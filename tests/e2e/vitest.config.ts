@@ -15,6 +15,7 @@ export default defineConfig({
       '@coordinator/coordinator': path.resolve(__dirname, '../../packages/coordinator/src/index.ts'),
       '@coordinator/storage': path.resolve(__dirname, '../../packages/storage/src/index.ts'),
       '@coordinator/specs-hello': path.resolve(__dirname, '../../packages/specs/hello/src/index.ts'),
+      '@coordinator/specs-todo': path.resolve(__dirname, '../../packages/specs/todo/src/index.ts'),
       '@coordinator/agents-mock': path.resolve(__dirname, '../../packages/agents/mock/src/index.ts'),
     },
   },
