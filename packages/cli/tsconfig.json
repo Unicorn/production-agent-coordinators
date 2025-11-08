@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../coordinator" },
+    { "path": "../specs/hello" },
+    { "path": "../agents/anthropic" },
+    { "path": "../agents/mock" }
+  ]
+}
