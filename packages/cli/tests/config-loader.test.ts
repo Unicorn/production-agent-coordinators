@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadConfig, type CoordinatorConfig } from '../src/config-loader.js';
-import { writeFileSync, unlinkSync, existsSync, mkdirSync, rmdirSync, rmSync } from 'fs';
+import { loadConfig } from '../src/config-loader.js';
+import { writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 

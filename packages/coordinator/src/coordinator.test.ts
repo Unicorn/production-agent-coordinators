@@ -26,7 +26,7 @@ class TestSpecFactory implements ISpecFactory {
   readonly version = "1.0.0";
   createCallCount = 0;
 
-  create(context: SpecContext): ISpec {
+  create(_context: SpecContext): ISpec {
     this.createCallCount++;
     return {
       name: this.name,

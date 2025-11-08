@@ -65,17 +65,17 @@ function validateConfig(config: CoordinatorConfig): void {
   }
 }
 
-export function loadConfigFromFile(filePath: string): CoordinatorConfig {
+export async function loadConfigFromFile(filePath: string): Promise<CoordinatorConfig> {
   if (!existsSync(filePath)) {
     throw new Error(`Config file not found: ${filePath}`);
   }
 
-  // This is synchronous for simple use cases
-  // For production, use cosmiconfig instead
+  // Use dynamic import for ESM compatibility
   try {
-    const config = require(filePath);
-    validateConfig(config);
-    return config;
+    const module = await import(filePath);
+    const config = module.default || module;
+    validateConfig(config as CoordinatorConfig);
+    return config as CoordinatorConfig;
   } catch (error) {
     throw new Error(`Failed to load config from ${filePath}: ${error}`);
   }

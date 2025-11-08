@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCommand, type CLICommand } from '../src/command-parser.js';
+import { parseCommand } from '../src/command-parser.js';
 
 describe('Command Parser', () => {
   describe('run command', () => {
