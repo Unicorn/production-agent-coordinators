@@ -1,0 +1,14 @@
+# Environment files with sensitive data
+.env
+
+# Docker volumes (managed by Docker)
+volumes/
+
+# Temporary files
+*.tmp
+*.log
+
+# Backup files
+*.sql
+*.tar.gz
+*.dump
