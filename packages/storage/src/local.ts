@@ -73,7 +73,7 @@ export class LocalFileStorage implements IStorage {
 
   private resolvePath(key: string): string {
     // 1. Split path into segments
-    const segments = key.split(/[\/\\]/);
+    const segments = key.split(/[/\\]/);
 
     // 2. Filter out traversal attempts (. and ..)
     const cleanedSegments = segments.filter(seg => seg !== ".." && seg !== "." && seg !== "");

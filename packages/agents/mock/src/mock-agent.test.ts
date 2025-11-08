@@ -3,7 +3,6 @@ import { MockAgent, MockAgentFactory, type MockAgentConfig } from "./mock-agent"
 import type {
   AgentContext,
   AgentExecutionContext,
-  AgentResult,
   ILogger,
   IStorage,
 } from "@coordinator/contracts";
