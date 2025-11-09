@@ -1,0 +1,43 @@
+{
+  "name": "@coordinator/temporal-coordinator",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./activities": {
+      "types": "./dist/activities.d.ts",
+      "import": "./dist/activities.js"
+    },
+    "./workflows": {
+      "types": "./dist/workflows.d.ts",
+      "import": "./dist/workflows.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@coordinator/contracts": "*",
+    "@coordinator/engine": "*",
+    "@coordinator/coordinator": "*",
+    "@coordinator/specs-hello": "*",
+    "@coordinator/agents-mock": "*",
+    "@coordinator/storage": "*",
+    "@temporalio/activity": "^1.13.1",
+    "@temporalio/client": "^1.13.1",
+    "@temporalio/worker": "^1.13.1",
+    "@temporalio/workflow": "^1.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3"
+  }
+}

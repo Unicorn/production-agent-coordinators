@@ -203,7 +203,7 @@ export class AnthropicAgent implements IAgent {
     try {
       // Real Anthropic API call
       const response = await this.client.messages.create({
-        model: (payload.model as string) || (this.context.config.model as string) || "claude-3-5-sonnet-20241022",
+        model: (payload.model as string) || (this.context.config.model as string) || "claude-sonnet-4-20250514",
         max_tokens: payload.max_tokens || 4096,
         temperature: payload.temperature,
         messages: payload.messages as Anthropic.MessageParam[],
@@ -416,8 +416,8 @@ export class AnthropicAgent implements IAgent {
   }
 
   private calculateCost(tokens: { prompt: number; completion: number }): number {
-    // STUB: Approximate costs for Claude 3.5 Sonnet
-    // Update with actual pricing when SDK is integrated
+    // Approximate costs for Claude Sonnet 4 (as of 2025)
+    // Input: $3 per MTok, Output: $15 per MTok
     const promptCostPer1k = 0.003;
     const completionCostPer1k = 0.015;
 

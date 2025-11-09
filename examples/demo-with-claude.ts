@@ -11,11 +11,13 @@
  * 5. Agent executes work with REAL Claude API calls (AnthropicAgent)
  *
  * Prerequisites:
- * - ANTHROPIC_API_KEY environment variable must be set
+ * - ANTHROPIC_API_KEY in .env file OR as environment variable
  *
- * Run with: ANTHROPIC_API_KEY=sk-xxx npx tsx examples/demo-with-claude.ts
+ * Run with: npx tsx examples/demo-with-claude.ts
+ * Or with: ANTHROPIC_API_KEY=sk-xxx npx tsx examples/demo-with-claude.ts
  */
 
+import dotenv from 'dotenv';
 import { Engine } from '../packages/engine/src/index.js';
 import { Container, Coordinator, ConsoleLogger } from '../packages/coordinator/src/index.js';
 import { LocalFileStorage } from '../packages/storage/src/index.js';
@@ -24,6 +26,9 @@ import { AnthropicAgentFactory } from '../packages/agents/anthropic/src/index.js
 import type { EngineState, AgentResponse, StepState } from '../packages/contracts/src/index.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+
+// Load environment variables from .env file
+dotenv.config();
 
 // Helper to create spec function wrapper
 function createSpecFunctionWrapper(spec: any, responses: Map<string, AgentResponse>) {
@@ -102,17 +107,30 @@ function createAgentExecutor(agent: any, responses: Map<string, AgentResponse>, 
 
     responses.set(stepId, response);
 
-    console.log(`   ✅ Claude response: ${result.status}`);
-    if (result.content) {
-      console.log(`   💬 Response:`, result.content);
-    }
-    if (result.metrics) {
-      console.log(`   📊 Metrics:`, {
-        tokens: result.metrics.tokens,
-        latencyMs: result.metrics.latencyMs,
-        costUsd: result.metrics.costUsd?.toFixed(6),
-        model: result.metrics.modelName,
-      });
+    if (result.status === 'FAIL' || result.status === 'RATE_LIMITED' || result.status === 'CONTEXT_EXCEEDED') {
+      console.log(`   ❌ Claude response: ${result.status}`);
+      if (result.errors && result.errors.length > 0) {
+        console.log(`   🚨 Errors:`);
+        result.errors.forEach((error, idx) => {
+          console.log(`      ${idx + 1}. [${error.type}] ${error.message}`);
+          if (error.retryable) {
+            console.log(`         Retryable: yes${error.retryAfterMs ? ` (retry after ${error.retryAfterMs}ms)` : ''}`);
+          }
+        });
+      }
+    } else {
+      console.log(`   ✅ Claude response: ${result.status}`);
+      if (result.content) {
+        console.log(`   💬 Response:`, result.content);
+      }
+      if (result.metrics) {
+        console.log(`   📊 Metrics:`, {
+          tokens: result.metrics.tokens,
+          latencyMs: result.metrics.latencyMs,
+          costUsd: result.metrics.costUsd?.toFixed(6),
+          model: result.metrics.modelName,
+        });
+      }
     }
 
     return response;
@@ -176,13 +194,13 @@ async function main() {
     workKind: 'greet',
   });
 
-  const agent = coordinator.createAgent('anthropic', {}, {
+  const agent = coordinator.createAgent('anthropic', {
     ANTHROPIC_API_KEY: apiKey,
-  });
+  }, {});
 
   console.log('   ✅ Spec created:', helloFactory.describe().name);
   console.log('   ✅ Agent created:', anthropicFactory.describe().name);
-  console.log('   ✅ Model: claude-3-5-sonnet-20241022 (default)');
+  console.log('   ✅ Model: claude-sonnet-4-20250514 (default)');
 
   console.log('\n⚙️  Step 5: Initializing Engine State');
 
