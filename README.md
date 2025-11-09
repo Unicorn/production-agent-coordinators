@@ -380,57 +380,60 @@ console.log('Final status:', finalState.status);
 
 See [packages/cli/src/examples](packages/cli/src/examples) for more examples.
 
-## Troubleshooting
+## Documentation
 
-### Common Issues
+### For Users
 
-**Build Errors**
-```bash
-# Clean and rebuild
-yarn clean
-yarn install
-yarn build
-```
+**Getting Started:**
+- [Quick Start Guide](docs/customer/getting-started.md) - Installation and first workflow
+- [Troubleshooting](docs/customer/troubleshooting.md) - Common issues and solutions
+- [FAQ](docs/customer/faq.md) - Frequently asked questions
 
-**Test Failures**
-- Ensure all dependencies are installed: `yarn install`
-- Check that Docker services are running: `yarn infra:up`
-- Clear test artifacts: `rm -rf ./output ./data`
+**How-To Guides:**
+- [Run Hello Workflow](docs/customer/how-to/run-hello-workflow.md) - Step-by-step tutorial
+- [Run Todo Workflow](docs/customer/how-to/run-todo-workflow.md) - Multi-step example
+- [Create Custom Workflow](docs/customer/how-to/create-custom-workflow.md) - Build your own specs
+- [Configure Agents](docs/customer/how-to/configure-agents.md) - Agent setup and configuration
+- [Use CLI](docs/customer/how-to/use-cli.md) - Command-line interface guide
 
-**Port Conflicts**
-- Modify ports in `docker/.env`
-- Default ports: PostgreSQL (5432), Redis (6379), Temporal (7233), Temporal UI (8080)
+**Use Cases:**
+- [Simple Automation](docs/customer/use-cases/simple-automation.md) - Single-step patterns
+- [Multi-Step Workflows](docs/customer/use-cases/multi-step-workflows.md) - Complex workflows
+- [Integrating LLMs](docs/customer/use-cases/integrating-llms.md) - Using Claude and other AI
 
-**TypeScript Errors**
-- Ensure you're using TypeScript 5.6.3+: `yarn why typescript`
-- Run type checking: `yarn typecheck`
+**Reference:**
+- [CLI Commands](docs/customer/reference/cli-commands.md) - Complete CLI reference
+- [Configuration](docs/customer/reference/configuration.md) - All configuration options
+- [Workflow Specs](docs/customer/reference/workflow-specs.md) - Available specifications
 
-### Getting Help
+### For Developers & Contributors
 
-- Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design
-- Check [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines
-- Review package-specific READMEs in `packages/*/README.md`
-- Check existing issues on GitHub
+**Getting Started:**
+- [Internal Docs Index](docs/internal/README.md) - Navigation guide for all internal docs
+- [Contributing Guide](docs/internal/contributing.md) - How to contribute to the project
+
+**Architecture:**
+- [System Overview](docs/internal/architecture/overview.md) - High-level architecture
+- [Engine Package](docs/internal/architecture/engine.md) - Workflow execution engine
+- [Coordinator Package](docs/internal/architecture/coordinator.md) - Dependency injection
+- [Storage Package](docs/internal/architecture/storage.md) - Storage abstraction and security
+- [Specs](docs/internal/architecture/specs.md) - Specification interface and patterns
+- [Agents](docs/internal/architecture/agents.md) - Agent interface and implementations
+
+**Package Documentation:**
+- [Engine README](packages/engine/README.md) - Engine package details
+- [Coordinator README](packages/coordinator/README.md) - DI container details
+- [Docker README](docker/README.md) - Infrastructure setup
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+We welcome contributions! Please see [docs/internal/contributing.md](docs/internal/contributing.md) for:
 
 - Development workflow
 - Code style guidelines
 - Testing requirements
 - Commit conventions
 - Pull request process
-
-## Architecture Documentation
-
-For detailed architecture information, see:
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System design and patterns
-- [docs/plans/2025-11-07-agent-coordinator-architecture-design.md](docs/plans/2025-11-07-agent-coordinator-architecture-design.md) - Original design document
-- [packages/engine/README.md](packages/engine/README.md) - Engine architecture
-- [packages/coordinator/README.md](packages/coordinator/README.md) - DI and coordination
-- [docker/README.md](docker/README.md) - Infrastructure setup
 
 ## Roadmap
 
