@@ -22,7 +22,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist"
+    "build:worker": "node build-worker.js",
+    "start:worker": "node dist/worker.bundle.js",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {
     "@coordinator/contracts": "*",

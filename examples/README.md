@@ -160,13 +160,90 @@ The demo has a 30-second timeout. If it hangs:
 - Ensure `yarn build` completed successfully
 - Review console output for error messages
 
+## Running with Real Claude API
+
+To see the agent coordinator with REAL Claude API integration:
+
+```bash
+# Make sure you have your Anthropic API key
+export ANTHROPIC_API_KEY=sk-your-key-here
+
+# Or add it to .env file
+echo "ANTHROPIC_API_KEY=sk-your-key-here" > .env
+
+# Run the Claude demo
+npx tsx examples/demo-with-claude.ts
+```
+
+**What this demonstrates:**
+- Real Claude API calls (claude-sonnet-4-20250514)
+- Token usage tracking
+- Cost calculation
+- Latency metrics
+- Error handling (rate limits, context exceeded)
+
+## Running with Temporal
+
+To see the agent coordinator with durable Temporal workflows:
+
+### Prerequisites
+- Docker and Docker Compose installed
+- Temporal infrastructure running
+
+### Setup
+
+```bash
+# 1. Start Temporal infrastructure (Temporal server, PostgreSQL, Redis)
+yarn infra:up
+
+# 2. Build the Temporal worker bundle
+yarn workspace @coordinator/temporal-coordinator build:worker
+
+# 3. Start the worker (in a separate terminal)
+yarn workspace @coordinator/temporal-coordinator start:worker
+
+# 4. Run the demo (in another terminal)
+npx tsx examples/demo-with-temporal.ts
+```
+
+### What's Happening
+
+The Temporal integration uses a **bundler approach** to solve ES module issues:
+
+1. **esbuild bundler** (`build-worker.js`) compiles TypeScript source directly
+2. **Custom tsconfig** (`tsconfig.bundle.json`) redirects package imports to source files
+3. **Bundled worker** (`dist/worker.bundle.js`) runs with proper ESM syntax
+
+**What this demonstrates:**
+- Durable workflow execution
+- Automatic retries on failures
+- State persistence across restarts
+- Activity-based side effects
+- Temporal Web UI integration (http://localhost:8233)
+
+### Temporal Infrastructure
+
+To manage Temporal infrastructure:
+
+```bash
+# Start all services
+yarn infra:up
+
+# Stop all services
+yarn infra:down
+
+# View logs
+yarn infra:logs
+
+# Restart services
+yarn infra:restart
+```
+
 ## Additional Examples
 
 More examples coming soon:
 - TodoSpec multi-step workflow
 - Custom spec creation
-- Claude integration with AnthropicAgent
 - Error handling and retries
-- State persistence
 
 For now, explore the E2E tests in `tests/e2e/` for more comprehensive examples.
