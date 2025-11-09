@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type {
   IAgent,
   IAgentFactory,
@@ -65,9 +66,15 @@ interface CompletionPayload {
 export class AnthropicAgent implements IAgent {
   private rateLimitConfig: RateLimitConfig;
   private rateLimitState: RateLimitState;
+  private client: Anthropic;
 
   constructor(private context: AgentContext) {
-    // Default rate limits (align with Anthropic tier when SDK is integrated)
+    // Initialize Anthropic client
+    this.client = new Anthropic({
+      apiKey: context.apiKeys.ANTHROPIC_API_KEY,
+    });
+
+    // Default rate limits (align with Anthropic tier)
     this.rateLimitConfig = {
       maxRequestsPerMinute: 50,
       maxTokensPerMinute: 40000,
@@ -191,46 +198,92 @@ export class AnthropicAgent implements IAgent {
       };
     }
 
-    // STUB: Return mock response
-    // TODO: Replace with actual Anthropic SDK call:
-    // const response = await this.anthropicClient.messages.create({
-    //   model: payload.model || this.context.config.model || "claude-3-5-sonnet-20241022",
-    //   max_tokens: payload.max_tokens || 4096,
-    //   messages: payload.messages,
-    // });
+    const startTime = Date.now();
 
-    const stubTokens = {
-      prompt: 50,
-      completion: 100,
-    };
-
-    this.rateLimitState.tokensThisMinute += stubTokens.prompt + stubTokens.completion;
-
-    return {
-      status: "OK",
-      content: {
-        role: "assistant",
-        content: "[STUB] This is a mock response from AnthropicAgent. Anthropic SDK integration pending.",
-      },
-      metrics: {
-        tokens: stubTokens,
-        latencyMs: 150,
-        costUsd: this.calculateCost(stubTokens),
-        modelName: (payload.model as string) || "claude-3-5-sonnet-20241022",
-      },
-      llmMetadata: {
-        modelId: (payload.model as string) || "claude-3-5-sonnet-20241022",
+    try {
+      // Real Anthropic API call
+      const response = await this.client.messages.create({
+        model: (payload.model as string) || (this.context.config.model as string) || "claude-3-5-sonnet-20241022",
+        max_tokens: payload.max_tokens || 4096,
         temperature: payload.temperature,
-        maxTokens: payload.max_tokens || 4096,
-        stopReason: "end_turn",
-      },
-      provenance: {
-        agentId: "anthropic",
-        agentVersion: VERSION,
-        executionId: context.runId,
-        timestamp: new Date().toISOString(),
-      },
-    };
+        messages: payload.messages as Anthropic.MessageParam[],
+      });
+
+      const latencyMs = Date.now() - startTime;
+
+      // Extract token usage from response
+      const tokens = {
+        prompt: response.usage.input_tokens,
+        completion: response.usage.output_tokens,
+      };
+
+      this.rateLimitState.tokensThisMinute += tokens.prompt + tokens.completion;
+
+      // Extract text content from response
+      const textContent = response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map(block => block.text)
+        .join('\n');
+
+      return {
+        status: "OK",
+        content: {
+          role: "assistant",
+          content: textContent,
+          id: response.id,
+        },
+        metrics: {
+          tokens,
+          latencyMs,
+          costUsd: this.calculateCost(tokens),
+          modelName: response.model,
+        },
+        llmMetadata: {
+          modelId: response.model,
+          temperature: payload.temperature,
+          maxTokens: payload.max_tokens || 4096,
+          stopReason: response.stop_reason === 'end_turn' ? 'end_turn' :
+                      response.stop_reason === 'max_tokens' ? 'max_tokens' :
+                      response.stop_reason === 'stop_sequence' ? 'stop_sequence' : 'end_turn',
+        },
+        provenance: {
+          agentId: "anthropic",
+          agentVersion: VERSION,
+          executionId: context.runId,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      // Handle Anthropic-specific errors
+      if (error instanceof Anthropic.APIError) {
+        if (error.status === 429) {
+          return {
+            status: "RATE_LIMITED",
+            errors: [{
+              type: "RATE_LIMIT",
+              message: error.message,
+              retryable: true,
+              retryAfterMs: 60000,
+            }],
+          };
+        }
+
+        if (error.status === 400 && error.message.includes('context_length')) {
+          return {
+            status: "CONTEXT_EXCEEDED",
+            errors: [{
+              type: "CONTEXT_EXCEEDED",
+              message: error.message,
+              retryable: false,
+            }],
+          };
+        }
+
+        return this.createErrorResult("PROVIDER_ERROR", `Anthropic API error: ${error.message}`);
+      }
+
+      throw error;
+    }
   }
 
   private async executeCompletion(
@@ -405,11 +458,11 @@ export class AnthropicAgentFactory implements IAgentFactory {
     return {
       name: "anthropic",
       version: VERSION,
-      description: "Anthropic Claude API integration (stub ready for SDK)",
+      description: "Anthropic Claude API integration with real-time execution",
       supportedWorkKinds: [...this.supportedWorkKinds],
       capabilities: {
-        streaming: false, // Will be true when SDK is integrated
-        functionCalling: false, // Will be true when SDK is integrated with tool use
+        streaming: false, // Can be enabled in future versions
+        functionCalling: false, // Can be enabled with tool use in future versions
       },
     };
   }
