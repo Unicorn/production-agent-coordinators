@@ -1,108 +1,113 @@
-# Production Directory
+# Production Suite Builder
 
-This directory contains production-specific code, configurations, and data that should NOT be committed to git.
+Temporal-based workflow system for building and publishing BernierLLC package suites.
 
-## Structure
+## Prerequisites
 
-- **configs/** - Real configuration files (API keys, credentials, etc.) - GITIGNORED
-- **scripts/** - Production scripts for running workflows
-- **master-plans/** - Real master plans with actual package lists - GITIGNORED
+- Temporal server running (see framework repo: `yarn infra:up`)
+- Node.js 22+
+- Yarn
+- npm token with publish access to @bernierllc scope
 
-## Usage
+## Setup
 
-### Master Plans
-
-Place real master plans in `master-plans/`:
-
-```bash
-production/master-plans/
-├── content-management-suite.md
-├── social-media-suite.md
-└── analytics-suite.md
-```
-
-These files contain actual package dependency graphs and should be gitignored to keep proprietary information private.
-
-### Config Files
-
-Place production configs in `configs/`:
+1. **Create configuration file:**
 
 ```bash
-production/configs/
-├── temporal.json          # Temporal connection config
-├── npm-registry.json      # NPM registry credentials
-└── build-env.json         # Build environment variables
+cp production/configs/example-build-env.json production/configs/build-env.json
 ```
 
-### Scripts
+2. **Edit build-env.json with your credentials:**
 
-Production scripts go in `scripts/`:
+- Add your npm token
+- Verify workspace root path
+- Adjust concurrent builds if needed
+
+3. **Ensure Temporal is running:**
 
 ```bash
-production/scripts/
-├── run-content-suite.ts   # Script to build content-management-suite
-├── run-social-suite.ts    # Script to build social-media-suite
-└── deploy-suite.ts        # Deployment script
+cd ../agent-coordinators
+yarn infra:up
 ```
 
-These scripts import from the production agent implementations and use real configuration files.
+## Running the Suite Builder
 
-## Example Script
+Build a suite from an audit report:
 
-```typescript
-#!/usr/bin/env tsx
-
-import { Connection, Client } from '@temporalio/client';
-import type { SuiteBuilderWorkflowConfig } from '@coordinator/temporal-coordinator';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-async function main() {
-  const connection = await Connection.connect({
-    address: 'localhost:7233',
-  });
-
-  const client = new Client({ connection });
-
-  const config: SuiteBuilderWorkflowConfig = {
-    goalId: 'build-content-suite',
-    suiteName: 'content-management-suite',
-    masterPlanPath: path.join(__dirname, '../master-plans/content-management-suite.md'),
-    specConfig: {
-      maxConcurrentBuilds: 4,
-      enableMCPLocking: false,
-    },
-    agentConfig: {
-      baseDir: __dirname,
-      verbose: true,
-    },
-    maxIterations: 500,
-  };
-
-  const handle = await client.workflow.start('suiteBuilderWorkflow', {
-    taskQueue: 'agent-coordinator-queue',
-    workflowId: `suite-builder-${Date.now()}`,
-    args: [config],
-  });
-
-  console.log(`Started workflow: ${handle.workflowId}`);
-
-  const result = await handle.result();
-  console.log('Workflow completed:', result);
-}
-
-main().catch(console.error);
+```bash
+yarn demo:suite-builder
 ```
 
-## Security
+This will:
+- Parse the audit report
+- Build dependency graph
+- Build packages in correct order (validators → core → utilities → services → UI → suites)
+- Run quality checks for each package
+- Automatically fix quality issues with agents
+- Publish packages to npm
+- Generate comprehensive reports
 
-NEVER commit files from this directory containing:
-- API keys or credentials
-- Proprietary package lists
-- Internal architecture details
-- Customer data
+## Reports
 
-Use the .gitignore to protect sensitive files.
+After a build completes, find reports at:
+
+```
+production/reports/{YYYY-MM-DD}/
+  @bernierllc-package-name.json     # Individual package reports
+  suite-summary.json                 # Aggregate suite report
+```
+
+### Report Contents
+
+**Package Reports:**
+- Build/test/quality/publish metrics
+- Fix attempts and agent prompts used
+- Dependency wait times
+
+**Suite Report:**
+- Overall success/failure counts
+- Total duration
+- Slowest packages
+- Packages requiring most fixes
+- Full aggregated data
+
+## Architecture
+
+- **Main Workflow:** Orchestrates 5 phases (INITIALIZE → PLAN → BUILD → VERIFY → COMPLETE)
+- **Child Workflows:** One per package, keeps history manageable
+- **Dynamic Parallelism:** Respects dependencies, maximizes concurrency
+- **Agent-Based Fixes:** Quality failures spawn agents to fix issues automatically
+- **Comprehensive Reporting:** JSON reports enable data-driven improvements
+
+## Configuration
+
+See `production/configs/example-build-env.json` for all options.
+
+Key settings:
+- `maxConcurrentBuilds`: How many packages to build in parallel (default: 4)
+- `testing.minCoveragePercent`: Minimum test coverage required (default: 80%)
+- `publishing.dryRun`: Test without actually publishing (default: false)
+
+## Troubleshooting
+
+**"Temporal connection failed"**
+- Ensure Temporal server is running: `yarn infra:up`
+
+**"npm publish failed"**
+- Verify npm token in build-env.json
+- Check token has publish access to @bernierllc scope
+
+**"Quality checks failed after 3 attempts"**
+- Review package reports for specific failures
+- Check agent prompts were created correctly
+- Manual fixes may be needed
+
+## Development
+
+Build the suite builder package:
+
+```bash
+cd packages/agents/suite-builder-production
+yarn build
+yarn test
+```
