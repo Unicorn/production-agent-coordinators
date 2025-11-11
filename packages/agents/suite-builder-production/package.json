@@ -11,10 +11,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@temporalio/workflow": "^1.10.0",
     "@temporalio/activity": "^1.10.0",
+    "@temporalio/client": "^1.10.0",
     "@temporalio/worker": "^1.10.0",
-    "@temporalio/client": "^1.10.0"
+    "@temporalio/workflow": "^1.10.0",
+    "glob": "^11.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

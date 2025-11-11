@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseInput } from '../discovery.activities';
+import { parseInput, searchForPackage } from '../discovery.activities';
+import * as fs from 'fs';
+import * as path from 'path';
 
 describe('Discovery Activities', () => {
   describe('parseInput', () => {
@@ -41,6 +43,35 @@ describe('Discovery Activities', () => {
 
     it('should throw error if no input provided', () => {
       expect(() => parseInput({ config: {} as any })).toThrow('No input provided');
+    });
+  });
+
+  describe('searchForPackage', () => {
+    it('should find package in workspace', async () => {
+      // Use the actual workspace root for integration-style testing
+      const workspaceRoot = path.resolve(process.cwd());
+
+      const result = await searchForPackage({
+        searchQuery: '@coordinator/agent-suite-builder-production',
+        workspaceRoot
+      });
+
+      expect(result.found).toBe(true);
+      expect(result.packagePath).toBeDefined();
+      expect(result.packagePath).toContain('packages/agents/suite-builder-production');
+    });
+
+    it('should return not found if package does not exist', async () => {
+      const workspaceRoot = path.resolve(process.cwd());
+
+      const result = await searchForPackage({
+        searchQuery: 'non-existent-package-xyz-12345',
+        workspaceRoot
+      });
+
+      expect(result.found).toBe(false);
+      expect(result.searchedLocations).toContain('plans/packages/**');
+      expect(result.searchedLocations).toContain('packages/**');
     });
   });
 });
