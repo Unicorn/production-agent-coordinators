@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseInput, searchForPackage } from '../discovery.activities';
+import { parseInput, searchForPackage, readPackageJson } from '../discovery.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -87,6 +87,60 @@ describe('Discovery Activities', () => {
       expect(result.found).toBe(false);
       expect(result.searchedLocations).toContain('plans/packages/**');
       expect(result.searchedLocations).toContain('packages/**');
+    });
+  });
+
+  describe('readPackageJson', () => {
+    it('should read package.json and extract metadata', async () => {
+      // Create temp package.json for testing
+      const tempDir = '/tmp/test-package';
+      fs.mkdirSync(tempDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0',
+          dependencies: {
+            '@bernierllc/logger': '^1.0.0'
+          }
+        })
+      );
+
+      const result = await readPackageJson({
+        packagePath: tempDir
+      });
+
+      expect(result.name).toBe('@bernierllc/test-package');
+      expect(result.version).toBe('1.0.0');
+      expect(result.dependencies).toContain('@bernierllc/logger');
+
+      // Cleanup
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should filter out non-workspace dependencies', async () => {
+      const tempDir = '/tmp/test-package-2';
+      fs.mkdirSync(tempDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0',
+          dependencies: {
+            '@bernierllc/logger': '^1.0.0',
+            'axios': '^1.0.0'
+          }
+        })
+      );
+
+      const result = await readPackageJson({
+        packagePath: tempDir
+      });
+
+      expect(result.dependencies).toContain('@bernierllc/logger');
+      expect(result.dependencies).not.toContain('axios');
+
+      fs.rmSync(tempDir, { recursive: true });
     });
   });
 });

@@ -15,6 +15,13 @@ export interface SearchResult {
   searchedLocations: string[];
 }
 
+export interface PackageMetadata {
+  name: string;
+  version: string;
+  dependencies: string[];
+  scripts: Record<string, string>;
+}
+
 export function parseInput(input: PackageWorkflowInput): ParsedInput {
   if (input.packageName) {
     return { type: 'packageName', value: input.packageName };
@@ -119,5 +126,33 @@ export async function searchForPackage(input: {
   return {
     found: false,
     searchedLocations
+  };
+}
+
+export async function readPackageJson(input: {
+  packagePath: string;
+}): Promise<PackageMetadata> {
+  const packageJsonPath = path.join(input.packagePath, 'package.json');
+
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error(`package.json not found at ${packageJsonPath}`);
+  }
+
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+
+  // Extract workspace dependencies (those starting with @bernierllc/)
+  const allDeps = {
+    ...packageJson.dependencies,
+    ...packageJson.devDependencies
+  };
+
+  const workspaceDeps = Object.keys(allDeps)
+    .filter(dep => dep.startsWith('@bernierllc/'));
+
+  return {
+    name: packageJson.name,
+    version: packageJson.version,
+    dependencies: workspaceDeps,
+    scripts: packageJson.scripts || {}
   };
 }
