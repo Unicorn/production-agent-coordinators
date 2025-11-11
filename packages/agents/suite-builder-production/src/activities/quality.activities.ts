@@ -1,6 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { StructureResult } from '../types';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import type { StructureResult, TypeScriptResult } from '../types';
+
+const execAsync = promisify(exec);
 
 export async function validatePackageStructure(input: {
   packagePath: string;
@@ -77,4 +81,45 @@ export async function validatePackageStructure(input: {
     invalidFields,
     details: { missingFiles, invalidFields }
   };
+}
+
+export async function runTypeScriptCheck(input: {
+  packagePath: string;
+}): Promise<TypeScriptResult> {
+  try {
+    await execAsync('tsc --noEmit', { cwd: input.packagePath });
+
+    return {
+      passed: true,
+      errors: [],
+      details: { errors: [] }
+    };
+  } catch (error: any) {
+    const stderr = error.stderr || '';
+    const errors = parseTypeScriptErrors(stderr);
+
+    return {
+      passed: false,
+      errors,
+      details: { errors }
+    };
+  }
+}
+
+function parseTypeScriptErrors(stderr: string): Array<{ file: string; line: number; message: string }> {
+  const errors: Array<{ file: string; line: number; message: string }> = [];
+
+  // Parse TypeScript error format: "file.ts(line,col): error TS1234: message"
+  const errorRegex = /([^(]+)\((\d+),\d+\):\s*error\s+TS\d+:\s*(.+)/g;
+  let match;
+
+  while ((match = errorRegex.exec(stderr)) !== null) {
+    errors.push({
+      file: match[1],
+      line: parseInt(match[2], 10),
+      message: match[3]
+    });
+  }
+
+  return errors;
 }

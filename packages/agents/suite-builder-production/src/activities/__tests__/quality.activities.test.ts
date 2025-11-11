@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -86,5 +86,38 @@ describe('Quality Activities', () => {
 
       fs.rmSync(tempDir, { recursive: true });
     });
+  });
+
+  describe('runTypeScriptCheck', () => {
+    it('should pass for valid TypeScript', async () => {
+      const tempDir = '/tmp/valid-ts-package';
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            target: 'ES2020',
+            module: 'commonjs'
+          }
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.ts'),
+        'export function test(x: number): number { return x + 1; }'
+      );
+
+      const result = await runTypeScriptCheck({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.errors).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    // Note: Testing actual TypeScript errors requires tsc to be run
+    // For unit tests, we can mock execAsync to simulate errors
   });
 });
