@@ -86,8 +86,47 @@ export async function validatePackageStructure(input: {
 export async function runTypeScriptCheck(input: {
   packagePath: string;
 }): Promise<TypeScriptResult> {
+  // Input validation
+  if (!input.packagePath || input.packagePath.trim() === '') {
+    throw new Error('packagePath cannot be empty');
+  }
+
+  // Check if packagePath exists
   try {
-    await execAsync('tsc --noEmit', { cwd: input.packagePath });
+    await fs.promises.access(input.packagePath);
+  } catch (error) {
+    throw new Error(`packagePath does not exist: ${input.packagePath}`);
+  }
+
+  // Check if packagePath is a directory
+  const stats = await fs.promises.stat(input.packagePath);
+  if (!stats.isDirectory()) {
+    throw new Error(`packagePath is not a directory: ${input.packagePath}`);
+  }
+
+  // Check if tsconfig.json exists
+  const tsconfigPath = path.join(input.packagePath, 'tsconfig.json');
+  try {
+    await fs.promises.access(tsconfigPath);
+  } catch (error) {
+    throw new Error(`tsconfig.json not found in ${input.packagePath}`);
+  }
+
+  try {
+    // Use local tsc from node_modules, falling back to npx if not found
+    let tscCommand = 'npx tsc --noEmit';
+
+    // Try to find tsc in the package's node_modules
+    const localTscPath = path.join(input.packagePath, 'node_modules', '.bin', 'tsc');
+    try {
+      await fs.promises.access(localTscPath);
+      tscCommand = `"${localTscPath}" --noEmit`;
+    } catch {
+      // Fall back to npx
+      tscCommand = 'npx tsc --noEmit';
+    }
+
+    await execAsync(tscCommand, { cwd: input.packagePath });
 
     return {
       passed: true,
@@ -96,7 +135,10 @@ export async function runTypeScriptCheck(input: {
     };
   } catch (error: any) {
     const stderr = error.stderr || '';
-    const errors = parseTypeScriptErrors(stderr);
+    const stdout = error.stdout || '';
+    // TypeScript errors can appear in stdout, not just stderr
+    const combinedOutput = stderr + '\n' + stdout;
+    const errors = parseTypeScriptErrors(combinedOutput);
 
     return {
       passed: false,
@@ -119,6 +161,23 @@ function parseTypeScriptErrors(stderr: string): Array<{ file: string; line: numb
       line: parseInt(match[2], 10),
       message: match[3]
     });
+  }
+
+  // Fallback: if no structured errors were parsed but stderr is not empty, include it as a generic error
+  // Filter out npm warnings which are not TypeScript errors
+  if (errors.length === 0 && stderr.trim()) {
+    // Only treat as error if it's not just npm warnings
+    const isOnlyNpmWarnings = stderr.trim().split('\n').every(line =>
+      line.includes('npm warn') || line.trim() === ''
+    );
+
+    if (!isOnlyNpmWarnings) {
+      errors.push({
+        file: 'unknown',
+        line: 0,
+        message: stderr.trim()
+      });
+    }
   }
 
   return errors;

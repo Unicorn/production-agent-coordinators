@@ -91,7 +91,40 @@ describe('Quality Activities', () => {
   describe('runTypeScriptCheck', () => {
     it('should pass for valid TypeScript', async () => {
       const tempDir = '/tmp/valid-ts-package';
+      // Clean up if it exists from previous run
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
       fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
+
+      // Create a minimal package.json with typescript as a dependency
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'test-package',
+          dependencies: {
+            typescript: '*'
+          }
+        })
+      );
+
+      // Link to the workspace root node_modules to access typescript
+      // Find the workspace root by looking for node_modules/typescript
+      let typescriptPath = '/Users/mattbernier/projects/production-agent-coordinators/.worktrees/production-suite-builder/.worktrees/autonomous-workflow/node_modules/typescript';
+      const targetNodeModules = path.join(tempDir, 'node_modules/typescript');
+      if (fs.existsSync(typescriptPath)) {
+        fs.symlinkSync(typescriptPath, targetNodeModules, 'dir');
+      }
+
+      // Also create .bin directory and symlink tsc
+      const binDir = path.join(tempDir, 'node_modules', '.bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const tscSource = path.join(typescriptPath, 'bin', 'tsc');
+      const tscTarget = path.join(binDir, 'tsc');
+      if (fs.existsSync(tscSource)) {
+        fs.symlinkSync(tscSource, tscTarget, 'file');
+      }
 
       fs.writeFileSync(
         path.join(tempDir, 'tsconfig.json'),
@@ -117,7 +150,96 @@ describe('Quality Activities', () => {
       fs.rmSync(tempDir, { recursive: true });
     });
 
-    // Note: Testing actual TypeScript errors requires tsc to be run
-    // For unit tests, we can mock execAsync to simulate errors
+    it('should fail for TypeScript compilation errors', async () => {
+      const tempDir = '/tmp/invalid-ts-package';
+      // Clean up if it exists from previous run
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
+
+      // Create a minimal package.json with typescript as a dependency
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'test-package',
+          dependencies: {
+            typescript: '*'
+          }
+        })
+      );
+
+      // Link to the workspace root node_modules to access typescript
+      // Find the workspace root by looking for node_modules/typescript
+      let typescriptPath = '/Users/mattbernier/projects/production-agent-coordinators/.worktrees/production-suite-builder/.worktrees/autonomous-workflow/node_modules/typescript';
+      const targetNodeModules = path.join(tempDir, 'node_modules/typescript');
+      if (fs.existsSync(typescriptPath)) {
+        fs.symlinkSync(typescriptPath, targetNodeModules, 'dir');
+      }
+
+      // Also create .bin directory and symlink tsc
+      const binDir = path.join(tempDir, 'node_modules', '.bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const tscSource = path.join(typescriptPath, 'bin', 'tsc');
+      const tscTarget = path.join(binDir, 'tsc');
+      if (fs.existsSync(tscSource)) {
+        fs.symlinkSync(tscSource, tscTarget, 'file');
+      }
+
+      fs.writeFileSync(
+        path.join(tempDir, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            target: 'ES2020',
+            module: 'commonjs'
+          }
+        })
+      );
+
+      // Write invalid TypeScript code (type error)
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.ts'),
+        'export function test(x: number): number { return "string"; }'
+      );
+
+      const result = await runTypeScriptCheck({ packagePath: tempDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for missing tsconfig.json', async () => {
+      const tempDir = '/tmp/no-tsconfig-package';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await expect(runTypeScriptCheck({ packagePath: tempDir }))
+        .rejects.toThrow('tsconfig.json not found in');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(runTypeScriptCheck({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(runTypeScriptCheck({ packagePath: '/tmp/does-not-exist-xyz-ts' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file-ts.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(runTypeScriptCheck({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
+    });
   });
 });
