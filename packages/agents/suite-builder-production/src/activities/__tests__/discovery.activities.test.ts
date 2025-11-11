@@ -199,5 +199,57 @@ describe('Discovery Activities', () => {
 
       fs.rmSync(workspace, { recursive: true });
     });
+
+    it('should handle circular dependencies gracefully', async () => {
+      // Create test workspace with circular deps
+      const workspace = '/tmp/test-circular-deps';
+      const pkgAPath = path.join(workspace, 'packages/pkg-a');
+      const pkgBPath = path.join(workspace, 'packages/pkg-b');
+
+      fs.mkdirSync(pkgAPath, { recursive: true });
+      fs.mkdirSync(pkgBPath, { recursive: true });
+
+      // Package A depends on Package B
+      fs.writeFileSync(
+        path.join(pkgAPath, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/pkg-a',
+          version: '1.0.0',
+          dependencies: { '@bernierllc/pkg-b': '^1.0.0' }
+        })
+      );
+
+      // Package B depends on Package A (circular)
+      fs.writeFileSync(
+        path.join(pkgBPath, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/pkg-b',
+          version: '1.0.0',
+          dependencies: { '@bernierllc/pkg-a': '^1.0.0' }
+        })
+      );
+
+      const result = await buildDependencyTree({
+        packageName: '@bernierllc/pkg-a',
+        workspaceRoot: workspace
+      });
+
+      // Verify both packages discovered
+      expect(result.packages).toHaveLength(2);
+      expect(result.packages.map(p => p.name)).toContain('@bernierllc/pkg-a');
+      expect(result.packages.map(p => p.name)).toContain('@bernierllc/pkg-b');
+
+      // Verify each package appears exactly once (no duplication from cycle)
+      const nameOccurrences = result.packages.reduce((acc, pkg) => {
+        acc[pkg.name] = (acc[pkg.name] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      expect(nameOccurrences['@bernierllc/pkg-a']).toBe(1);
+      expect(nameOccurrences['@bernierllc/pkg-b']).toBe(1);
+
+      // Cleanup
+      fs.rmSync(workspace, { recursive: true });
+    });
   });
 });
