@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseInput, searchForPackage, readPackageJson } from '../discovery.activities';
+import { parseInput, searchForPackage, readPackageJson, buildDependencyTree } from '../discovery.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -141,6 +141,63 @@ describe('Discovery Activities', () => {
       expect(result.dependencies).not.toContain('axios');
 
       fs.rmSync(tempDir, { recursive: true });
+    });
+  });
+
+  describe('buildDependencyTree', () => {
+    it('should build complete dependency tree', async () => {
+      // Setup test packages
+      const workspace = '/tmp/test-workspace';
+      fs.mkdirSync(path.join(workspace, 'packages/core/logger'), { recursive: true });
+      fs.mkdirSync(path.join(workspace, 'packages/core/openai-client'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(workspace, 'packages/core/logger/package.json'),
+        JSON.stringify({ name: '@bernierllc/logger', version: '1.0.0', dependencies: {} })
+      );
+
+      fs.writeFileSync(
+        path.join(workspace, 'packages/core/openai-client/package.json'),
+        JSON.stringify({
+          name: '@bernierllc/openai-client',
+          version: '1.0.0',
+          dependencies: { '@bernierllc/logger': '^1.0.0' }
+        })
+      );
+
+      const result = await buildDependencyTree({
+        packageName: '@bernierllc/openai-client',
+        workspaceRoot: workspace
+      });
+
+      expect(result.packages).toHaveLength(2);
+      expect(result.packages.map(p => p.name)).toContain('@bernierllc/logger');
+      expect(result.packages.map(p => p.name)).toContain('@bernierllc/openai-client');
+
+      const clientPkg = result.packages.find(p => p.name === '@bernierllc/openai-client');
+      expect(clientPkg?.dependencies).toContain('@bernierllc/logger');
+
+      fs.rmSync(workspace, { recursive: true });
+    });
+
+    it('should handle packages with no dependencies', async () => {
+      const workspace = '/tmp/test-workspace-2';
+      fs.mkdirSync(path.join(workspace, 'packages/core/logger'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(workspace, 'packages/core/logger/package.json'),
+        JSON.stringify({ name: '@bernierllc/logger', version: '1.0.0', dependencies: {} })
+      );
+
+      const result = await buildDependencyTree({
+        packageName: '@bernierllc/logger',
+        workspaceRoot: workspace
+      });
+
+      expect(result.packages).toHaveLength(1);
+      expect(result.packages[0].dependencies).toHaveLength(0);
+
+      fs.rmSync(workspace, { recursive: true });
     });
   });
 });

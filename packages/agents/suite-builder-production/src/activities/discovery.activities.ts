@@ -1,4 +1,4 @@
-import type { PackageWorkflowInput } from '../types';
+import type { PackageWorkflowInput, PackageNode } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { glob } from 'glob';
@@ -155,4 +155,61 @@ export async function readPackageJson(input: {
     dependencies: workspaceDeps,
     scripts: packageJson.scripts || {}
   };
+}
+
+export interface DependencyTree {
+  packages: PackageNode[];
+}
+
+export async function buildDependencyTree(input: {
+  packageName: string;
+  workspaceRoot: string;
+}): Promise<DependencyTree> {
+  const visited = new Set<string>();
+  const packages: PackageNode[] = [];
+
+  async function discoverPackage(packageName: string) {
+    if (visited.has(packageName)) {
+      return;
+    }
+    visited.add(packageName);
+
+    // Find package in workspace
+    const searchResult = await searchForPackage({
+      searchQuery: packageName,
+      workspaceRoot: input.workspaceRoot
+    });
+
+    if (!searchResult.found || !searchResult.packagePath) {
+      throw new Error(`Package ${packageName} not found in workspace`);
+    }
+
+    // Read package.json
+    const metadata = await readPackageJson({
+      packagePath: path.join(input.workspaceRoot, searchResult.packagePath)
+    });
+
+    // Create package node
+    const packageNode: PackageNode = {
+      name: metadata.name,
+      path: searchResult.packagePath,
+      version: metadata.version,
+      dependencies: metadata.dependencies,
+      buildCommand: metadata.scripts.build || 'yarn build',
+      testCommand: metadata.scripts['test:run'] || metadata.scripts.test || 'yarn test',
+      buildStatus: 'pending',
+      testStatus: 'pending'
+    };
+
+    packages.push(packageNode);
+
+    // Recursively discover dependencies
+    for (const dep of metadata.dependencies) {
+      await discoverPackage(dep);
+    }
+  }
+
+  await discoverPackage(input.packageName);
+
+  return { packages };
 }
