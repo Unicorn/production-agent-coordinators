@@ -18,7 +18,7 @@ export async function writePackageBuildReport(
 }
 
 export async function loadAllPackageReports(
-  suiteId: string,
+  _suiteId: string,
   workspaceRoot: string
 ): Promise<PackageBuildReport[]> {
   const date = new Date().toISOString().split('T')[0];
