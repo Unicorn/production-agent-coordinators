@@ -2,7 +2,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import type { StructureResult, TypeScriptResult } from '../types';
+import type {
+  StructureResult,
+  TypeScriptResult,
+  LintResult,
+  TestResult,
+  SecurityResult,
+  DocumentationResult,
+  LicenseResult,
+  IntegrationResult,
+  ComplianceScore
+} from '../types';
 
 const execAsync = promisify(exec);
 
@@ -181,4 +191,57 @@ function parseTypeScriptErrors(stderr: string): Array<{ file: string; line: numb
   }
 
   return errors;
+}
+
+export async function calculateComplianceScore(input: {
+  structure: StructureResult;
+  typescript: TypeScriptResult;
+  lint: LintResult;
+  tests: TestResult;
+  security: SecurityResult;
+  documentation: DocumentationResult;
+  license: LicenseResult;
+  integration: IntegrationResult;
+}): Promise<ComplianceScore> {
+  // Define weights for each check (must sum to 100)
+  const weights = {
+    structure: 10,
+    typescript: 20,
+    lint: 15,
+    tests: 25,
+    security: 15,
+    documentation: 5,
+    license: 5,
+    integration: 5
+  };
+
+  // Calculate weighted score
+  let score = 0;
+
+  if (input.structure.passed) score += weights.structure;
+  if (input.typescript.passed) score += weights.typescript;
+  if (input.lint.passed) score += weights.lint;
+  if (input.tests.passed) score += weights.tests;
+  if (input.security.passed) score += weights.security;
+  if (input.documentation.passed) score += weights.documentation;
+  if (input.license.passed) score += weights.license;
+  if (input.integration.passed) score += weights.integration;
+
+  // Determine compliance level based on score
+  let level: 'excellent' | 'good' | 'acceptable' | 'blocked';
+
+  if (score >= 95) {
+    level = 'excellent';
+  } else if (score >= 90) {
+    level = 'good';
+  } else if (score >= 85) {
+    level = 'acceptable';
+  } else {
+    level = 'blocked';
+  }
+
+  return {
+    score,
+    level
+  };
 }

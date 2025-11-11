@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure, runTypeScriptCheck } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck, calculateComplianceScore } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
+import type {
+  StructureResult,
+  TypeScriptResult,
+  LintResult,
+  TestResult,
+  SecurityResult,
+  DocumentationResult,
+  LicenseResult,
+  IntegrationResult
+} from '../types';
 
 describe('Quality Activities', () => {
   describe('validatePackageStructure', () => {
@@ -240,6 +250,181 @@ describe('Quality Activities', () => {
         .rejects.toThrow('packagePath is not a directory');
 
       fs.rmSync(tempFile);
+    });
+  });
+
+  describe('calculateComplianceScore', () => {
+    it('should return 100% excellent for all passing checks', async () => {
+      const input = {
+        structure: { passed: true, details: {}, missingFiles: [], invalidFields: [] } as StructureResult,
+        typescript: { passed: true, details: {}, errors: [] } as TypeScriptResult,
+        lint: { passed: true, details: {}, errors: [], warnings: [] } as LintResult,
+        tests: {
+          passed: true,
+          details: {},
+          coverage: { branches: 100, functions: 100, lines: 100, statements: 100, total: 100 },
+          requiredCoverage: 80,
+          failures: []
+        } as TestResult,
+        security: { passed: true, details: {}, vulnerabilities: [] } as SecurityResult,
+        documentation: { passed: true, details: {}, missing: [] } as DocumentationResult,
+        license: { passed: true, details: {}, filesWithoutLicense: [] } as LicenseResult,
+        integration: { passed: true, details: {}, issues: [] } as IntegrationResult
+      };
+
+      const result = await calculateComplianceScore(input);
+
+      expect(result.score).toBe(100);
+      expect(result.level).toBe('excellent');
+    });
+
+    it('should calculate correct weighted score for mixed results', async () => {
+      const input = {
+        structure: { passed: true, details: {}, missingFiles: [], invalidFields: [] } as StructureResult, // 10%
+        typescript: { passed: true, details: {}, errors: [] } as TypeScriptResult, // 20%
+        lint: { passed: false, details: {}, errors: [], warnings: [] } as LintResult, // 0% (15% lost)
+        tests: {
+          passed: true,
+          details: {},
+          coverage: { branches: 100, functions: 100, lines: 100, statements: 100, total: 100 },
+          requiredCoverage: 80,
+          failures: []
+        } as TestResult, // 25%
+        security: { passed: true, details: {}, vulnerabilities: [] } as SecurityResult, // 15%
+        documentation: { passed: false, details: {}, missing: [] } as DocumentationResult, // 0% (5% lost)
+        license: { passed: true, details: {}, filesWithoutLicense: [] } as LicenseResult, // 5%
+        integration: { passed: true, details: {}, issues: [] } as IntegrationResult // 5%
+      };
+
+      const result = await calculateComplianceScore(input);
+
+      // 10 + 20 + 0 + 25 + 15 + 0 + 5 + 5 = 80%
+      expect(result.score).toBe(80);
+      expect(result.level).toBe('blocked'); // <85
+    });
+
+    it('should return 0% blocked for all failing checks', async () => {
+      const input = {
+        structure: { passed: false, details: {}, missingFiles: [], invalidFields: [] } as StructureResult,
+        typescript: { passed: false, details: {}, errors: [] } as TypeScriptResult,
+        lint: { passed: false, details: {}, errors: [], warnings: [] } as LintResult,
+        tests: {
+          passed: false,
+          details: {},
+          coverage: { branches: 0, functions: 0, lines: 0, statements: 0, total: 0 },
+          requiredCoverage: 80,
+          failures: []
+        } as TestResult,
+        security: { passed: false, details: {}, vulnerabilities: [] } as SecurityResult,
+        documentation: { passed: false, details: {}, missing: [] } as DocumentationResult,
+        license: { passed: false, details: {}, filesWithoutLicense: [] } as LicenseResult,
+        integration: { passed: false, details: {}, issues: [] } as IntegrationResult
+      };
+
+      const result = await calculateComplianceScore(input);
+
+      expect(result.score).toBe(0);
+      expect(result.level).toBe('blocked');
+    });
+
+    it('should return excellent at 95% threshold boundary', async () => {
+      const input = {
+        structure: { passed: true, details: {}, missingFiles: [], invalidFields: [] } as StructureResult, // 10%
+        typescript: { passed: true, details: {}, errors: [] } as TypeScriptResult, // 20%
+        lint: { passed: true, details: {}, errors: [], warnings: [] } as LintResult, // 15%
+        tests: {
+          passed: true,
+          details: {},
+          coverage: { branches: 100, functions: 100, lines: 100, statements: 100, total: 100 },
+          requiredCoverage: 80,
+          failures: []
+        } as TestResult, // 25%
+        security: { passed: true, details: {}, vulnerabilities: [] } as SecurityResult, // 15%
+        documentation: { passed: true, details: {}, missing: [] } as DocumentationResult, // 5%
+        license: { passed: false, details: {}, filesWithoutLicense: [] } as LicenseResult, // 0% (5% lost)
+        integration: { passed: true, details: {}, issues: [] } as IntegrationResult // 5%
+      };
+
+      const result = await calculateComplianceScore(input);
+
+      // 10 + 20 + 15 + 25 + 15 + 5 + 0 + 5 = 95%
+      expect(result.score).toBe(95);
+      expect(result.level).toBe('excellent');
+    });
+
+    it('should return good at 90% threshold boundary', async () => {
+      const input = {
+        structure: { passed: true, details: {}, missingFiles: [], invalidFields: [] } as StructureResult, // 10%
+        typescript: { passed: true, details: {}, errors: [] } as TypeScriptResult, // 20%
+        lint: { passed: true, details: {}, errors: [], warnings: [] } as LintResult, // 15%
+        tests: {
+          passed: true,
+          details: {},
+          coverage: { branches: 100, functions: 100, lines: 100, statements: 100, total: 100 },
+          requiredCoverage: 80,
+          failures: []
+        } as TestResult, // 25%
+        security: { passed: true, details: {}, vulnerabilities: [] } as SecurityResult, // 15%
+        documentation: { passed: false, details: {}, missing: [] } as DocumentationResult, // 0% (5% lost)
+        license: { passed: false, details: {}, filesWithoutLicense: [] } as LicenseResult, // 0% (5% lost)
+        integration: { passed: true, details: {}, issues: [] } as IntegrationResult // 5%
+      };
+
+      const result = await calculateComplianceScore(input);
+
+      // 10 + 20 + 15 + 25 + 15 + 0 + 0 + 5 = 90%
+      expect(result.score).toBe(90);
+      expect(result.level).toBe('good');
+    });
+
+    it('should return acceptable at 85% threshold boundary', async () => {
+      const input = {
+        structure: { passed: true, details: {}, missingFiles: [], invalidFields: [] } as StructureResult, // 10%
+        typescript: { passed: true, details: {}, errors: [] } as TypeScriptResult, // 20%
+        lint: { passed: false, details: {}, errors: [], warnings: [] } as LintResult, // 0% (15% lost)
+        tests: {
+          passed: true,
+          details: {},
+          coverage: { branches: 100, functions: 100, lines: 100, statements: 100, total: 100 },
+          requiredCoverage: 80,
+          failures: []
+        } as TestResult, // 25%
+        security: { passed: true, details: {}, vulnerabilities: [] } as SecurityResult, // 15%
+        documentation: { passed: true, details: {}, missing: [] } as DocumentationResult, // 5%
+        license: { passed: true, details: {}, filesWithoutLicense: [] } as LicenseResult, // 5%
+        integration: { passed: true, details: {}, issues: [] } as IntegrationResult // 5%
+      };
+
+      const result = await calculateComplianceScore(input);
+
+      // 10 + 20 + 0 + 25 + 15 + 5 + 5 + 5 = 85%
+      expect(result.score).toBe(85);
+      expect(result.level).toBe('acceptable');
+    });
+
+    it('should return blocked at 84% (just below acceptable threshold)', async () => {
+      const input = {
+        structure: { passed: true, details: {}, missingFiles: [], invalidFields: [] } as StructureResult, // 10%
+        typescript: { passed: true, details: {}, errors: [] } as TypeScriptResult, // 20%
+        lint: { passed: false, details: {}, errors: [], warnings: [] } as LintResult, // 0% (15% lost)
+        tests: {
+          passed: true,
+          details: {},
+          coverage: { branches: 100, functions: 100, lines: 100, statements: 100, total: 100 },
+          requiredCoverage: 80,
+          failures: []
+        } as TestResult, // 25%
+        security: { passed: true, details: {}, vulnerabilities: [] } as SecurityResult, // 15%
+        documentation: { passed: true, details: {}, missing: [] } as DocumentationResult, // 5%
+        license: { passed: false, details: {}, filesWithoutLicense: [] } as LicenseResult, // 0% (5% lost)
+        integration: { passed: true, details: {}, issues: [] } as IntegrationResult // 5%
+      };
+
+      const result = await calculateComplianceScore(input);
+
+      // 10 + 20 + 0 + 25 + 15 + 5 + 0 + 5 = 80%
+      expect(result.score).toBe(80);
+      expect(result.level).toBe('blocked');
     });
   });
 });
