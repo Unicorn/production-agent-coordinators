@@ -13,7 +13,7 @@ export async function runBuild(input: {
   const fullPath = path.join(input.workspaceRoot, input.packagePath);
 
   try {
-    const { stdout, stderr } = await execAsync(`cd ${fullPath} && yarn build`);
+    const { stdout, stderr } = await execAsync('yarn build', { cwd: fullPath });
 
     return {
       success: true,
@@ -40,7 +40,8 @@ export async function runTests(input: {
 
   try {
     const { stdout, stderr } = await execAsync(
-      `cd ${fullPath} && yarn test --run --coverage`
+      'yarn test --run --coverage',
+      { cwd: fullPath }
     );
 
     // Parse coverage from output (simple regex for "Coverage: XX%")
