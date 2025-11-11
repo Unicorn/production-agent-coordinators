@@ -1,0 +1,33 @@
+{
+  "// NOTE": "This is an EXAMPLE file. Copy to build-env.json and add real credentials",
+  "// WARNING": "build-env.json is gitignored - it will NOT be committed",
+
+  "npmRegistry": "https://registry.npmjs.org/",
+  "npmToken": "npm_REPLACE_WITH_REAL_TOKEN",
+
+  "workspaceRoot": "/Users/mattbernier/projects/tools",
+  "maxConcurrentBuilds": 4,
+
+  "temporal": {
+    "address": "localhost:7233",
+    "namespace": "default",
+    "taskQueue": "agent-coordinator-queue"
+  },
+
+  "git": {
+    "defaultBranch": "main",
+    "autoCommit": false
+  },
+
+  "testing": {
+    "enableCoverage": true,
+    "minCoveragePercent": 80,
+    "failOnError": true
+  },
+
+  "publishing": {
+    "dryRun": false,
+    "requireTests": true,
+    "requireCleanWorkingDirectory": true
+  }
+}
