@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import type { BuildResult, TestResult, QualityResult, QualityFailure, PublishResult, BuildConfig, PackageNode, PackageCategory } from '../types/index';
+import type { BuildResult, TestActivityResult, QualityResult, QualityFailure, PublishResult, BuildConfig, PackageNode, PackageCategory } from '../types/index';
 
 const execAsync = promisify(exec);
 
@@ -35,7 +35,7 @@ export async function runBuild(input: {
 export async function runTests(input: {
   workspaceRoot: string;
   packagePath: string;
-}): Promise<TestResult> {
+}): Promise<TestActivityResult> {
   const startTime = Date.now();
   const fullPath = path.join(input.workspaceRoot, input.packagePath);
 
@@ -190,6 +190,8 @@ export async function buildDependencyGraph(auditReportPath: string): Promise<Pac
 
     packages.push({
       name: dep,
+      path: '', // TODO: resolve from workspace
+      version: '0.0.0',
       category,
       dependencies: [],
       layer,
@@ -201,6 +203,8 @@ export async function buildDependencyGraph(auditReportPath: string): Promise<Pac
   const mainCategory = getCategory(report.packageName);
   packages.push({
     name: report.packageName,
+    path: '', // TODO: resolve from workspace
+    version: '0.0.0',
     category: mainCategory,
     dependencies,
     layer: categoryToLayer(mainCategory),
@@ -208,7 +212,7 @@ export async function buildDependencyGraph(auditReportPath: string): Promise<Pac
   });
 
   // Sort by layer (validators first, suites last)
-  return packages.sort((a, b) => a.layer - b.layer);
+  return packages.sort((a, b) => (a.layer ?? 0) - (b.layer ?? 0));
 }
 
 function categoryToLayer(category: PackageCategory): number {

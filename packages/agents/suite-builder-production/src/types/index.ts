@@ -13,10 +13,15 @@ export type PackageCategory = 'validator' | 'core' | 'utility' | 'service' | 'ui
 // Dependency graph node
 export interface PackageNode {
   name: string;
-  category: PackageCategory;
+  path: string;
+  version: string;
+  category?: PackageCategory;
   dependencies: string[];
-  layer: number;
+  layer?: number;
+  buildCommand?: string;
+  testCommand?: string;
   buildStatus: 'pending' | 'building' | 'completed' | 'failed';
+  testStatus?: 'pending' | 'running' | 'passed' | 'failed';
 }
 
 // Main workflow state
@@ -154,7 +159,7 @@ export interface BuildResult {
   stderr: string;
 }
 
-export interface TestResult {
+export interface TestActivityResult {
   success: boolean;
   duration: number;
   coverage: number;
@@ -180,4 +185,146 @@ export interface PublishResult {
   success: boolean;
   duration: number;
   stdout: string;
+}
+
+// New workflow input type
+export interface PackageWorkflowInput {
+  // User provides ONE of these:
+  packageName?: string;
+  packageIdea?: string;
+  planFilePath?: string;
+  updatePrompt?: string;
+
+  // Configuration (reuse existing BuildConfig)
+  config: BuildConfig;
+}
+
+// Discovery phase result
+export interface DiscoveryResult {
+  packageName: string;
+  packagePath: string;
+  version: string;
+  dependencies: string[];
+  isPublished: boolean;
+  npmVersion: string | null;
+  worktreePath: string;
+}
+
+// Planning phase result
+export interface PlanningResult {
+  packageName: string;
+  planPath: string;
+  planContent: string;
+  registeredWithMcp: boolean;
+}
+
+// MECE validation result
+export interface MeceViolation {
+  violation: string;
+  solution: string;
+  affectedFunctionality: string[];
+  mainPackageStillUsesIt: boolean;
+  newPackages: string[];
+}
+
+export interface MeceValidationResult {
+  isCompliant: boolean;
+  violation?: MeceViolation;
+  additionalPackages: PackageNode[];
+}
+
+// Quality check types
+export interface QualityCheckResult {
+  passed: boolean;
+  details: any;
+}
+
+export interface StructureResult extends QualityCheckResult {
+  missingFiles: string[];
+  invalidFields: string[];
+}
+
+export interface TypeScriptResult extends QualityCheckResult {
+  errors: Array<{
+    file: string;
+    line: number;
+    message: string;
+  }>;
+}
+
+export interface LintResult extends QualityCheckResult {
+  errors: Array<{
+    file: string;
+    line: number;
+    rule: string;
+    message: string;
+  }>;
+  warnings: Array<{
+    file: string;
+    line: number;
+    rule: string;
+    message: string;
+  }>;
+}
+
+export interface TestResult extends QualityCheckResult {
+  coverage: {
+    branches: number;
+    functions: number;
+    lines: number;
+    statements: number;
+    total: number;
+  };
+  requiredCoverage: number;
+  failures: Array<{
+    test: string;
+    message: string;
+  }>;
+}
+
+export interface SecurityResult extends QualityCheckResult {
+  vulnerabilities: Array<{
+    severity: 'low' | 'moderate' | 'high' | 'critical';
+    package: string;
+    description: string;
+  }>;
+}
+
+export interface DocumentationResult extends QualityCheckResult {
+  missing: string[];
+}
+
+export interface LicenseResult extends QualityCheckResult {
+  filesWithoutLicense: string[];
+}
+
+export interface IntegrationResult extends QualityCheckResult {
+  issues: string[];
+}
+
+export interface ComplianceScore {
+  score: number;
+  level: 'excellent' | 'good' | 'acceptable' | 'blocked';
+}
+
+// Remediation types
+export interface RemediationTask {
+  category: 'structure' | 'typescript' | 'lint' | 'tests' | 'security' | 'documentation' | 'license' | 'integration';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  description: string;
+  details: string[];
+  suggestedFix?: string;
+}
+
+export interface RemediationInput {
+  packagePath: string;
+  packageName: string;
+  currentScore: number;
+  targetScore: number;
+  tasks: RemediationTask[];
+}
+
+export interface RemediationResult {
+  completed: boolean;
+  tasksAttempted: number;
 }

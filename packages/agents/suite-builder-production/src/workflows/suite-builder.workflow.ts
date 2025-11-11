@@ -83,13 +83,14 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
 
     // Spawn child workflows for batch
     for (const pkg of batch) {
+      const category = pkg.category || 'core';
       const child = await startChild(PackageBuildWorkflow, {
         workflowId: `build-${state.suiteId}-${pkg.name}`,
         args: [{
           packageName: pkg.name,
-          packagePath: `packages/${pkg.category}/${pkg.name.split('/')[1]}`,
-          planPath: `plans/packages/${pkg.category}/${pkg.name.split('/')[1]}.md`,
-          category: pkg.category,
+          packagePath: `packages/${category}/${pkg.name.split('/')[1]}`,
+          planPath: `plans/packages/${category}/${pkg.name.split('/')[1]}.md`,
+          category,
           dependencies: pkg.dependencies,
           workspaceRoot: config.workspaceRoot,
           config
