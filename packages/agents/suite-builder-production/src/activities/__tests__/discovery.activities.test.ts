@@ -48,8 +48,15 @@ describe('Discovery Activities', () => {
 
   describe('searchForPackage', () => {
     it('should find package in workspace', async () => {
-      // Use the actual workspace root for integration-style testing
-      const workspaceRoot = path.resolve(process.cwd());
+      // Find the monorepo root by looking for the packages directory
+      let workspaceRoot = path.resolve(process.cwd());
+      while (!fs.existsSync(path.join(workspaceRoot, 'packages')) && workspaceRoot !== '/') {
+        workspaceRoot = path.dirname(workspaceRoot);
+      }
+
+      if (workspaceRoot === '/') {
+        throw new Error('Could not find monorepo root');
+      }
 
       const result = await searchForPackage({
         searchQuery: '@coordinator/agent-suite-builder-production',
@@ -62,7 +69,15 @@ describe('Discovery Activities', () => {
     });
 
     it('should return not found if package does not exist', async () => {
-      const workspaceRoot = path.resolve(process.cwd());
+      // Find the monorepo root by looking for the packages directory
+      let workspaceRoot = path.resolve(process.cwd());
+      while (!fs.existsSync(path.join(workspaceRoot, 'packages')) && workspaceRoot !== '/') {
+        workspaceRoot = path.dirname(workspaceRoot);
+      }
+
+      if (workspaceRoot === '/') {
+        throw new Error('Could not find monorepo root');
+      }
 
       const result = await searchForPackage({
         searchQuery: 'non-existent-package-xyz-12345',

@@ -35,6 +35,24 @@ export async function searchForPackage(input: {
   searchQuery: string;
   workspaceRoot: string;
 }): Promise<SearchResult> {
+  // Input validation
+  if (!input.searchQuery || input.searchQuery.trim() === '') {
+    throw new Error('searchQuery cannot be empty');
+  }
+
+  if (!input.workspaceRoot || input.workspaceRoot.trim() === '') {
+    throw new Error('workspaceRoot cannot be empty');
+  }
+
+  if (!fs.existsSync(input.workspaceRoot)) {
+    throw new Error(`workspaceRoot does not exist: ${input.workspaceRoot}`);
+  }
+
+  const stats = fs.statSync(input.workspaceRoot);
+  if (!stats.isDirectory()) {
+    throw new Error(`workspaceRoot is not a directory: ${input.workspaceRoot}`);
+  }
+
   const searchedLocations: string[] = [];
 
   // 1. Search in plans directory
@@ -45,7 +63,7 @@ export async function searchForPackage(input: {
   });
 
   for (const planFile of planFiles) {
-    const content = fs.readFileSync(planFile, 'utf-8');
+    const content = await fs.promises.readFile(planFile, 'utf-8');
     if (content.includes(input.searchQuery)) {
       // Extract package path from plan file
       const packagePathMatch = content.match(/Package Path:\s*`([^`]+)`/);
@@ -69,18 +87,29 @@ export async function searchForPackage(input: {
   });
 
   for (const packageJsonFile of packageJsonFiles) {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonFile, 'utf-8'));
-    const packageName = packageJson.name;
+    try {
+      const content = await fs.promises.readFile(packageJsonFile, 'utf-8');
+      const packageJson = JSON.parse(content);
+      const packageName = packageJson.name;
 
-    if (packageName === input.searchQuery ||
-        packageName.includes(input.searchQuery) ||
-        path.dirname(packageJsonFile).includes(input.searchQuery)) {
-      return {
-        found: true,
-        packagePath: path.relative(input.workspaceRoot, path.dirname(packageJsonFile)),
-        packageName: packageJson.name,
-        searchedLocations
-      };
+      if (!packageName) {
+        console.warn(`Warning: package.json at ${packageJsonFile} does not have a name field`);
+        continue;
+      }
+
+      if (packageName === input.searchQuery ||
+          packageName.includes(input.searchQuery) ||
+          path.dirname(packageJsonFile).includes(input.searchQuery)) {
+        return {
+          found: true,
+          packagePath: path.relative(input.workspaceRoot, path.dirname(packageJsonFile)),
+          packageName: packageJson.name,
+          searchedLocations
+        };
+      }
+    } catch (error) {
+      console.warn(`Warning: Failed to parse package.json at ${packageJsonFile}:`, error instanceof Error ? error.message : String(error));
+      continue;
     }
   }
 
