@@ -1,7 +1,8 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
-import type { BuildResult, TestResult, QualityResult, QualityFailure, PublishResult, BuildConfig } from '../types/index';
+import * as fs from 'fs/promises';
+import type { BuildResult, TestResult, QualityResult, QualityFailure, PublishResult, BuildConfig, PackageNode, PackageCategory } from '../types/index';
 
 const execAsync = promisify(exec);
 
@@ -156,4 +157,68 @@ export async function publishPackage(input: {
       stdout: error.stdout || error.message
     };
   }
+}
+
+export async function buildDependencyGraph(auditReportPath: string): Promise<PackageNode[]> {
+  // Read audit report
+  const content = await fs.readFile(auditReportPath, 'utf-8');
+  const report = JSON.parse(content);
+
+  // Extract package dependencies
+  const dependencies = report.checks?.packageDependencies || [];
+
+  // For now, create simple graph from single package
+  // TODO: Recursively resolve all dependencies
+  const packages: PackageNode[] = [];
+
+  // Determine category from package name
+  const getCategory = (name: string): PackageCategory => {
+    // Check suite first as it's the most specific (packages can have 'ui' or 'service' in 'suite' name)
+    if (name.includes('suite')) return 'suite';
+    if (name.includes('validator')) return 'validator';
+    if (name.includes('core')) return 'core';
+    if (name.includes('util')) return 'utility';
+    if (name.includes('service')) return 'service';
+    if (name.includes('ui')) return 'ui';
+    return 'suite';
+  };
+
+  // Add dependencies as nodes
+  dependencies.forEach((dep: string) => {
+    const category = getCategory(dep);
+    const layer = categoryToLayer(category);
+
+    packages.push({
+      name: dep,
+      category,
+      dependencies: [],
+      layer,
+      buildStatus: 'pending'
+    });
+  });
+
+  // Add main package
+  const mainCategory = getCategory(report.packageName);
+  packages.push({
+    name: report.packageName,
+    category: mainCategory,
+    dependencies,
+    layer: categoryToLayer(mainCategory),
+    buildStatus: 'pending'
+  });
+
+  // Sort by layer (validators first, suites last)
+  return packages.sort((a, b) => a.layer - b.layer);
+}
+
+function categoryToLayer(category: PackageCategory): number {
+  const layerMap: Record<PackageCategory, number> = {
+    'validator': 0,
+    'core': 1,
+    'utility': 2,
+    'service': 3,
+    'ui': 4,
+    'suite': 5
+  };
+  return layerMap[category];
 }

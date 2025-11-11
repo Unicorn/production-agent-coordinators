@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runBuild, runTests, runQualityChecks, publishPackage } from '../build.activities';
+import { runBuild, runTests, runQualityChecks, publishPackage, buildDependencyGraph } from '../build.activities';
 import * as child_process from 'child_process';
+import * as fs from 'fs/promises';
 
 // Mock child_process module
 vi.mock('child_process', () => ({
   exec: vi.fn()
 }));
+
+// Mock fs/promises module
+vi.mock('fs/promises');
 
 describe('Build Activities', () => {
   beforeEach(() => {
@@ -233,6 +237,115 @@ describe('Build Activities', () => {
         },
         expect.any(Function)
       );
+    });
+  });
+
+  describe('buildDependencyGraph', () => {
+    it('should parse audit report and create dependency graph', async () => {
+      const mockReport = {
+        packageName: '@bernierllc/suite',
+        checks: {
+          packageDependencies: [
+            '@bernierllc/core-a',
+            '@bernierllc/service-b'
+          ]
+        }
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockReport));
+
+      const result = await buildDependencyGraph('/tmp/test-audit-report.json');
+
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0]).toHaveProperty('name');
+      expect(result[0]).toHaveProperty('category');
+      expect(result[0]).toHaveProperty('layer');
+      expect(result[0]).toHaveProperty('dependencies');
+      expect(result[0]).toHaveProperty('buildStatus');
+    });
+
+    it('should categorize packages correctly', async () => {
+      const mockReport = {
+        packageName: '@bernierllc/content-management-suite',
+        checks: {
+          packageDependencies: [
+            '@bernierllc/validator-base',
+            '@bernierllc/core-types',
+            '@bernierllc/util-helpers',
+            '@bernierllc/service-api',
+            '@bernierllc/ui-components'
+          ]
+        }
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockReport));
+
+      const result = await buildDependencyGraph('/tmp/test-audit-report.json');
+
+      // Find packages by category
+      const validator = result.find(p => p.category === 'validator');
+      const core = result.find(p => p.category === 'core');
+      const utility = result.find(p => p.category === 'utility');
+      const service = result.find(p => p.category === 'service');
+      const ui = result.find(p => p.category === 'ui');
+      const suite = result.find(p => p.category === 'suite');
+
+      expect(validator).toBeDefined();
+      expect(core).toBeDefined();
+      expect(utility).toBeDefined();
+      expect(service).toBeDefined();
+      expect(ui).toBeDefined();
+      expect(suite).toBeDefined();
+    });
+
+    it('should assign layers based on category', async () => {
+      const mockReport = {
+        packageName: '@bernierllc/suite',
+        checks: {
+          packageDependencies: [
+            '@bernierllc/validator-base',
+            '@bernierllc/core-types'
+          ]
+        }
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockReport));
+
+      const result = await buildDependencyGraph('/tmp/test-audit-report.json');
+
+      // Validators should be layer 0
+      const validator = result.find(p => p.name.includes('validator'));
+      expect(validator?.layer).toBe(0);
+
+      // Core should be layer 1
+      const core = result.find(p => p.name.includes('core'));
+      expect(core?.layer).toBe(1);
+
+      // Suite should be layer 5
+      const suite = result.find(p => p.name.includes('suite'));
+      expect(suite?.layer).toBe(5);
+
+      // Should be sorted by layer (ascending)
+      for (let i = 1; i < result.length; i++) {
+        expect(result[i].layer).toBeGreaterThanOrEqual(result[i - 1].layer);
+      }
+    });
+
+    it('should set initial buildStatus to pending', async () => {
+      const mockReport = {
+        packageName: '@bernierllc/test-package',
+        checks: {
+          packageDependencies: ['@bernierllc/dep-1']
+        }
+      };
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockReport));
+
+      const result = await buildDependencyGraph('/tmp/test-audit-report.json');
+
+      result.forEach(pkg => {
+        expect(pkg.buildStatus).toBe('pending');
+      });
     });
   });
 });
