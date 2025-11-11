@@ -239,7 +239,7 @@ export async function runLintCheck(input: {
   }
 
   try {
-    const { stdout, stderr } = await execAsync(eslintCommand, { cwd: input.packagePath });
+    const { stdout } = await execAsync(eslintCommand, { cwd: input.packagePath });
 
     // Even on success, check for warnings in the output
     if (useJsonFormat && stdout) {
