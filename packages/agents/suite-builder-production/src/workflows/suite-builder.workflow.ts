@@ -1,6 +1,5 @@
-import { proxyActivities } from '@temporalio/workflow';
-// import { startChild } from '@temporalio/workflow'; // TODO: Uncomment in Task 10
-// import { PackageBuildWorkflow } from './package-build.workflow'; // TODO: Uncomment in Task 10
+import { proxyActivities, startChild } from '@temporalio/workflow';
+import { PackageBuildWorkflow } from './package-build.workflow';
 import type {
   SuiteBuilderInput,
   SuiteBuilderState,
@@ -8,8 +7,13 @@ import type {
   BuildConfig
 } from '../types/index';
 import type * as reportActivities from '../activities/report.activities';
+import type * as buildActivities from '../activities/build.activities';
 
 const { loadAllPackageReports, writeSuiteReport } = proxyActivities<typeof reportActivities>({
+  startToCloseTimeout: '5 minutes'
+});
+
+const { buildDependencyGraph } = proxyActivities<typeof buildActivities>({
   startToCloseTimeout: '5 minutes'
 });
 
@@ -37,12 +41,13 @@ export async function SuiteBuilderWorkflow(input: SuiteBuilderInput): Promise<vo
 async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderState> {
   console.log('Phase: INITIALIZE');
 
-  // TODO: Parse audit report and build dependency graph
-  // For now, return empty state
+  // Parse audit report and build dependency graph
+  const packages = await buildDependencyGraph(input.auditReportPath);
+
   const state: SuiteBuilderState = {
     phase: 'PLAN' as BuildPhase,
     suiteId: input.suiteId,
-    packages: [],
+    packages,
     completedPackages: [],
     failedPackages: [],
     childWorkflowIds: new Map()
@@ -59,12 +64,81 @@ async function planPhase(state: SuiteBuilderState): Promise<void> {
   state.phase = 'BUILD' as BuildPhase;
 }
 
-async function buildPhase(state: SuiteBuilderState, _config: BuildConfig): Promise<void> {
+async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promise<void> {
   console.log('Phase: BUILD');
 
-  // TODO: Implement dynamic parallelism
+  const maxConcurrent = config.maxConcurrentBuilds || 4;
+  const activeBuilds = new Map<string, any>();
+
+  while (hasUnbuiltPackages(state)) {
+    // Find packages ready to build (all dependencies completed)
+    const readyPackages = state.packages.filter(pkg =>
+      pkg.buildStatus === 'pending' &&
+      pkg.dependencies.every(dep => state.completedPackages.includes(dep))
+    );
+
+    // Fill available slots
+    const availableSlots = maxConcurrent - activeBuilds.size;
+    const batch = readyPackages.slice(0, availableSlots);
+
+    // Spawn child workflows for batch
+    for (const pkg of batch) {
+      const child = await startChild(PackageBuildWorkflow, {
+        workflowId: `build-${state.suiteId}-${pkg.name}`,
+        args: [{
+          packageName: pkg.name,
+          packagePath: `packages/${pkg.category}/${pkg.name.split('/')[1]}`,
+          planPath: `plans/packages/${pkg.category}/${pkg.name.split('/')[1]}.md`,
+          category: pkg.category,
+          dependencies: pkg.dependencies,
+          workspaceRoot: config.workspaceRoot,
+          config
+        }]
+      });
+
+      activeBuilds.set(pkg.name, child);
+      pkg.buildStatus = 'building';
+    }
+
+    // Wait for any child to complete
+    if (activeBuilds.size > 0) {
+      const entries = Array.from(activeBuilds.entries());
+      const results = await Promise.race(
+        entries.map(async ([name, handle]) => {
+          const result = await handle.result();
+          return { name, result };
+        })
+      );
+
+      // Update state
+      activeBuilds.delete(results.name);
+      const pkg = state.packages.find(p => p.name === results.name);
+
+      if (pkg) {
+        if (results.result.success) {
+          pkg.buildStatus = 'completed';
+          state.completedPackages.push(results.name);
+        } else {
+          pkg.buildStatus = 'failed';
+          state.failedPackages.push({
+            packageName: results.name,
+            phase: results.result.failedPhase || 'build',
+            error: results.result.error || 'Unknown error',
+            fixAttempts: results.result.fixAttempts || 0,
+            canRetryManually: true
+          });
+        }
+      }
+    }
+  }
 
   state.phase = 'VERIFY' as BuildPhase;
+}
+
+function hasUnbuiltPackages(state: SuiteBuilderState): boolean {
+  return state.packages.some(pkg =>
+    pkg.buildStatus === 'pending' || pkg.buildStatus === 'building'
+  );
 }
 
 async function verifyPhase(state: SuiteBuilderState): Promise<void> {
