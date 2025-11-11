@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseInput, searchForPackage, readPackageJson, buildDependencyTree } from '../discovery.activities';
+import { parseInput, searchForPackage, readPackageJson, buildDependencyTree, copyEnvFiles } from '../discovery.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -250,6 +250,53 @@ describe('Discovery Activities', () => {
 
       // Cleanup
       fs.rmSync(workspace, { recursive: true });
+    });
+  });
+
+  describe('copyEnvFiles', () => {
+    it('should copy .env and mgr/.env to worktree', async () => {
+      const sourceRoot = '/tmp/source-workspace';
+      const worktreePath = '/tmp/worktree-workspace';
+
+      // Setup source .env files
+      fs.mkdirSync(sourceRoot, { recursive: true });
+      fs.mkdirSync(path.join(sourceRoot, 'mgr'), { recursive: true });
+      fs.writeFileSync(path.join(sourceRoot, '.env'), 'NPM_TOKEN=test123');
+      fs.writeFileSync(path.join(sourceRoot, 'mgr', '.env'), 'MGR_TOKEN=mgr456');
+
+      // Create worktree directory
+      fs.mkdirSync(worktreePath, { recursive: true });
+
+      await copyEnvFiles({
+        sourceRoot,
+        worktreePath
+      });
+
+      // Verify files copied
+      expect(fs.existsSync(path.join(worktreePath, '.env'))).toBe(true);
+      expect(fs.existsSync(path.join(worktreePath, 'mgr', '.env'))).toBe(true);
+
+      const rootEnv = fs.readFileSync(path.join(worktreePath, '.env'), 'utf-8');
+      expect(rootEnv).toBe('NPM_TOKEN=test123');
+
+      // Cleanup
+      fs.rmSync(sourceRoot, { recursive: true });
+      fs.rmSync(worktreePath, { recursive: true });
+    });
+
+    it('should handle missing .env files gracefully', async () => {
+      const sourceRoot = '/tmp/source-no-env';
+      const worktreePath = '/tmp/worktree-no-env';
+
+      fs.mkdirSync(sourceRoot, { recursive: true });
+      fs.mkdirSync(worktreePath, { recursive: true });
+
+      await expect(
+        copyEnvFiles({ sourceRoot, worktreePath })
+      ).resolves.not.toThrow();
+
+      fs.rmSync(sourceRoot, { recursive: true });
+      fs.rmSync(worktreePath, { recursive: true });
     });
   });
 });

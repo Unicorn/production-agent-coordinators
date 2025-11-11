@@ -213,3 +213,26 @@ export async function buildDependencyTree(input: {
 
   return { packages };
 }
+
+export async function copyEnvFiles(input: {
+  sourceRoot: string;
+  worktreePath: string;
+}): Promise<void> {
+  const files = [
+    path.join(input.sourceRoot, '.env'),
+    path.join(input.sourceRoot, 'mgr', '.env')
+  ];
+
+  for (const file of files) {
+    if (fs.existsSync(file)) {
+      const relativePath = path.relative(input.sourceRoot, file);
+      const target = path.join(input.worktreePath, relativePath);
+
+      // Create target directory if needed
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+
+      // Copy file
+      await fs.promises.copyFile(file, target);
+    }
+  }
+}
