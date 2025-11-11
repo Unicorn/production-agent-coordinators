@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-<<<<<<< HEAD
 .pnp
 .pnp.js
 
@@ -11,6 +10,7 @@ coverage/
 # Build outputs
 dist/
 build/
+out/
 *.tsbuildinfo
 
 # Environment files
@@ -21,23 +21,10 @@ build/
 
 # Logs
 logs/
-=======
-
-# Build outputs
-dist/
-*.tsbuildinfo
-
-# Environment
-.env
-.env.local
-
-# Logs
->>>>>>> upstream/main
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-<<<<<<< HEAD
 lerna-debug.log*
 
 # OS files
@@ -45,20 +32,14 @@ lerna-debug.log*
 Thumbs.db
 
 # Editor directories
-=======
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
->>>>>>> upstream/main
 .vscode/
 .idea/
 *.swp
 *.swo
-<<<<<<< HEAD
 *~
+
+# Worktrees
+.worktrees/
 
 # Production-specific: SENSITIVE DATA - DO NOT COMMIT
 production/configs/*
@@ -68,6 +49,8 @@ production/configs/*
 production/master-plans/*
 !production/master-plans/.gitkeep
 !production/master-plans/example-*.md
+
+production/reports/
 
 # Credentials and secrets
 *.pem
@@ -83,14 +66,6 @@ secrets.json
 tmp/
 temp/
 *.tmp
-=======
-
-# Test coverage
-coverage/
-
-# Output
-out/
 
 # Temporal
 .temporal/
->>>>>>> upstream/main
