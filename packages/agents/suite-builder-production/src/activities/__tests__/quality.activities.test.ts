@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -725,6 +725,361 @@ describe('Quality Activities', () => {
       // 10 + 20 + 15 + 0 + 15 + 5 + 5 + 5 = 75%
       expect(result.score).toBe(75);
       expect(result.level).toBe('blocked');
+    });
+  });
+
+  describe('runTestsWithCoverage', () => {
+    it('should pass for core package with 95% coverage (above 90% threshold)', async () => {
+      const tempDir = '/tmp/core-package-good-coverage';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/core/auth'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/core/auth/coverage'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/core/auth');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/core-auth',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'vitest run --coverage' }
+        })
+      );
+
+      // Mock coverage summary
+      fs.writeFileSync(
+        path.join(packageDir, 'coverage/coverage-summary.json'),
+        JSON.stringify({
+          total: {
+            lines: { total: 100, covered: 95, pct: 95 },
+            statements: { total: 100, covered: 95, pct: 95 },
+            functions: { total: 20, covered: 19, pct: 95 },
+            branches: { total: 40, covered: 38, pct: 95 }
+          }
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.testsPassed).toBe(true);
+      expect(result.details.coveragePassed).toBe(true);
+      expect(result.coverage.total).toBe(95);
+      expect(result.requiredCoverage).toBe(90);
+      expect(result.failures).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for core package with 85% coverage (below 90% threshold)', async () => {
+      const tempDir = '/tmp/core-package-low-coverage';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/core/auth'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/core/auth/coverage'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/core/auth');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/core-auth',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'vitest run --coverage' }
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(packageDir, 'coverage/coverage-summary.json'),
+        JSON.stringify({
+          total: {
+            lines: { total: 100, covered: 85, pct: 85 },
+            statements: { total: 100, covered: 85, pct: 85 },
+            functions: { total: 20, covered: 17, pct: 85 },
+            branches: { total: 40, covered: 34, pct: 85 }
+          }
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.details.testsPassed).toBe(true);
+      expect(result.details.coveragePassed).toBe(false);
+      expect(result.coverage.total).toBe(85);
+      expect(result.requiredCoverage).toBe(90);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass for service package with 87% coverage (above 85% threshold)', async () => {
+      const tempDir = '/tmp/service-package-good-coverage';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api/coverage'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/services/api');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/service-api',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'vitest run --coverage' }
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(packageDir, 'coverage/coverage-summary.json'),
+        JSON.stringify({
+          total: {
+            lines: { total: 100, covered: 87, pct: 87 },
+            statements: { total: 100, covered: 87, pct: 87 },
+            functions: { total: 20, covered: 17, pct: 87 },
+            branches: { total: 40, covered: 35, pct: 87 }
+          }
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.testsPassed).toBe(true);
+      expect(result.details.coveragePassed).toBe(true);
+      expect(result.coverage.total).toBe(87);
+      expect(result.requiredCoverage).toBe(85);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for service package with 80% coverage (below 85% threshold)', async () => {
+      const tempDir = '/tmp/service-package-low-coverage';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api/coverage'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/services/api');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/service-api',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'vitest run --coverage' }
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(packageDir, 'coverage/coverage-summary.json'),
+        JSON.stringify({
+          total: {
+            lines: { total: 100, covered: 80, pct: 80 },
+            statements: { total: 100, covered: 80, pct: 80 },
+            functions: { total: 20, covered: 16, pct: 80 },
+            branches: { total: 40, covered: 32, pct: 80 }
+          }
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.details.testsPassed).toBe(true);
+      expect(result.details.coveragePassed).toBe(false);
+      expect(result.coverage.total).toBe(80);
+      expect(result.requiredCoverage).toBe(85);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass for suite package with 82% coverage (above 80% threshold)', async () => {
+      const tempDir = '/tmp/suite-package-good-coverage';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard/coverage'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/suites/dashboard');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/suite-dashboard',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'vitest run --coverage' }
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(packageDir, 'coverage/coverage-summary.json'),
+        JSON.stringify({
+          total: {
+            lines: { total: 100, covered: 82, pct: 82 },
+            statements: { total: 100, covered: 82, pct: 82 },
+            functions: { total: 20, covered: 16, pct: 82 },
+            branches: { total: 40, covered: 33, pct: 82 }
+          }
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.testsPassed).toBe(true);
+      expect(result.details.coveragePassed).toBe(true);
+      expect(result.coverage.total).toBe(82);
+      expect(result.requiredCoverage).toBe(80);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for suite package with 75% coverage (below 80% threshold)', async () => {
+      const tempDir = '/tmp/suite-package-low-coverage';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard/coverage'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/suites/dashboard');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/suite-dashboard',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'vitest run --coverage' }
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(packageDir, 'coverage/coverage-summary.json'),
+        JSON.stringify({
+          total: {
+            lines: { total: 100, covered: 75, pct: 75 },
+            statements: { total: 100, covered: 75, pct: 75 },
+            functions: { total: 20, covered: 15, pct: 75 },
+            branches: { total: 40, covered: 30, pct: 75 }
+          }
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.details.testsPassed).toBe(true);
+      expect(result.details.coveragePassed).toBe(false);
+      expect(result.coverage.total).toBe(75);
+      expect(result.requiredCoverage).toBe(80);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass for ui package with 82% coverage (above 80% threshold)', async () => {
+      const tempDir = '/tmp/ui-package-good-coverage';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/ui/components'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/ui/components/coverage'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/ui/components');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/ui-components',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'vitest run --coverage' }
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(packageDir, 'coverage/coverage-summary.json'),
+        JSON.stringify({
+          total: {
+            lines: { total: 100, covered: 82, pct: 82 },
+            statements: { total: 100, covered: 82, pct: 82 },
+            functions: { total: 20, covered: 16, pct: 82 },
+            branches: { total: 40, covered: 33, pct: 82 }
+          }
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.testsPassed).toBe(true);
+      expect(result.details.coveragePassed).toBe(true);
+      expect(result.coverage.total).toBe(82);
+      expect(result.requiredCoverage).toBe(80);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for package with test failures', async () => {
+      const tempDir = '/tmp/package-test-failures';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/core/auth'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/core/auth');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/core-auth',
+          version: '1.0.0',
+          scripts: { 'test:coverage': 'exit 1' } // Simulate test failure
+        })
+      );
+
+      const result = await runTestsWithCoverage({ packagePath: packageDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.details.testsPassed).toBe(false);
+      expect(result.failures.length).toBeGreaterThan(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for missing package.json', async () => {
+      const tempDir = '/tmp/no-package-json-test';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await expect(runTestsWithCoverage({ packagePath: tempDir }))
+        .rejects.toThrow('package.json not found in');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(runTestsWithCoverage({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(runTestsWithCoverage({ packagePath: '/tmp/does-not-exist-test-xyz' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file-test.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(runTestsWithCoverage({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
     });
   });
 });

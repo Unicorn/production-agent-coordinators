@@ -370,6 +370,196 @@ export async function runLintCheck(input: {
   }
 }
 
+export async function runTestsWithCoverage(input: {
+  packagePath: string;
+}): Promise<TestResult> {
+  // Input validation
+  if (!input.packagePath || input.packagePath.trim() === '') {
+    throw new Error('packagePath cannot be empty');
+  }
+
+  // Check if packagePath exists
+  try {
+    await fs.promises.access(input.packagePath);
+  } catch (error) {
+    throw new Error(`packagePath does not exist: ${input.packagePath}`);
+  }
+
+  // Check if packagePath is a directory
+  const stats = await fs.promises.stat(input.packagePath);
+  if (!stats.isDirectory()) {
+    throw new Error(`packagePath is not a directory: ${input.packagePath}`);
+  }
+
+  // Check if package.json exists
+  const packageJsonPath = path.join(input.packagePath, 'package.json');
+  try {
+    await fs.promises.access(packageJsonPath);
+  } catch (error) {
+    throw new Error(`package.json not found in ${input.packagePath}`);
+  }
+
+  // Read package.json to determine package type
+  const packageJsonContent = await fs.promises.readFile(packageJsonPath, 'utf-8');
+  const packageJson = JSON.parse(packageJsonContent);
+  const packageName = packageJson.name || '';
+
+  // Determine coverage threshold based on package type
+  let threshold = 80; // Default for suite/ui packages
+  if (packageName.includes('/core/') || input.packagePath.includes('/core/')) {
+    threshold = 90;
+  } else if (packageName.includes('/services/') || input.packagePath.includes('/services/')) {
+    threshold = 85;
+  } else if (packageName.includes('/suites/') || packageName.includes('/ui/') ||
+             input.packagePath.includes('/suites/') || input.packagePath.includes('/ui/')) {
+    threshold = 80;
+  }
+
+  // Try to run tests with coverage
+  let testsPassed = false;
+  let coveragePassed = false;
+  const failures: Array<{ test: string; message: string }> = [];
+  let coverage = {
+    branches: 0,
+    functions: 0,
+    lines: 0,
+    statements: 0,
+    total: 0
+  };
+
+  // Try to read coverage from coverage/coverage-summary.json first
+  const coveragePath = path.join(input.packagePath, 'coverage', 'coverage-summary.json');
+  let hasCoverageFile = false;
+
+  try {
+    await fs.promises.access(coveragePath);
+    hasCoverageFile = true;
+    const coverageContent = await fs.promises.readFile(coveragePath, 'utf-8');
+    const coverageData = JSON.parse(coverageContent);
+
+    if (coverageData.total) {
+      coverage = {
+        branches: coverageData.total.branches?.pct || 0,
+        functions: coverageData.total.functions?.pct || 0,
+        lines: coverageData.total.lines?.pct || 0,
+        statements: coverageData.total.statements?.pct || 0,
+        total: 0 // Will calculate below
+      };
+
+      // Calculate total as average of all metrics
+      coverage.total = (coverage.branches + coverage.functions + coverage.lines + coverage.statements) / 4;
+    }
+
+    // Check if coverage meets threshold
+    coveragePassed = coverage.total >= threshold;
+
+    // If coverage file exists, assume tests were run successfully
+    testsPassed = true;
+  } catch (coverageError) {
+    // Coverage file not found - need to run tests
+    hasCoverageFile = false;
+  }
+
+  // If no coverage file exists, try to run tests
+  if (!hasCoverageFile) {
+    try {
+      // Try test:coverage script first, fall back to test --coverage
+      const hasTestCoverageScript = packageJson.scripts && packageJson.scripts['test:coverage'];
+      const testCommand = hasTestCoverageScript ? 'yarn test:coverage' : 'yarn test --coverage';
+
+      try {
+        await execAsync(testCommand, { cwd: input.packagePath });
+        testsPassed = true;
+      } catch (error: any) {
+        // Tests failed - extract failure information
+        const stderr = error.stderr || '';
+        const stdout = error.stdout || '';
+        const combinedOutput = stdout + '\n' + stderr;
+
+        // Try to parse test failures from output
+        const failureLines = combinedOutput.split('\n').filter(line =>
+          line.includes('FAIL') || line.includes('✕') || line.includes('Error:')
+        );
+
+        if (failureLines.length > 0) {
+          failureLines.forEach(line => {
+            failures.push({
+              test: 'unknown',
+              message: line.trim()
+            });
+          });
+        } else {
+          // Generic failure
+          failures.push({
+            test: 'unknown',
+            message: combinedOutput.trim() || 'Tests failed'
+          });
+        }
+
+        testsPassed = false;
+      }
+
+      // Try to read coverage from coverage/coverage-summary.json again
+      try {
+        await fs.promises.access(coveragePath);
+        const coverageContent = await fs.promises.readFile(coveragePath, 'utf-8');
+        const coverageData = JSON.parse(coverageContent);
+
+        if (coverageData.total) {
+          coverage = {
+            branches: coverageData.total.branches?.pct || 0,
+            functions: coverageData.total.functions?.pct || 0,
+            lines: coverageData.total.lines?.pct || 0,
+            statements: coverageData.total.statements?.pct || 0,
+            total: 0 // Will calculate below
+          };
+
+          // Calculate total as average of all metrics
+          coverage.total = (coverage.branches + coverage.functions + coverage.lines + coverage.statements) / 4;
+        }
+
+        // Check if coverage meets threshold
+        coveragePassed = coverage.total >= threshold;
+      } catch (coverageReadError) {
+        // Coverage file not found or parse error after running tests
+        if (testsPassed) {
+          coveragePassed = false;
+          failures.push({
+            test: 'coverage',
+            message: 'Coverage report not found or could not be parsed'
+          });
+        }
+      }
+    } catch (error: any) {
+      // Command execution error
+      failures.push({
+        test: 'execution',
+        message: error.message || 'Failed to execute tests'
+      });
+      testsPassed = false;
+      coveragePassed = false;
+    }
+  }
+
+  // Overall passed = tests passed AND coverage passed
+  const passed = testsPassed && coveragePassed;
+
+  return {
+    passed,
+    coverage: {
+      ...coverage,
+      total: Math.round(coverage.total * 100) / 100 // Round to 2 decimals
+    },
+    requiredCoverage: threshold,
+    failures,
+    details: {
+      testsPassed,
+      coveragePassed,
+      threshold
+    }
+  };
+}
+
 export function calculateComplianceScore(input: {
   structure: StructureResult;
   typescript: TypeScriptResult;
