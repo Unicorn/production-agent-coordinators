@@ -51,5 +51,40 @@ describe('Quality Activities', () => {
 
       fs.rmSync(tempDir, { recursive: true });
     });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(validatePackageStructure({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(validatePackageStructure({ packagePath: '/tmp/does-not-exist-xyz' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(validatePackageStructure({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
+    });
+
+    it('should throw error for malformed package.json', async () => {
+      const tempDir = '/tmp/malformed-json-package';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      fs.writeFileSync(path.join(tempDir, 'package.json'), 'invalid json {');
+      fs.writeFileSync(path.join(tempDir, 'tsconfig.json'), '{}');
+      fs.writeFileSync(path.join(tempDir, 'jest.config.js'), '');
+      fs.writeFileSync(path.join(tempDir, '.eslintrc.js'), '');
+
+      await expect(validatePackageStructure({ packagePath: tempDir }))
+        .rejects.toThrow('Failed to parse package.json');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
   });
 });
