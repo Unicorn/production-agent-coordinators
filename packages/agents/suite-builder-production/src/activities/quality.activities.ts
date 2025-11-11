@@ -193,6 +193,183 @@ function parseTypeScriptErrors(stderr: string): Array<{ file: string; line: numb
   return errors;
 }
 
+export async function runLintCheck(input: {
+  packagePath: string;
+}): Promise<LintResult> {
+  // Input validation
+  if (!input.packagePath || input.packagePath.trim() === '') {
+    throw new Error('packagePath cannot be empty');
+  }
+
+  // Check if packagePath exists
+  try {
+    await fs.promises.access(input.packagePath);
+  } catch (error) {
+    throw new Error(`packagePath does not exist: ${input.packagePath}`);
+  }
+
+  // Check if packagePath is a directory
+  const stats = await fs.promises.stat(input.packagePath);
+  if (!stats.isDirectory()) {
+    throw new Error(`packagePath is not a directory: ${input.packagePath}`);
+  }
+
+  // Check if package.json exists
+  const packageJsonPath = path.join(input.packagePath, 'package.json');
+  try {
+    await fs.promises.access(packageJsonPath);
+  } catch (error) {
+    throw new Error(`package.json not found in ${input.packagePath}`);
+  }
+
+  // Use local eslint from node_modules, falling back to yarn lint
+  let eslintCommand = 'yarn lint';
+  let useJsonFormat = false;
+
+  // Try to find eslint in the package's node_modules
+  const localEslintPath = path.join(input.packagePath, 'node_modules', '.bin', 'eslint');
+  try {
+    await fs.promises.access(localEslintPath);
+    // Use JSON format for easier parsing
+    eslintCommand = `"${localEslintPath}" --format json .`;
+    useJsonFormat = true;
+  } catch {
+    // Fall back to yarn lint
+    eslintCommand = 'yarn lint';
+  }
+
+  try {
+    const { stdout, stderr } = await execAsync(eslintCommand, { cwd: input.packagePath });
+
+    // Even on success, check for warnings in the output
+    if (useJsonFormat && stdout) {
+      const eslintWarnings: Array<{ file: string; line: number; rule: string; message: string }> = [];
+
+      try {
+        const results = JSON.parse(stdout);
+
+        // Parse ESLint JSON output for warnings
+        for (const file of results) {
+          if (file.messages && Array.isArray(file.messages)) {
+            for (const message of file.messages) {
+              if (message.severity === 1) {
+                eslintWarnings.push({
+                  file: file.filePath || 'unknown',
+                  line: message.line || 0,
+                  rule: message.ruleId || 'unknown',
+                  message: message.message || ''
+                });
+              }
+            }
+          }
+        }
+      } catch (parseError) {
+        // Ignore parse errors on success
+      }
+
+      // No errors, possibly warnings
+      return {
+        passed: true,
+        errors: [],
+        warnings: eslintWarnings,
+        details: { errors: [], warnings: eslintWarnings }
+      };
+    }
+
+    // No errors or warnings
+    return {
+      passed: true,
+      errors: [],
+      warnings: [],
+      details: { errors: [], warnings: [] }
+    };
+  } catch (error: any) {
+    const stderr = error.stderr || '';
+    const stdout = error.stdout || '';
+    // ESLint output can appear in stdout
+    const combinedOutput = stdout + '\n' + stderr;
+
+    // Try to parse as JSON first (if we used --format json)
+    let eslintErrors: Array<{ file: string; line: number; rule: string; message: string }> = [];
+    let eslintWarnings: Array<{ file: string; line: number; rule: string; message: string }> = [];
+
+    try {
+      // Try to extract JSON from output
+      const jsonMatch = combinedOutput.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const results = JSON.parse(jsonMatch[0]);
+
+        // Parse ESLint JSON output
+        for (const file of results) {
+          if (file.messages && Array.isArray(file.messages)) {
+            for (const message of file.messages) {
+              const lintMessage = {
+                file: file.filePath || 'unknown',
+                line: message.line || 0,
+                rule: message.ruleId || 'unknown',
+                message: message.message || ''
+              };
+
+              if (message.severity === 2) {
+                eslintErrors.push(lintMessage);
+              } else if (message.severity === 1) {
+                eslintWarnings.push(lintMessage);
+              }
+            }
+          }
+        }
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, try text format parsing
+      const lines = combinedOutput.split('\n');
+
+      for (const line of lines) {
+        // Parse text format: "  line:col  error/warning  message  rule"
+        const match = line.match(/^\s*(\d+):(\d+)\s+(error|warning)\s+(.+?)\s+([a-z-]+)$/i);
+        if (match) {
+          const lintMessage = {
+            file: 'unknown', // Text format doesn't include file in each line
+            line: parseInt(match[1], 10),
+            rule: match[5],
+            message: match[4]
+          };
+
+          if (match[3].toLowerCase() === 'error') {
+            eslintErrors.push(lintMessage);
+          } else if (match[3].toLowerCase() === 'warning') {
+            eslintWarnings.push(lintMessage);
+          }
+        }
+      }
+    }
+
+    // If we still have no parsed errors but got an error exit code, treat as generic error
+    if (eslintErrors.length === 0 && eslintWarnings.length === 0 && combinedOutput.trim()) {
+      // Check if it's actually a real error or just warnings
+      const hasErrorKeyword = combinedOutput.toLowerCase().includes('error');
+
+      if (hasErrorKeyword) {
+        eslintErrors.push({
+          file: 'unknown',
+          line: 0,
+          rule: 'unknown',
+          message: combinedOutput.trim()
+        });
+      }
+    }
+
+    // passed = true if no errors (warnings are OK)
+    const passed = eslintErrors.length === 0;
+
+    return {
+      passed,
+      errors: eslintErrors,
+      warnings: eslintWarnings,
+      details: { errors: eslintErrors, warnings: eslintWarnings }
+    };
+  }
+}
+
 export function calculateComplianceScore(input: {
   structure: StructureResult;
   typescript: TypeScriptResult;

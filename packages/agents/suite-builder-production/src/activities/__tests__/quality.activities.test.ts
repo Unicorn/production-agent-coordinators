@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure, runTypeScriptCheck, calculateComplianceScore } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -247,6 +247,231 @@ describe('Quality Activities', () => {
       fs.writeFileSync(tempFile, 'test');
 
       await expect(runTypeScriptCheck({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
+    });
+  });
+
+  describe('runLintCheck', () => {
+    it('should pass for package with no lint errors', async () => {
+      const tempDir = '/tmp/valid-lint-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
+
+      // Create a minimal package.json
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'test-package',
+          version: '1.0.0',
+          scripts: {
+            lint: 'eslint .'
+          },
+          devDependencies: {
+            eslint: '*'
+          }
+        })
+      );
+
+      // Link to workspace eslint
+      const eslintPath = '/Users/mattbernier/projects/production-agent-coordinators/.worktrees/production-suite-builder/.worktrees/autonomous-workflow/node_modules/eslint';
+      const targetNodeModules = path.join(tempDir, 'node_modules/eslint');
+      if (fs.existsSync(eslintPath)) {
+        fs.symlinkSync(eslintPath, targetNodeModules, 'dir');
+      }
+
+      // Create .bin directory and symlink eslint
+      const binDir = path.join(tempDir, 'node_modules', '.bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const eslintBinSource = path.join(eslintPath, 'bin', 'eslint.js');
+      const eslintBinTarget = path.join(binDir, 'eslint');
+      if (fs.existsSync(eslintBinSource)) {
+        fs.symlinkSync(eslintBinSource, eslintBinTarget, 'file');
+      }
+
+      // Create a simple .eslintrc.js config
+      fs.writeFileSync(
+        path.join(tempDir, '.eslintrc.js'),
+        `module.exports = {
+          env: { node: true, es2021: true },
+          extends: 'eslint:recommended',
+          parserOptions: { ecmaVersion: 12 }
+        };`
+      );
+
+      // Write valid JavaScript code
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.js'),
+        'const x = 1;\nconsole.log(x);\n'
+      );
+
+      const result = await runLintCheck({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.errors).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for package with lint errors', async () => {
+      const tempDir = '/tmp/invalid-lint-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
+
+      // Create a minimal package.json
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'test-package',
+          version: '1.0.0',
+          scripts: {
+            lint: 'eslint .'
+          },
+          devDependencies: {
+            eslint: '*'
+          }
+        })
+      );
+
+      // Link to workspace eslint
+      const eslintPath = '/Users/mattbernier/projects/production-agent-coordinators/.worktrees/production-suite-builder/.worktrees/autonomous-workflow/node_modules/eslint';
+      const targetNodeModules = path.join(tempDir, 'node_modules/eslint');
+      if (fs.existsSync(eslintPath)) {
+        fs.symlinkSync(eslintPath, targetNodeModules, 'dir');
+      }
+
+      // Create .bin directory and symlink eslint
+      const binDir = path.join(tempDir, 'node_modules', '.bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const eslintBinSource = path.join(eslintPath, 'bin', 'eslint.js');
+      const eslintBinTarget = path.join(binDir, 'eslint');
+      if (fs.existsSync(eslintBinSource)) {
+        fs.symlinkSync(eslintBinSource, eslintBinTarget, 'file');
+      }
+
+      // Create a simple .eslintrc.js config with strict rules
+      fs.writeFileSync(
+        path.join(tempDir, '.eslintrc.js'),
+        `module.exports = {
+          env: { node: true, es2021: true },
+          extends: 'eslint:recommended',
+          parserOptions: { ecmaVersion: 12 },
+          rules: { 'no-unused-vars': 'error', 'no-undef': 'error' }
+        };`
+      );
+
+      // Write invalid JavaScript code (unused variable and undefined variable)
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.js'),
+        'const unused = 1;\nconsole.log(undefinedVar);\n'
+      );
+
+      const result = await runLintCheck({ packagePath: tempDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some(e => e.message.includes('unused') || e.message.includes('undef'))).toBe(true);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass with warnings only (warnings are acceptable)', async () => {
+      const tempDir = '/tmp/warning-lint-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
+
+      // Create a minimal package.json
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'test-package',
+          version: '1.0.0',
+          scripts: {
+            lint: 'eslint .'
+          },
+          devDependencies: {
+            eslint: '*'
+          }
+        })
+      );
+
+      // Link to workspace eslint
+      const eslintPath = '/Users/mattbernier/projects/production-agent-coordinators/.worktrees/production-suite-builder/.worktrees/autonomous-workflow/node_modules/eslint';
+      const targetNodeModules = path.join(tempDir, 'node_modules/eslint');
+      if (fs.existsSync(eslintPath)) {
+        fs.symlinkSync(eslintPath, targetNodeModules, 'dir');
+      }
+
+      // Create .bin directory and symlink eslint
+      const binDir = path.join(tempDir, 'node_modules', '.bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const eslintBinSource = path.join(eslintPath, 'bin', 'eslint.js');
+      const eslintBinTarget = path.join(binDir, 'eslint');
+      if (fs.existsSync(eslintBinSource)) {
+        fs.symlinkSync(eslintBinSource, eslintBinTarget, 'file');
+      }
+
+      // Create .eslintrc.js with warning-level rule
+      fs.writeFileSync(
+        path.join(tempDir, '.eslintrc.js'),
+        `module.exports = {
+          env: { node: true, es2021: true },
+          extends: 'eslint:recommended',
+          parserOptions: { ecmaVersion: 12 },
+          rules: { 'no-console': 'warn' }
+        };`
+      );
+
+      // Write code that triggers warning
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.js'),
+        'const x = 1;\nconsole.log(x);\n'
+      );
+
+      const result = await runLintCheck({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.warnings.length).toBeGreaterThan(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for missing package.json', async () => {
+      const tempDir = '/tmp/no-package-json-lint';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await expect(runLintCheck({ packagePath: tempDir }))
+        .rejects.toThrow('package.json not found in');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(runLintCheck({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(runLintCheck({ packagePath: '/tmp/does-not-exist-lint-xyz' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file-lint.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(runLintCheck({ packagePath: tempFile }))
         .rejects.toThrow('packagePath is not a directory');
 
       fs.rmSync(tempFile);
