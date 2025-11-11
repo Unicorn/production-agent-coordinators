@@ -193,7 +193,7 @@ function parseTypeScriptErrors(stderr: string): Array<{ file: string; line: numb
   return errors;
 }
 
-export async function calculateComplianceScore(input: {
+export function calculateComplianceScore(input: {
   structure: StructureResult;
   typescript: TypeScriptResult;
   lint: LintResult;
@@ -202,7 +202,7 @@ export async function calculateComplianceScore(input: {
   documentation: DocumentationResult;
   license: LicenseResult;
   integration: IntegrationResult;
-}): Promise<ComplianceScore> {
+}): ComplianceScore {
   // Define weights for each check (must sum to 100)
   const weights = {
     structure: 10,
@@ -221,7 +221,8 @@ export async function calculateComplianceScore(input: {
   if (input.structure.passed) score += weights.structure;
   if (input.typescript.passed) score += weights.typescript;
   if (input.lint.passed) score += weights.lint;
-  if (input.tests.passed) score += weights.tests;
+  // Test scoring is proportional to coverage
+  score += weights.tests * (input.tests.coverage.total / 100);
   if (input.security.passed) score += weights.security;
   if (input.documentation.passed) score += weights.documentation;
   if (input.license.passed) score += weights.license;
