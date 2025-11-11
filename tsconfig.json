@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/contracts" },
+    { "path": "./packages/engine" },
+    { "path": "./packages/coordinator" },
+    { "path": "./packages/specs/hello" },
+    { "path": "./packages/specs/todo" },
+    { "path": "./packages/agents/mock" },
+    { "path": "./packages/agents/anthropic" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/temporal-coordinator" }
+  ]
+}

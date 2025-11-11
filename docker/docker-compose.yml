@@ -1,0 +1,101 @@
+services:
+  # PostgreSQL for state persistence
+  postgres:
+    image: postgres:16-alpine
+    container_name: coordinator-postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-coordinator}
+      POSTGRES_USER: ${POSTGRES_USER:-coordinator}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-coordinator_dev}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coordinator} -d ${POSTGRES_DB:-coordinator}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - coordinator-network
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: coordinator-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory ${REDIS_MAX_MEMORY:-256mb}
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-redis_dev}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - coordinator-network
+
+  # Temporal workflow engine
+  temporal:
+    image: temporalio/auto-setup:${TEMPORAL_VERSION:-1.23}
+    container_name: coordinator-temporal
+    ports:
+      - "${TEMPORAL_PORT:-7233}:7233"
+      - "8233:8233"
+    environment:
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-coordinator}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-coordinator_dev}
+      DEFAULT_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development.yaml
+    volumes:
+      - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "temporal", "--address", "127.0.0.1:7233", "operator", "search-attribute", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    networks:
+      - coordinator-network
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:${TEMPORAL_UI_VERSION:-2.22.0}
+    container_name: coordinator-temporal-ui
+    ports:
+      - "${TEMPORAL_UI_PORT:-8080}:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      temporal:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - coordinator-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  coordinator-network:
+    driver: bridge

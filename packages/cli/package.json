@@ -1,0 +1,32 @@
+{
+  "name": "@coordinator/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "coordinator": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@coordinator/contracts": "*",
+    "@coordinator/coordinator": "*",
+    "@coordinator/specs-hello": "*",
+    "@coordinator/agent-anthropic": "*",
+    "@coordinator/agents-mock": "*",
+    "commander": "^12.0.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.1",
+    "cosmiconfig": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3",
+    "vitest": "^1.6.0"
+  }
+}

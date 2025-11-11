@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@coordinator/contracts": ["../contracts/src/index.ts"],
+      "@coordinator/engine": ["../engine/src/index.ts"],
+      "@coordinator/coordinator": ["../coordinator/src/index.ts"],
+      "@coordinator/specs-hello": ["../specs/hello/src/index.ts"],
+      "@coordinator/agents-mock": ["../agents/mock/src/index.ts"],
+      "@coordinator/storage": ["../storage/src/index.ts"]
+    }
+  }
+}

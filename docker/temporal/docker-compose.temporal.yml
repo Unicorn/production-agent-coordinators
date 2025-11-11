@@ -1,0 +1,13 @@
+services:
+  temporal:
+    image: temporalio/auto-setup:1.23
+    ports:
+      - "7233:7233"
+    environment:
+      DB: sqlite
+      DEFAULT_NAMESPACE: default
+    healthcheck:
+      test: ["CMD", "temporal", "--address", "127.0.0.1:7233", "operator", "search-attribute", "list"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
