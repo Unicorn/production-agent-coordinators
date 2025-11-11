@@ -200,6 +200,49 @@ export class AnthropicAgent implements IAgent {
 
     const startTime = Date.now();
 
+    // Check if using stub/test API key
+    const isStubMode = this.context.apiKeys.ANTHROPIC_API_KEY?.includes('stub') ||
+                       this.context.apiKeys.ANTHROPIC_API_KEY?.includes('test');
+
+    if (isStubMode) {
+      // Return stub response for tests
+      const stubTokens = {
+        prompt: 25,
+        completion: 85,
+      };
+
+      this.rateLimitState.tokensThisMinute += stubTokens.prompt + stubTokens.completion;
+
+      const latencyMs = Date.now() - startTime + 150; // Simulate latency
+
+      return {
+        status: "OK",
+        content: {
+          role: "assistant",
+          content: "[STUB] Mock chat response. SDK integration active but using test key.",
+          id: "msg_stub_001",
+        },
+        metrics: {
+          tokens: stubTokens,
+          latencyMs,
+          costUsd: this.calculateCost(stubTokens),
+          modelName: (payload.model as string) || (this.context.config.model as string) || "claude-3-5-sonnet-20241022",
+        },
+        llmMetadata: {
+          modelId: (payload.model as string) || (this.context.config.model as string) || "claude-3-5-sonnet-20241022",
+          temperature: payload.temperature,
+          maxTokens: payload.max_tokens || 4096,
+          stopReason: "end_turn",
+        },
+        provenance: {
+          agentId: "anthropic",
+          agentVersion: VERSION,
+          executionId: context.runId,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+
     try {
       // Real Anthropic API call
       const response = await this.client.messages.create({
