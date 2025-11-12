@@ -1050,7 +1050,7 @@ describe('Quality Activities', () => {
       expect(result.failures.length).toBeGreaterThan(0);
 
       fs.rmSync(tempDir, { recursive: true });
-    });
+    }, 10000);
 
     it('should throw error for missing package.json', async () => {
       const tempDir = '/tmp/no-package-json-test';

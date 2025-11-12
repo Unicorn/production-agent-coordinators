@@ -290,8 +290,8 @@ export async function runLintCheck(input: {
     const combinedOutput = stdout + '\n' + stderr;
 
     // Try to parse as JSON first (if we used --format json)
-    let eslintErrors: Array<{ file: string; line: number; rule: string; message: string }> = [];
-    let eslintWarnings: Array<{ file: string; line: number; rule: string; message: string }> = [];
+    const eslintErrors: Array<{ file: string; line: number; rule: string; message: string }> = [];
+    const eslintWarnings: Array<{ file: string; line: number; rule: string; message: string }> = [];
 
     try {
       // Try to extract JSON from output
