@@ -412,3 +412,17 @@ export interface DependentPackageUpdate {
     [key: string]: string; // dependency name -> new version
   };
 }
+
+// Version bump types
+export type ChangeType = 'major' | 'minor' | 'patch';
+
+export interface VersionBumpInput {
+  currentVersion: string;
+  changeType: ChangeType;
+}
+
+export interface VersionBumpResult {
+  newVersion: string;
+  previousVersion: string;
+  changeType: ChangeType;
+}
