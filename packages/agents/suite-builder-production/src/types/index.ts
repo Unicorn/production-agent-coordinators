@@ -460,3 +460,19 @@ export interface UpdatedPackage {
   previousVersion: string;
   newVersion: string;
 }
+
+// Deprecation notice types
+export interface DeprecationNoticeInput {
+  packageName: string;
+  version: string;
+  message: string;
+  dryRun?: boolean;
+}
+
+export interface DeprecationNoticeResult {
+  success: boolean;
+  packageName: string;
+  version: string;
+  message: string;
+  error?: string;
+}

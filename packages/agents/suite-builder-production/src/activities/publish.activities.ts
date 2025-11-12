@@ -11,7 +11,9 @@ import type {
   PublishToNpmResult,
   UpdateDependentVersionsInput,
   UpdateDependentVersionsResult,
-  UpdatedPackage
+  UpdatedPackage,
+  DeprecationNoticeInput,
+  DeprecationNoticeResult
 } from '../types/index';
 
 const execAsync = promisify(exec);
@@ -156,4 +158,46 @@ export async function updateDependentVersions(
   }
 
   return { updatedPackages };
+}
+
+export async function publishDeprecationNotice(
+  input: DeprecationNoticeInput
+): Promise<DeprecationNoticeResult> {
+  // Input validation
+  if (!input.packageName || input.packageName.trim() === '') {
+    throw new Error('packageName cannot be empty');
+  }
+
+  if (!input.version || input.version.trim() === '') {
+    throw new Error('version cannot be empty');
+  }
+
+  if (!input.message || input.message.trim() === '') {
+    throw new Error('message cannot be empty');
+  }
+
+  // Build npm deprecate command
+  const packageSpec = `${input.packageName}@${input.version}`;
+  const command = input.dryRun
+    ? `echo "DRY RUN: npm deprecate ${packageSpec} '${input.message}'"`
+    : `npm deprecate ${packageSpec} "${input.message}"`;
+
+  try {
+    await execAsync(command);
+
+    return {
+      success: true,
+      packageName: input.packageName,
+      version: input.version,
+      message: input.message
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      packageName: input.packageName,
+      version: input.version,
+      message: input.message,
+      error: error.message
+    };
+  }
 }

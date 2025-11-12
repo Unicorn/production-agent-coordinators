@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { determineVersionBump, publishToNpm, updateDependentVersions } from '../publish.activities';
+import { determineVersionBump, publishToNpm, updateDependentVersions, publishDeprecationNotice } from '../publish.activities';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -536,6 +536,182 @@ describe('Publishing Activities', () => {
         p => p.packageName === '@bernierllc/package-b'
       );
       expect(pkgBUpdate?.packagePath).toContain('packages/package-b');
+    });
+  });
+
+  describe('publishDeprecationNotice', () => {
+    afterEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should successfully publish deprecation notice', async () => {
+      // Mock successful npm deprecate
+      vi.mocked(exec).mockImplementation((cmd: any, callback: any) => {
+        callback(null, { stdout: 'deprecated @bernierllc/test-package@1.x', stderr: '' });
+        return {} as any;
+      });
+
+      const result = await publishDeprecationNotice({
+        packageName: '@bernierllc/test-package',
+        version: '1.x',
+        message: 'Please use version 2.0.0 or higher'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.packageName).toBe('@bernierllc/test-package');
+      expect(result.version).toBe('1.x');
+      expect(result.message).toBe('Please use version 2.0.0 or higher');
+      expect(result.error).toBeUndefined();
+
+      // Verify npm deprecate command was called correctly
+      expect(exec).toHaveBeenCalledWith(
+        'npm deprecate @bernierllc/test-package@1.x "Please use version 2.0.0 or higher"',
+        expect.any(Function)
+      );
+    });
+
+    it('should successfully publish deprecation notice with migration message', async () => {
+      // Mock successful npm deprecate
+      vi.mocked(exec).mockImplementation((cmd: any, callback: any) => {
+        callback(null, { stdout: 'deprecated @bernierllc/openai-client@1.x', stderr: '' });
+        return {} as any;
+      });
+
+      const result = await publishDeprecationNotice({
+        packageName: '@bernierllc/openai-client',
+        version: '1.x',
+        message: 'Video processing functionality moved to @bernierllc/video-processor in 2.0.0'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.packageName).toBe('@bernierllc/openai-client');
+      expect(result.version).toBe('1.x');
+      expect(result.message).toBe('Video processing functionality moved to @bernierllc/video-processor in 2.0.0');
+
+      // Verify npm deprecate command was called with migration message
+      expect(exec).toHaveBeenCalledWith(
+        'npm deprecate @bernierllc/openai-client@1.x "Video processing functionality moved to @bernierllc/video-processor in 2.0.0"',
+        expect.any(Function)
+      );
+    });
+
+    it('should handle failed deprecation with npm error', async () => {
+      // Mock failed npm deprecate
+      vi.mocked(exec).mockImplementation((cmd: any, callback: any) => {
+        callback(new Error('npm ERR! 404 Not Found - PUT https://registry.npmjs.org/@bernierllc/test-package'), { stdout: '', stderr: 'npm ERR! 404 Not Found' });
+        return {} as any;
+      });
+
+      const result = await publishDeprecationNotice({
+        packageName: '@bernierllc/test-package',
+        version: '1.x',
+        message: 'Please use version 2.0.0 or higher'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.packageName).toBe('@bernierllc/test-package');
+      expect(result.version).toBe('1.x');
+      expect(result.message).toBe('Please use version 2.0.0 or higher');
+      expect(result.error).toContain('npm ERR! 404 Not Found');
+    });
+
+    it('should throw error for empty packageName', async () => {
+      await expect(
+        publishDeprecationNotice({
+          packageName: '',
+          version: '1.x',
+          message: 'Please use version 2.0.0 or higher'
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error for empty version', async () => {
+      await expect(
+        publishDeprecationNotice({
+          packageName: '@bernierllc/test-package',
+          version: '',
+          message: 'Please use version 2.0.0 or higher'
+        })
+      ).rejects.toThrow('version cannot be empty');
+    });
+
+    it('should throw error for empty message', async () => {
+      await expect(
+        publishDeprecationNotice({
+          packageName: '@bernierllc/test-package',
+          version: '1.x',
+          message: ''
+        })
+      ).rejects.toThrow('message cannot be empty');
+    });
+
+    it('should support dry run mode without actual deprecation', async () => {
+      // Mock successful dry run (echo command)
+      vi.mocked(exec).mockImplementation((cmd: any, callback: any) => {
+        callback(null, { stdout: 'DRY RUN: npm deprecate @bernierllc/test-package@1.x \'Please use version 2.0.0 or higher\'', stderr: '' });
+        return {} as any;
+      });
+
+      const result = await publishDeprecationNotice({
+        packageName: '@bernierllc/test-package',
+        version: '1.x',
+        message: 'Please use version 2.0.0 or higher',
+        dryRun: true
+      });
+
+      expect(result.success).toBe(true);
+
+      // Verify echo command was called instead of actual npm deprecate
+      expect(exec).toHaveBeenCalledWith(
+        'echo "DRY RUN: npm deprecate @bernierllc/test-package@1.x \'Please use version 2.0.0 or higher\'"',
+        expect.any(Function)
+      );
+    });
+
+    it('should handle specific version deprecation', async () => {
+      // Mock successful npm deprecate
+      vi.mocked(exec).mockImplementation((cmd: any, callback: any) => {
+        callback(null, { stdout: 'deprecated @bernierllc/test-package@1.5.0', stderr: '' });
+        return {} as any;
+      });
+
+      const result = await publishDeprecationNotice({
+        packageName: '@bernierllc/test-package',
+        version: '1.5.0',
+        message: 'Security vulnerability fixed in 1.6.0'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.version).toBe('1.5.0');
+
+      // Verify npm deprecate command was called with specific version
+      expect(exec).toHaveBeenCalledWith(
+        'npm deprecate @bernierllc/test-package@1.5.0 "Security vulnerability fixed in 1.6.0"',
+        expect.any(Function)
+      );
+    });
+
+    it('should handle version range deprecation', async () => {
+      // Mock successful npm deprecate
+      vi.mocked(exec).mockImplementation((cmd: any, callback: any) => {
+        callback(null, { stdout: 'deprecated @bernierllc/test-package@<2.0.0', stderr: '' });
+        return {} as any;
+      });
+
+      const result = await publishDeprecationNotice({
+        packageName: '@bernierllc/test-package',
+        version: '<2.0.0',
+        message: 'Breaking changes in 2.0.0'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.version).toBe('<2.0.0');
+
+      // Verify npm deprecate command was called with version range
+      expect(exec).toHaveBeenCalledWith(
+        'npm deprecate @bernierllc/test-package@<2.0.0 "Breaking changes in 2.0.0"',
+        expect.any(Function)
+      );
     });
   });
 });
