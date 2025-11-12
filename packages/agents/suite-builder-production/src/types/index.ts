@@ -492,3 +492,17 @@ export interface RemediationWorkflowResult {
   tasksCompleted: number;
   remainingIssues: RemediationTask[];
 }
+
+// Suite builder workflow result
+export interface SuiteBuilderResult {
+  totalPackages: number;
+  successfulBuilds: number;
+  failedBuilds: number;
+  skippedPackages: number;
+  packages: Array<{
+    name: string;
+    version: string;
+    buildStatus: 'completed' | 'failed' | 'skipped';
+    qualityScore?: number;
+  }>;
+}

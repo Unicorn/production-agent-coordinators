@@ -3,6 +3,7 @@ import { PackageBuildWorkflow } from './package-build.workflow';
 import type {
   PackageWorkflowInput,
   SuiteBuilderState,
+  SuiteBuilderResult,
   BuildPhase,
   BuildConfig,
   PackageNode,
@@ -74,7 +75,7 @@ const {
  * 6. Publishes to npm
  * 7. Generates comprehensive reports
  */
-export async function SuiteBuilderWorkflow(input: PackageWorkflowInput): Promise<void> {
+export async function SuiteBuilderWorkflow(input: PackageWorkflowInput): Promise<SuiteBuilderResult> {
   console.log(`Starting autonomous suite builder workflow`);
 
   // PHASE 1: DISCOVERY - Determine what we're building
@@ -129,6 +130,23 @@ export async function SuiteBuilderWorkflow(input: PackageWorkflowInput): Promise
   await completePhase(state, input.config.workspaceRoot);
 
   console.log(`✅ Autonomous suite builder workflow complete`);
+
+  // Return summary result
+  return {
+    totalPackages: state.packages.length,
+    successfulBuilds: state.completedPackages.length,
+    failedBuilds: state.failedPackages.length,
+    skippedPackages: state.packages.length - state.completedPackages.length - state.failedPackages.length,
+    packages: state.packages.map(pkg => ({
+      name: pkg.name,
+      version: pkg.version,
+      buildStatus: state.completedPackages.includes(pkg.name)
+        ? 'completed' as const
+        : state.failedPackages.some(f => f.packageName === pkg.name)
+        ? 'failed' as const
+        : 'skipped' as const
+    }))
+  };
 }
 
 /**
@@ -483,7 +501,7 @@ async function publishPhase(
  * PHASE 7: COMPLETE
  * Generate comprehensive reports
  */
-async function completePhase(state: SuiteBuilderState, workspaceRoot: string): Promise<void> {
+async function completePhase(state: SuiteBuilderState, workspaceRoot: string): Promise<any[]> {
   console.log('Phase 7: COMPLETE');
 
   // Load all package reports
@@ -510,4 +528,6 @@ async function completePhase(state: SuiteBuilderState, workspaceRoot: string): P
   if (state.failedPackages.length > 0) {
     console.log(`❌ Failed: ${state.failedPackages.length} packages`);
   }
+
+  return packageReports;
 }
