@@ -476,3 +476,19 @@ export interface DeprecationNoticeResult {
   message: string;
   error?: string;
 }
+
+// Remediation workflow types
+export interface RemediationWorkflowInput {
+  packagePath: string;
+  packageName: string;
+  tasks: RemediationTask[];
+  maxAttempts?: number;
+}
+
+export interface RemediationWorkflowResult {
+  success: boolean;
+  finalQualityScore: number;
+  attemptsUsed: number;
+  tasksCompleted: number;
+  remainingIssues: RemediationTask[];
+}
