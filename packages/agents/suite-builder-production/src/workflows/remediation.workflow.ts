@@ -9,12 +9,14 @@ import type {
   SecurityResult,
   DocumentationResult,
   LicenseResult,
-  IntegrationResult,
-  ComplianceScore
+  IntegrationResult
 } from '../types/index';
 import * as qualityActivities from '../activities/quality.activities';
 
-// Create activity proxies with timeouts
+// Import calculateComplianceScore directly (it's a pure function, not an activity)
+import { calculateComplianceScore } from '../activities/quality.activities';
+
+// Create activity proxies with timeouts (exclude calculateComplianceScore - it's sync)
 const {
   validatePackageStructure,
   runTypeScriptCheck,
@@ -23,8 +25,7 @@ const {
   runSecurityAudit,
   validateDocumentation,
   validateLicenseHeaders,
-  validateIntegrationPoints,
-  calculateComplianceScore
+  validateIntegrationPoints
 } = proxyActivities<typeof qualityActivities>({
   startToCloseTimeout: '5 minutes'
 });
