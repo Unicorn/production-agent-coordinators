@@ -426,3 +426,19 @@ export interface VersionBumpResult {
   previousVersion: string;
   changeType: ChangeType;
 }
+
+// Publish to npm types
+export interface PublishInput {
+  packagePath: string;
+  version: string;
+  isPublic?: boolean;
+  dryRun?: boolean;
+}
+
+export interface PublishToNpmResult {
+  success: boolean;
+  publishedVersion: string;
+  packageName: string;
+  registryUrl?: string;
+  error?: string;
+}
