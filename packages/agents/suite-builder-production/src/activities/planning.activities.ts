@@ -188,3 +188,39 @@ export async function validatePlan(input: {
     foundSections
   };
 }
+
+/**
+ * Register a plan with the packages-api MCP server
+ *
+ * This function will register a plan with the MCP server using the mcp__vibe-kanban__* tools
+ * to store the plan content in the centralized plan registry.
+ *
+ * TODO: Implement actual MCP integration using mcp__vibe-kanban__* tools
+ * The implementation will:
+ * 1. Use MCP tools to connect to the packages-api server
+ * 2. Register the plan file with the packageName as the identifier
+ * 3. Store the planContent in the registry
+ * 4. Return true if registration succeeded, false otherwise
+ *
+ * @param input - Object containing packageName and planContent
+ * @returns Promise resolving to true if registration succeeded, false otherwise
+ * @throws Error if input validation fails
+ */
+export async function registerPlanWithMcp(input: {
+  packageName: string;
+  planContent: string;
+}): Promise<boolean> {
+  // Input validation
+  if (!input.packageName || input.packageName.trim() === '') {
+    throw new Error('packageName cannot be empty');
+  }
+
+  if (!input.planContent || input.planContent.trim() === '') {
+    throw new Error('planContent cannot be empty');
+  }
+
+  // TODO: Implement MCP registration
+  // This will use the mcp__vibe-kanban__* tools to register the plan with packages-api server
+  // For now, return true as a stub until MCP server is properly configured
+  return true;
+}

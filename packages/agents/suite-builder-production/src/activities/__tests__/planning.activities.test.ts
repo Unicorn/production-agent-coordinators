@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { searchLocalPlans, queryMcpForPlan, validatePlan } from '../planning.activities';
+import { searchLocalPlans, queryMcpForPlan, validatePlan, registerPlanWithMcp } from '../planning.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -403,6 +403,67 @@ This plan only has an overview.
       expect(result.missingSections).toContain('Implementation');
       expect(result.missingSections).toContain('Testing');
       expect(result.foundSections).toContain('Overview');
+    });
+  });
+
+  describe('registerPlanWithMcp', () => {
+    it('should return true for successful plan registration', async () => {
+      // This test uses a stub implementation
+      // TODO: Mock MCP call here when implementation is ready
+      const result = await registerPlanWithMcp({
+        packageName: '@bernierllc/openai-client',
+        planContent: '# OpenAI Client Plan\n\nThis is a test plan.'
+      });
+
+      // Stub implementation returns true
+      expect(result).toBe(true);
+    });
+
+    it('should return true for registration (stub implementation)', async () => {
+      // This test verifies the stub behavior
+      // TODO: Update when actual MCP implementation is ready to test actual registration
+      const result = await registerPlanWithMcp({
+        packageName: '@bernierllc/test-package',
+        planContent: '# Test Package Plan\n\n## Overview\nTest content.'
+      });
+
+      expect(result).toBe(true);
+    });
+
+    it('should throw error if packageName is empty', async () => {
+      await expect(
+        registerPlanWithMcp({
+          packageName: '',
+          planContent: '# Plan Content'
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if packageName is only whitespace', async () => {
+      await expect(
+        registerPlanWithMcp({
+          packageName: '   ',
+          planContent: '# Plan Content'
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if planContent is empty', async () => {
+      await expect(
+        registerPlanWithMcp({
+          packageName: '@bernierllc/test-package',
+          planContent: ''
+        })
+      ).rejects.toThrow('planContent cannot be empty');
+    });
+
+    it('should throw error if planContent is only whitespace', async () => {
+      await expect(
+        registerPlanWithMcp({
+          packageName: '@bernierllc/test-package',
+          planContent: '   '
+        })
+      ).rejects.toThrow('planContent cannot be empty');
     });
   });
 });
