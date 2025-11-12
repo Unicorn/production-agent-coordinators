@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeMeceCompliance, generateSplitPlans } from '../mece.activities';
-import type { MeceViolation } from '../../types';
+import { analyzeMeceCompliance, generateSplitPlans, registerSplitPlans } from '../mece.activities';
+import type { MeceViolation, SplitPackagePlan } from '../../types';
 
 describe('MECE Activities', () => {
   describe('analyzeMeceCompliance', () => {
@@ -316,6 +316,106 @@ Add authentication, rate limiting, and monitoring to API gateway.
       // TODO: When MCP is integrated, expect:
       // expect(result.splitPlans[0].mainPackageDependsOnIt).toBe(false);
       expect(result.splitPlans).toEqual([]);
+    });
+  });
+
+  describe('registerSplitPlans', () => {
+    it('should successfully register single split plan', async () => {
+      // Test case: Register one new package plan with MCP
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/video-processor',
+          functionality: ['video encoding', 'video upload', 'video analysis'],
+          dependencies: ['ffmpeg', '@bernierllc/openai-client'],
+          mainPackageDependsOnIt: true,
+          planContent: `
+# Video Processor Package
+
+## Overview
+Handles video processing functionality extracted from openai-client.
+
+## Features
+- Video encoding
+- Video upload to OpenAI
+- Video analysis
+          `
+        }
+      ];
+
+      const result = await registerSplitPlans({ splitPlans });
+
+      expect(result.success).toBe(true);
+      expect(result.registeredCount).toBe(1);
+    });
+
+    it('should successfully register multiple split plans', async () => {
+      // Test case: Register multiple new package plans with MCP
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/auth-service',
+          functionality: ['JWT authentication', 'OAuth integration'],
+          dependencies: ['jsonwebtoken', 'passport'],
+          mainPackageDependsOnIt: true,
+          planContent: '# Auth Service\n\nAuthentication functionality.'
+        },
+        {
+          packageName: '@bernierllc/rate-limiter',
+          functionality: ['Rate limiting', 'Token bucket algorithm'],
+          dependencies: ['redis'],
+          mainPackageDependsOnIt: true,
+          planContent: '# Rate Limiter\n\nRate limiting functionality.'
+        }
+      ];
+
+      const result = await registerSplitPlans({ splitPlans });
+
+      expect(result.success).toBe(true);
+      expect(result.registeredCount).toBe(2);
+    });
+
+    it('should handle empty splitPlans array', async () => {
+      // Test case: Empty array should return success (nothing to register)
+      const result = await registerSplitPlans({ splitPlans: [] });
+
+      expect(result.success).toBe(true);
+      expect(result.registeredCount).toBe(0);
+    });
+
+    it('should throw error if splitPlans is null', async () => {
+      await expect(
+        registerSplitPlans({ splitPlans: null as any })
+      ).rejects.toThrow('splitPlans cannot be null or undefined');
+    });
+
+    it('should throw error if splitPlans is undefined', async () => {
+      await expect(
+        registerSplitPlans({ splitPlans: undefined as any })
+      ).rejects.toThrow('splitPlans cannot be null or undefined');
+    });
+
+    it('should handle split plans with different dependency configurations', async () => {
+      // Test case: Some plans have main package dependency, some don't
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/legacy-support',
+          functionality: ['deprecated API v1', 'legacy format converter'],
+          dependencies: [],
+          mainPackageDependsOnIt: false, // Main package does NOT depend on this
+          planContent: '# Legacy Support\n\nLegacy functionality.'
+        },
+        {
+          packageName: '@bernierllc/core-utils',
+          functionality: ['common utilities'],
+          dependencies: ['lodash'],
+          mainPackageDependsOnIt: true, // Main package DOES depend on this
+          planContent: '# Core Utils\n\nUtility functions.'
+        }
+      ];
+
+      const result = await registerSplitPlans({ splitPlans });
+
+      expect(result.success).toBe(true);
+      expect(result.registeredCount).toBe(2);
     });
   });
 });

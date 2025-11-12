@@ -361,3 +361,13 @@ export interface SplitPackagePlan {
   mainPackageDependsOnIt: boolean;
   planContent: string;
 }
+
+// Register split plans types
+export interface RegisterSplitPlansInput {
+  splitPlans: SplitPackagePlan[];
+}
+
+export interface RegisterSplitPlansResult {
+  success: boolean;
+  registeredCount: number;
+}

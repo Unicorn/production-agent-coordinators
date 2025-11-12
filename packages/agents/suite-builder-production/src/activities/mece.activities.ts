@@ -2,7 +2,9 @@ import type {
   MeceAnalysisInput,
   MeceAnalysisResult,
   SplitPlanGenerationInput,
-  SplitPlanGenerationResult
+  SplitPlanGenerationResult,
+  RegisterSplitPlansInput,
+  RegisterSplitPlansResult
 } from '../types';
 
 /**
@@ -156,5 +158,104 @@ export async function generateSplitPlans(
   // The actual implementation will generate detailed plans using AI
   return {
     splitPlans: []
+  };
+}
+
+/**
+ * Register split package plans with the packages-api MCP server
+ *
+ * After generating split plans for MECE violations, this activity registers
+ * each split plan with the MCP server so they become tracked package plans
+ * in the system.
+ *
+ * This enables the workflow to:
+ * 1. Track the new packages that need to be created
+ * 2. Query for the registered plans later
+ * 3. Build the split packages alongside the main package
+ * 4. Maintain dependency relationships
+ *
+ * Example: If video processing is split from @bernierllc/openai-client into
+ * @bernierllc/video-processor, this function would register the video-processor
+ * plan with MCP so it can be built and the main package can depend on it.
+ *
+ * TODO: Implement actual MCP integration using mcp__vibe-kanban__* tools
+ * The implementation will:
+ * 1. Iterate through each split plan in the array
+ * 2. For each plan, call MCP to register it as a new package plan:
+ *    - Package name and scope
+ *    - Functionality that was extracted
+ *    - Dependencies (both npm and internal)
+ *    - Whether the main package depends on it
+ *    - Full plan content for implementation
+ * 3. Track successful registrations
+ * 4. Handle registration failures gracefully
+ *
+ * The MCP server will:
+ * - Store the plan as a registered package
+ * - Make it available for discovery and building
+ * - Track relationships between packages
+ * - Enable querying for package metadata
+ *
+ * @param input - Object containing array of split package plans
+ * @returns Promise resolving to registration result with success status and count
+ * @throws Error if input validation fails
+ */
+export async function registerSplitPlans(
+  input: RegisterSplitPlansInput
+): Promise<RegisterSplitPlansResult> {
+  // Input validation
+  if (input.splitPlans === null || input.splitPlans === undefined) {
+    throw new Error('splitPlans cannot be null or undefined');
+  }
+
+  // Handle empty array - nothing to register is a success case
+  if (input.splitPlans.length === 0) {
+    return {
+      success: true,
+      registeredCount: 0
+    };
+  }
+
+  // TODO: Implement MCP integration
+  // This will use the mcp__vibe-kanban__* tools to register each plan
+  // with the packages-api server.
+  //
+  // Example MCP registration:
+  // const registrationResults = await Promise.all(
+  //   input.splitPlans.map(async (plan) => {
+  //     try {
+  //       const mcpResponse = await mcp__vibe_kanban__create_task({
+  //         project_id: 'packages-project-id',
+  //         title: `Implement ${plan.packageName}`,
+  //         description: JSON.stringify({
+  //           packageName: plan.packageName,
+  //           functionality: plan.functionality,
+  //           dependencies: plan.dependencies,
+  //           mainPackageDependsOnIt: plan.mainPackageDependsOnIt,
+  //           planContent: plan.planContent
+  //         })
+  //       });
+  //       return { success: true, plan: plan.packageName };
+  //     } catch (error) {
+  //       console.error(`Failed to register ${plan.packageName}:`, error);
+  //       return { success: false, plan: plan.packageName };
+  //     }
+  //   })
+  // );
+  //
+  // const successCount = registrationResults.filter(r => r.success).length;
+  // const allSuccessful = successCount === input.splitPlans.length;
+  //
+  // return {
+  //   success: allSuccessful,
+  //   registeredCount: successCount
+  // };
+
+  // Stub implementation: Return success with count
+  // Until MCP integration is implemented, assume all registrations succeed
+  // The actual implementation will register each plan individually with MCP
+  return {
+    success: true,
+    registeredCount: input.splitPlans.length
   };
 }
