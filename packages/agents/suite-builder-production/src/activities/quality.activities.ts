@@ -925,3 +925,128 @@ export function calculateComplianceScore(input: {
     level
   };
 }
+
+export async function validateIntegrationPoints(input: {
+  packagePath: string;
+}): Promise<IntegrationResult> {
+  // Input validation
+  if (!input.packagePath || input.packagePath.trim() === '') {
+    throw new Error('packagePath cannot be empty');
+  }
+
+  // Check if packagePath exists
+  try {
+    await fs.promises.access(input.packagePath);
+  } catch (error) {
+    throw new Error(`packagePath does not exist: ${input.packagePath}`);
+  }
+
+  // Check if packagePath is a directory
+  const stats = await fs.promises.stat(input.packagePath);
+  if (!stats.isDirectory()) {
+    throw new Error(`packagePath is not a directory: ${input.packagePath}`);
+  }
+
+  // Check if package.json exists
+  const packageJsonPath = path.join(input.packagePath, 'package.json');
+  try {
+    await fs.promises.access(packageJsonPath);
+  } catch (error) {
+    throw new Error(`package.json not found in ${input.packagePath}`);
+  }
+
+  // Read package.json to get package name and determine package type
+  const packageJsonContent = await fs.promises.readFile(packageJsonPath, 'utf-8');
+  const packageJson = JSON.parse(packageJsonContent);
+  const packageName = packageJson.name || '';
+
+  // Determine package type (core/service/suite/ui/unknown)
+  let packageType: 'core' | 'service' | 'suite' | 'ui' | 'unknown' = 'unknown';
+  if (packageName.includes('/core/') || input.packagePath.includes('/core/')) {
+    packageType = 'core';
+  } else if (packageName.includes('/services/') || input.packagePath.includes('/services/')) {
+    packageType = 'service';
+  } else if (packageName.includes('/suites/') || input.packagePath.includes('/suites/')) {
+    packageType = 'suite';
+  } else if (packageName.includes('/ui/') || input.packagePath.includes('/ui/')) {
+    packageType = 'ui';
+  }
+
+  // Determine required integrations based on package type
+  const requiredIntegrations: string[] = [];
+  if (packageType === 'service' || packageType === 'suite' || packageType === 'ui') {
+    requiredIntegrations.push('logger');
+  }
+
+  // Find all .ts files recursively, excluding certain directories
+  const excludedDirs = ['node_modules', 'dist', 'build', 'coverage', '.git'];
+  const tsFiles: string[] = [];
+
+  async function findTsFiles(dir: string): Promise<void> {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        // Skip excluded directories
+        if (!excludedDirs.includes(entry.name)) {
+          await findTsFiles(fullPath);
+        }
+      } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+        tsFiles.push(fullPath);
+      }
+    }
+  }
+
+  await findTsFiles(input.packagePath);
+
+  // Check for logger imports in .ts files
+  const foundIntegrations: string[] = [];
+  let hasLoggerImport = false;
+
+  for (const file of tsFiles) {
+    const content = await fs.promises.readFile(file, 'utf-8');
+
+    // Search for logger import patterns:
+    // - import { ... } from '@bernierllc/logger'
+    // - import * as logger from '@bernierllc/logger'
+    // - import logger from '@bernierllc/logger'
+    // Simple pattern: just check if the file contains "from '@bernierllc/logger'"
+    if (content.includes("from '@bernierllc/logger'") || content.includes('from "@bernierllc/logger"')) {
+      hasLoggerImport = true;
+      break;
+    }
+  }
+
+  if (hasLoggerImport) {
+    foundIntegrations.push('logger');
+  }
+
+  // Determine missing integrations
+  const missingIntegrations = requiredIntegrations.filter(
+    integration => !foundIntegrations.includes(integration)
+  );
+
+  // Determine if passed
+  const passed = missingIntegrations.length === 0;
+
+  // Build issues list
+  const issues: string[] = [];
+  if (!passed) {
+    for (const missing of missingIntegrations) {
+      issues.push(`Missing required integration: ${missing}`);
+    }
+  }
+
+  return {
+    passed,
+    issues,
+    details: {
+      packageType,
+      requiredIntegrations,
+      missingIntegrations,
+      foundIntegrations
+    }
+  };
+}

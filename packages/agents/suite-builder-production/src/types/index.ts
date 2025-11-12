@@ -300,6 +300,12 @@ export interface LicenseResult extends QualityCheckResult {
 
 export interface IntegrationResult extends QualityCheckResult {
   issues: string[];
+  details: {
+    packageType: 'core' | 'service' | 'suite' | 'ui' | 'unknown';
+    requiredIntegrations: string[];
+    missingIntegrations: string[];
+    foundIntegrations: string[];
+  };
 }
 
 export interface ComplianceScore {

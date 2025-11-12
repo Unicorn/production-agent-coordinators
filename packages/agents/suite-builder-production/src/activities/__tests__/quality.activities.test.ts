@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage, runSecurityAudit, validateDocumentation, validateLicenseHeaders } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage, runSecurityAudit, validateDocumentation, validateLicenseHeaders, validateIntegrationPoints } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -1844,6 +1844,370 @@ export const test3 = () => {};`
       expect(result.passed).toBe(true);
       expect(result.filesWithoutLicense).toHaveLength(0);
       expect(result.details.totalFiles).toBe(3);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+  });
+
+  describe('validateIntegrationPoints', () => {
+    it('should pass for core package with no integration requirements', async () => {
+      const tempDir = '/tmp/core-package-integration';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/core/utils'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/core/utils/src'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/core/utils');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/core-utils',
+          version: '1.0.0'
+        })
+      );
+
+      // Core packages don't need logger integration
+      fs.writeFileSync(
+        path.join(packageDir, 'src/index.ts'),
+        'export function coreUtil() { return "core"; }'
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.packageType).toBe('core');
+      expect(result.details.requiredIntegrations).toHaveLength(0);
+      expect(result.details.missingIntegrations).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass for service package with logger integration', async () => {
+      const tempDir = '/tmp/service-package-with-logger';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api/src'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/services/api');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/service-api',
+          version: '1.0.0'
+        })
+      );
+
+      // Service package with logger import
+      fs.writeFileSync(
+        path.join(packageDir, 'src/index.ts'),
+        `import { Logger } from '@bernierllc/logger';
+
+export function serviceFunction() {
+  const logger = new Logger();
+  logger.info('Service running');
+  return "service";
+}`
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.packageType).toBe('service');
+      expect(result.details.requiredIntegrations).toContain('logger');
+      expect(result.details.missingIntegrations).toHaveLength(0);
+      expect(result.details.foundIntegrations).toContain('logger');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for service package without logger integration', async () => {
+      const tempDir = '/tmp/service-package-no-logger';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api/src'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/services/api');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/service-api',
+          version: '1.0.0'
+        })
+      );
+
+      // Service package WITHOUT logger import
+      fs.writeFileSync(
+        path.join(packageDir, 'src/index.ts'),
+        `export function serviceFunction() {
+  return "service";
+}`
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.details.packageType).toBe('service');
+      expect(result.details.requiredIntegrations).toContain('logger');
+      expect(result.details.missingIntegrations).toContain('logger');
+      expect(result.details.foundIntegrations).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass for suite package with logger integration', async () => {
+      const tempDir = '/tmp/suite-package-with-logger';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard/src'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/suites/dashboard');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/suite-dashboard',
+          version: '1.0.0'
+        })
+      );
+
+      // Suite package with logger import
+      fs.writeFileSync(
+        path.join(packageDir, 'src/app.ts'),
+        `import * as logger from '@bernierllc/logger';
+
+export function suiteApp() {
+  logger.info('Suite running');
+  return "suite";
+}`
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.packageType).toBe('suite');
+      expect(result.details.requiredIntegrations).toContain('logger');
+      expect(result.details.missingIntegrations).toHaveLength(0);
+      expect(result.details.foundIntegrations).toContain('logger');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for suite package without logger integration', async () => {
+      const tempDir = '/tmp/suite-package-no-logger';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/suites/dashboard/src'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/suites/dashboard');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/suite-dashboard',
+          version: '1.0.0'
+        })
+      );
+
+      // Suite package WITHOUT logger import
+      fs.writeFileSync(
+        path.join(packageDir, 'src/app.ts'),
+        `export function suiteApp() {
+  return "suite";
+}`
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.details.packageType).toBe('suite');
+      expect(result.details.requiredIntegrations).toContain('logger');
+      expect(result.details.missingIntegrations).toContain('logger');
+      expect(result.details.foundIntegrations).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should detect logger import in various formats', async () => {
+      const tempDir = '/tmp/service-logger-formats';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/services/test'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/services/test/src'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/services/test');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/service-test',
+          version: '1.0.0'
+        })
+      );
+
+      // Service package with default logger import
+      fs.writeFileSync(
+        path.join(packageDir, 'src/index.ts'),
+        `import logger from '@bernierllc/logger';
+
+export function test() {
+  logger.info('test');
+}`
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.foundIntegrations).toContain('logger');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for missing package.json', async () => {
+      const tempDir = '/tmp/no-package-json-integration';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await expect(validateIntegrationPoints({ packagePath: tempDir }))
+        .rejects.toThrow('package.json not found in');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(validateIntegrationPoints({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(validateIntegrationPoints({ packagePath: '/tmp/does-not-exist-integration-xyz' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file-integration.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(validateIntegrationPoints({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
+    });
+
+    it('should pass for ui package (80% threshold, same as suite)', async () => {
+      const tempDir = '/tmp/ui-package-integration';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/ui/components'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/ui/components/src'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/ui/components');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/ui-components',
+          version: '1.0.0'
+        })
+      );
+
+      // UI packages have same requirements as suite packages
+      fs.writeFileSync(
+        path.join(packageDir, 'src/index.ts'),
+        `import { Logger } from '@bernierllc/logger';
+
+export const Component = () => {
+  new Logger().info('Component loaded');
+};`
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.packageType).toBe('ui');
+      expect(result.details.foundIntegrations).toContain('logger');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should handle unknown package type gracefully', async () => {
+      const tempDir = '/tmp/unknown-package-type';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/unknown-package',
+          version: '1.0.0'
+        })
+      );
+
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.ts'),
+        'export const test = () => {};'
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: tempDir });
+
+      expect(result.details.packageType).toBe('unknown');
+      expect(result.details.requiredIntegrations).toHaveLength(0);
+      expect(result.passed).toBe(true);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should check nested TypeScript files for logger imports', async () => {
+      const tempDir = '/tmp/nested-files-integration';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages/services/api/src/handlers'), { recursive: true });
+
+      const packageDir = path.join(tempDir, 'packages/services/api');
+
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/service-api',
+          version: '1.0.0'
+        })
+      );
+
+      // Logger import in nested file
+      fs.writeFileSync(
+        path.join(packageDir, 'src/index.ts'),
+        'export * from "./handlers/main";'
+      );
+
+      fs.writeFileSync(
+        path.join(packageDir, 'src/handlers/main.ts'),
+        `import { Logger } from '@bernierllc/logger';
+
+export const handler = () => {
+  new Logger().info('Handler running');
+};`
+      );
+
+      const result = await validateIntegrationPoints({ packagePath: packageDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.details.foundIntegrations).toContain('logger');
 
       fs.rmSync(tempDir, { recursive: true });
     });
