@@ -775,6 +775,103 @@ export async function validateDocumentation(input: {
   };
 }
 
+export async function validateLicenseHeaders(input: {
+  packagePath: string;
+}): Promise<LicenseResult> {
+  // Input validation
+  if (!input.packagePath || input.packagePath.trim() === '') {
+    throw new Error('packagePath cannot be empty');
+  }
+
+  // Check if packagePath exists
+  try {
+    await fs.promises.access(input.packagePath);
+  } catch (error) {
+    throw new Error(`packagePath does not exist: ${input.packagePath}`);
+  }
+
+  // Check if packagePath is a directory
+  const stats = await fs.promises.stat(input.packagePath);
+  if (!stats.isDirectory()) {
+    throw new Error(`packagePath is not a directory: ${input.packagePath}`);
+  }
+
+  // Check if package.json exists
+  const packageJsonPath = path.join(input.packagePath, 'package.json');
+  try {
+    await fs.promises.access(packageJsonPath);
+  } catch (error) {
+    throw new Error(`package.json not found in ${input.packagePath}`);
+  }
+
+  // Find all .ts files recursively, excluding certain directories
+  const excludedDirs = ['node_modules', 'dist', 'build', 'coverage', '.git'];
+  const tsFiles: string[] = [];
+
+  async function findTsFiles(dir: string): Promise<void> {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        // Skip excluded directories
+        if (!excludedDirs.includes(entry.name)) {
+          await findTsFiles(fullPath);
+        }
+      } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+        tsFiles.push(fullPath);
+      }
+    }
+  }
+
+  await findTsFiles(input.packagePath);
+
+  // Check each .ts file for license header
+  const filesWithoutLicense: string[] = [];
+
+  for (const file of tsFiles) {
+    const hasLicense = await checkLicenseHeader(file);
+    if (!hasLicense) {
+      filesWithoutLicense.push(file);
+    }
+  }
+
+  const passed = filesWithoutLicense.length === 0;
+
+  return {
+    passed,
+    filesWithoutLicense,
+    details: {
+      totalFiles: tsFiles.length,
+      filesChecked: tsFiles.length,
+      filesWithoutLicense
+    }
+  };
+}
+
+async function checkLicenseHeader(filePath: string): Promise<boolean> {
+  // Read first 10 lines or 500 bytes of the file
+  const fileHandle = await fs.promises.open(filePath, 'r');
+  const buffer = Buffer.alloc(500);
+
+  try {
+    const { bytesRead } = await fileHandle.read(buffer, 0, 500, 0);
+    const content = buffer.toString('utf-8', 0, bytesRead).toLowerCase();
+
+    // Check for license header keywords (case-insensitive)
+    // Must contain "copyright" AND ("bernier" OR "bernier llc")
+    // OR contain "licensed under"
+    const hasCopyright = content.includes('copyright');
+    const hasBernier = content.includes('bernier');
+    const hasLicensed = content.includes('licensed');
+
+    return (hasCopyright && hasBernier) || hasLicensed;
+  } finally {
+    await fileHandle.close();
+  }
+}
+
 export function calculateComplianceScore(input: {
   structure: StructureResult;
   typescript: TypeScriptResult;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage, runSecurityAudit, validateDocumentation } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage, runSecurityAudit, validateDocumentation, validateLicenseHeaders } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -1524,6 +1524,328 @@ Current integration status.
         .rejects.toThrow('packagePath is not a directory');
 
       fs.rmSync(tempFile);
+    });
+  });
+
+  describe('validateLicenseHeaders', () => {
+    it('should pass for package with all .ts files having license headers', async () => {
+      const tempDir = '/tmp/license-headers-all-good';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // Create .ts files with license headers
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.ts'),
+        `/**
+ * Copyright (c) Bernier LLC
+ * Licensed under MIT
+ */
+
+export function hello() {
+  return "world";
+}`
+      );
+
+      fs.writeFileSync(
+        path.join(tempDir, 'src/utils.ts'),
+        `/**
+ * Copyright (c) Bernier LLC
+ * Licensed under MIT
+ */
+
+export const util = () => {};`
+      );
+
+      const result = await validateLicenseHeaders({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.filesWithoutLicense).toHaveLength(0);
+      expect(result.details.totalFiles).toBe(2);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for package with some .ts files missing license headers', async () => {
+      const tempDir = '/tmp/license-headers-some-missing';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // File with license header
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.ts'),
+        `/**
+ * Copyright (c) Bernier LLC
+ * Licensed under MIT
+ */
+
+export function hello() {
+  return "world";
+}`
+      );
+
+      // File without license header
+      fs.writeFileSync(
+        path.join(tempDir, 'src/missing.ts'),
+        `export const badFile = () => {
+  console.log("no license header");
+};`
+      );
+
+      const result = await validateLicenseHeaders({ packagePath: tempDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.filesWithoutLicense.length).toBeGreaterThan(0);
+      expect(result.filesWithoutLicense.some(f => f.includes('missing.ts'))).toBe(true);
+      expect(result.details.totalFiles).toBe(2);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass for package with no .ts files (only .js, .json, etc.)', async () => {
+      const tempDir = '/tmp/license-headers-no-ts';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // Create only non-.ts files
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.js'),
+        'console.log("no TypeScript files");'
+      );
+
+      fs.writeFileSync(
+        path.join(tempDir, 'src/config.json'),
+        '{ "key": "value" }'
+      );
+
+      const result = await validateLicenseHeaders({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.filesWithoutLicense).toHaveLength(0);
+      expect(result.details.totalFiles).toBe(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for missing package.json', async () => {
+      const tempDir = '/tmp/no-package-json-license';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await expect(validateLicenseHeaders({ packagePath: tempDir }))
+        .rejects.toThrow('package.json not found in');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(validateLicenseHeaders({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(validateLicenseHeaders({ packagePath: '/tmp/does-not-exist-license-xyz' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file-license.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(validateLicenseHeaders({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
+    });
+
+    it('should skip node_modules, dist, build, coverage directories', async () => {
+      const tempDir = '/tmp/license-headers-skip-dirs';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'dist'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'build'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'coverage'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // Create .ts file with license header in src
+      fs.writeFileSync(
+        path.join(tempDir, 'src/index.ts'),
+        `/**
+ * Copyright (c) Bernier LLC
+ * Licensed under MIT
+ */
+
+export const main = () => {};`
+      );
+
+      // Create .ts files without license headers in excluded directories
+      fs.writeFileSync(
+        path.join(tempDir, 'node_modules/test.ts'),
+        'export const nodeModule = () => {};'
+      );
+
+      fs.writeFileSync(
+        path.join(tempDir, 'dist/test.ts'),
+        'export const distFile = () => {};'
+      );
+
+      fs.writeFileSync(
+        path.join(tempDir, 'build/test.ts'),
+        'export const buildFile = () => {};'
+      );
+
+      fs.writeFileSync(
+        path.join(tempDir, 'coverage/test.ts'),
+        'export const coverageFile = () => {};'
+      );
+
+      const result = await validateLicenseHeaders({ packagePath: tempDir });
+
+      // Should only check src/index.ts, not files in excluded directories
+      expect(result.passed).toBe(true);
+      expect(result.details.totalFiles).toBe(1);
+      expect(result.filesWithoutLicense).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should detect license headers case-insensitively', async () => {
+      const tempDir = '/tmp/license-headers-case-insensitive';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // File with lowercase copyright
+      fs.writeFileSync(
+        path.join(tempDir, 'src/lowercase.ts'),
+        `/**
+ * copyright (c) bernier llc
+ * licensed under mit
+ */
+
+export const test1 = () => {};`
+      );
+
+      // File with uppercase COPYRIGHT
+      fs.writeFileSync(
+        path.join(tempDir, 'src/uppercase.ts'),
+        `/**
+ * COPYRIGHT (C) BERNIER LLC
+ * LICENSED UNDER MIT
+ */
+
+export const test2 = () => {};`
+      );
+
+      const result = await validateLicenseHeaders({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.filesWithoutLicense).toHaveLength(0);
+      expect(result.details.totalFiles).toBe(2);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should accept various comment styles (// and /* and /**)', async () => {
+      const tempDir = '/tmp/license-headers-comment-styles';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // File with // comment style
+      fs.writeFileSync(
+        path.join(tempDir, 'src/single-line.ts'),
+        `// Copyright (c) Bernier LLC
+// Licensed under MIT
+
+export const test1 = () => {};`
+      );
+
+      // File with /* */ comment style
+      fs.writeFileSync(
+        path.join(tempDir, 'src/multi-line.ts'),
+        `/*
+ * Copyright (c) Bernier LLC
+ * Licensed under MIT
+ */
+
+export const test2 = () => {};`
+      );
+
+      // File with /** */ JSDoc style
+      fs.writeFileSync(
+        path.join(tempDir, 'src/jsdoc.ts'),
+        `/**
+ * Copyright (c) Bernier LLC
+ * Licensed under MIT
+ */
+
+export const test3 = () => {};`
+      );
+
+      const result = await validateLicenseHeaders({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.filesWithoutLicense).toHaveLength(0);
+      expect(result.details.totalFiles).toBe(3);
+
+      fs.rmSync(tempDir, { recursive: true });
     });
   });
 });
