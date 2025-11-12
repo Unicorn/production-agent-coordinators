@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { searchLocalPlans, queryMcpForPlan } from '../planning.activities';
+import { searchLocalPlans, queryMcpForPlan, validatePlan } from '../planning.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -196,6 +196,213 @@ describe('Planning Activities', () => {
           packageName: '   '
         })
       ).rejects.toThrow('packageName cannot be empty');
+    });
+  });
+
+  describe('validatePlan', () => {
+    let testWorkspace: string;
+
+    beforeEach(() => {
+      // Create a temporary test workspace
+      testWorkspace = `/tmp/test-plan-validate-${Date.now()}`;
+      fs.mkdirSync(testWorkspace, { recursive: true });
+    });
+
+    afterEach(() => {
+      // Clean up test workspace
+      if (fs.existsSync(testWorkspace)) {
+        fs.rmSync(testWorkspace, { recursive: true, force: true });
+      }
+    });
+
+    it('should pass validation for plan file with all required sections', async () => {
+      // Setup: Create a plan file with all required sections
+      const planPath = path.join(testWorkspace, 'complete-plan.md');
+      const planContent = `# Complete Plan
+
+## Overview
+This is a complete plan with all required sections.
+
+## Requirements
+- Requirement 1
+- Requirement 2
+
+## Implementation
+Implementation steps:
+1. Step 1
+2. Step 2
+
+## Testing
+Testing approach:
+- Unit tests
+- Integration tests
+`;
+      fs.writeFileSync(planPath, planContent);
+
+      const result = await validatePlan({ planPath });
+
+      expect(result.passed).toBe(true);
+      expect(result.missingSections).toEqual([]);
+      expect(result.foundSections).toContain('Overview');
+      expect(result.foundSections).toContain('Requirements');
+      expect(result.foundSections).toContain('Implementation');
+      expect(result.foundSections).toContain('Testing');
+    });
+
+    it('should fail validation for plan file with missing sections', async () => {
+      // Setup: Create a plan file missing Requirements and Testing sections
+      const planPath = path.join(testWorkspace, 'incomplete-plan.md');
+      const planContent = `# Incomplete Plan
+
+## Overview
+This plan is missing some required sections.
+
+## Implementation
+Implementation steps:
+1. Step 1
+2. Step 2
+`;
+      fs.writeFileSync(planPath, planContent);
+
+      const result = await validatePlan({ planPath });
+
+      expect(result.passed).toBe(false);
+      expect(result.missingSections).toContain('Requirements');
+      expect(result.missingSections).toContain('Testing');
+      expect(result.foundSections).toContain('Overview');
+      expect(result.foundSections).toContain('Implementation');
+    });
+
+    it('should handle section name variations (case-insensitive)', async () => {
+      // Setup: Create a plan file with section name variations
+      const planPath = path.join(testWorkspace, 'varied-plan.md');
+      const planContent = `# Plan with Variations
+
+## description
+Overview content here.
+
+## scope
+Requirements content here.
+
+## tasks
+Implementation content here.
+
+## tests
+Testing content here.
+`;
+      fs.writeFileSync(planPath, planContent);
+
+      const result = await validatePlan({ planPath });
+
+      expect(result.passed).toBe(true);
+      expect(result.missingSections).toEqual([]);
+    });
+
+    it('should fail validation for empty plan file', async () => {
+      // Setup: Create an empty plan file
+      const planPath = path.join(testWorkspace, 'empty-plan.md');
+      fs.writeFileSync(planPath, '');
+
+      const result = await validatePlan({ planPath });
+
+      expect(result.passed).toBe(false);
+      expect(result.missingSections.length).toBeGreaterThan(0);
+      expect(result.foundSections).toEqual([]);
+    });
+
+    it('should throw error for invalid file path (file does not exist)', async () => {
+      const nonExistentPath = path.join(testWorkspace, 'nonexistent-plan.md');
+
+      await expect(
+        validatePlan({ planPath: nonExistentPath })
+      ).rejects.toThrow('planPath does not exist');
+    });
+
+    it('should throw error if planPath is empty', async () => {
+      await expect(
+        validatePlan({ planPath: '' })
+      ).rejects.toThrow('planPath cannot be empty');
+    });
+
+    it('should throw error if planPath is only whitespace', async () => {
+      await expect(
+        validatePlan({ planPath: '   ' })
+      ).rejects.toThrow('planPath cannot be empty');
+    });
+
+    it('should recognize alternative section names (Description for Overview)', async () => {
+      // Setup: Create a plan file with alternative section names
+      const planPath = path.join(testWorkspace, 'alternative-plan.md');
+      const planContent = `# Plan with Alternative Names
+
+## Description
+This is the description/overview section.
+
+## Requirements
+Requirements content here.
+
+## Implementation
+Implementation content here.
+
+## Testing
+Testing content here.
+`;
+      fs.writeFileSync(planPath, planContent);
+
+      const result = await validatePlan({ planPath });
+
+      expect(result.passed).toBe(true);
+      expect(result.missingSections).toEqual([]);
+    });
+
+    it('should handle nested headers correctly', async () => {
+      // Setup: Create a plan file with nested headers
+      const planPath = path.join(testWorkspace, 'nested-plan.md');
+      const planContent = `# Main Plan Title
+
+## Overview
+Overview content.
+
+### Sub-section
+This is a subsection under Overview.
+
+## Requirements
+Requirements content.
+
+## Implementation
+Implementation content.
+
+### Implementation Details
+Nested details.
+
+## Testing
+Testing content.
+`;
+      fs.writeFileSync(planPath, planContent);
+
+      const result = await validatePlan({ planPath });
+
+      expect(result.passed).toBe(true);
+      expect(result.missingSections).toEqual([]);
+    });
+
+    it('should handle plans with only some required sections', async () => {
+      // Setup: Create a plan file with only Overview
+      const planPath = path.join(testWorkspace, 'minimal-plan.md');
+      const planContent = `# Minimal Plan
+
+## Overview
+This plan only has an overview.
+`;
+      fs.writeFileSync(planPath, planContent);
+
+      const result = await validatePlan({ planPath });
+
+      expect(result.passed).toBe(false);
+      expect(result.missingSections).toContain('Requirements');
+      expect(result.missingSections).toContain('Implementation');
+      expect(result.missingSections).toContain('Testing');
+      expect(result.foundSections).toContain('Overview');
     });
   });
 });

@@ -97,3 +97,94 @@ export async function queryMcpForPlan(input: {
   // For now, return null as a stub until MCP server is properly configured
   return null;
 }
+
+export interface PlanValidationResult {
+  passed: boolean;
+  missingSections: string[];
+  foundSections: string[];
+}
+
+/**
+ * Validate that a plan file contains all required sections.
+ *
+ * Required sections (with accepted variations):
+ * - Overview/Description/Summary
+ * - Requirements/Scope
+ * - Implementation/Tasks
+ * - Testing/Tests
+ *
+ * @param input - Object containing planPath to validate
+ * @returns Promise resolving to validation result
+ * @throws Error if input validation fails or file doesn't exist
+ */
+export async function validatePlan(input: {
+  planPath: string;
+}): Promise<PlanValidationResult> {
+  // Input validation
+  if (!input.planPath || input.planPath.trim() === '') {
+    throw new Error('planPath cannot be empty');
+  }
+
+  // Check if file exists
+  if (!fs.existsSync(input.planPath)) {
+    throw new Error(`planPath does not exist: ${input.planPath}`);
+  }
+
+  // Read plan file content
+  const planContent = await fs.promises.readFile(input.planPath, 'utf-8');
+
+  // Define required sections and their variations
+  const requiredSections = [
+    { name: 'Overview', variations: ['overview', 'description', 'summary'] },
+    { name: 'Requirements', variations: ['requirements', 'scope'] },
+    { name: 'Implementation', variations: ['implementation', 'tasks'] },
+    { name: 'Testing', variations: ['testing', 'tests'] }
+  ];
+
+  // Parse markdown headers to find sections
+  const foundSections: string[] = [];
+  const lines = planContent.split('\n');
+
+  for (const line of lines) {
+    // Match markdown headers: #, ##, ###, etc.
+    const headerMatch = line.match(/^#{1,6}\s+(.+)$/);
+    if (headerMatch) {
+      const sectionName = headerMatch[1].trim();
+      foundSections.push(sectionName);
+    }
+  }
+
+  // Check which required sections are missing
+  const missingSections: string[] = [];
+
+  for (const required of requiredSections) {
+    let found = false;
+
+    // Check if any variation of this section exists in the plan
+    for (const foundSection of foundSections) {
+      const foundSectionLower = foundSection.toLowerCase();
+
+      // Check if the found section matches any variation
+      for (const variation of required.variations) {
+        if (foundSectionLower.includes(variation)) {
+          found = true;
+          break;
+        }
+      }
+
+      if (found) break;
+    }
+
+    if (!found) {
+      missingSections.push(required.name);
+    }
+  }
+
+  const passed = missingSections.length === 0;
+
+  return {
+    passed,
+    missingSections,
+    foundSections
+  };
+}
