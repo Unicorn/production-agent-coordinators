@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage, runSecurityAudit } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -1077,6 +1077,207 @@ describe('Quality Activities', () => {
       fs.writeFileSync(tempFile, 'test');
 
       await expect(runTestsWithCoverage({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
+    });
+  });
+
+  describe('runSecurityAudit', () => {
+    it('should pass for package with no vulnerabilities', async () => {
+      const tempDir = '/tmp/secure-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      // Create package.json
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'secure-package',
+          version: '1.0.0',
+          dependencies: {}
+        })
+      );
+
+      // Mock npm audit output with no vulnerabilities
+      fs.mkdirSync(path.join(tempDir, '.audit-mock'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, '.audit-mock', 'audit-output.json'),
+        JSON.stringify({
+          vulnerabilities: {},
+          metadata: {
+            vulnerabilities: {
+              critical: 0,
+              high: 0,
+              moderate: 0,
+              low: 0,
+              info: 0,
+              total: 0
+            }
+          }
+        })
+      );
+
+      const result = await runSecurityAudit({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.vulnerabilities).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should pass with warnings for package with low/moderate vulnerabilities', async () => {
+      const tempDir = '/tmp/low-vuln-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      // Create package.json
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'low-vuln-package',
+          version: '1.0.0',
+          dependencies: { 'some-package': '1.0.0' }
+        })
+      );
+
+      // Mock npm audit output with low/moderate vulnerabilities
+      fs.mkdirSync(path.join(tempDir, '.audit-mock'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, '.audit-mock', 'audit-output.json'),
+        JSON.stringify({
+          vulnerabilities: {
+            'some-package': {
+              name: 'some-package',
+              severity: 'low',
+              via: ['test vulnerability'],
+              range: '<=1.0.0',
+              nodes: ['node_modules/some-package'],
+              fixAvailable: true
+            },
+            'another-package': {
+              name: 'another-package',
+              severity: 'moderate',
+              via: ['test vulnerability 2'],
+              range: '<=2.0.0',
+              nodes: ['node_modules/another-package'],
+              fixAvailable: false
+            }
+          },
+          metadata: {
+            vulnerabilities: {
+              critical: 0,
+              high: 0,
+              moderate: 1,
+              low: 1,
+              info: 0,
+              total: 2
+            }
+          }
+        })
+      );
+
+      const result = await runSecurityAudit({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.vulnerabilities.length).toBeGreaterThan(0);
+      expect(result.vulnerabilities.some(v => v.severity === 'low')).toBe(true);
+      expect(result.vulnerabilities.some(v => v.severity === 'moderate')).toBe(true);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for package with high/critical vulnerabilities', async () => {
+      const tempDir = '/tmp/high-vuln-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      // Create package.json
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: 'high-vuln-package',
+          version: '1.0.0',
+          dependencies: { 'vulnerable-package': '1.0.0' }
+        })
+      );
+
+      // Mock npm audit output with high/critical vulnerabilities
+      fs.mkdirSync(path.join(tempDir, '.audit-mock'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, '.audit-mock', 'audit-output.json'),
+        JSON.stringify({
+          vulnerabilities: {
+            'vulnerable-package': {
+              name: 'vulnerable-package',
+              severity: 'high',
+              via: ['critical security issue'],
+              range: '<=1.0.0',
+              nodes: ['node_modules/vulnerable-package'],
+              fixAvailable: true
+            },
+            'critical-package': {
+              name: 'critical-package',
+              severity: 'critical',
+              via: ['remote code execution'],
+              range: '<=1.0.0',
+              nodes: ['node_modules/critical-package'],
+              fixAvailable: true
+            }
+          },
+          metadata: {
+            vulnerabilities: {
+              critical: 1,
+              high: 1,
+              moderate: 0,
+              low: 0,
+              info: 0,
+              total: 2
+            }
+          }
+        })
+      );
+
+      const result = await runSecurityAudit({ packagePath: tempDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.vulnerabilities.length).toBeGreaterThan(0);
+      expect(result.vulnerabilities.some(v => v.severity === 'high' || v.severity === 'critical')).toBe(true);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for missing package.json', async () => {
+      const tempDir = '/tmp/no-package-json-security';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await expect(runSecurityAudit({ packagePath: tempDir }))
+        .rejects.toThrow('package.json not found in');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(runSecurityAudit({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(runSecurityAudit({ packagePath: '/tmp/does-not-exist-security-xyz' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file-security.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(runSecurityAudit({ packagePath: tempFile }))
         .rejects.toThrow('packagePath is not a directory');
 
       fs.rmSync(tempFile);
