@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { determineVersionBump, publishToNpm } from '../publish.activities';
+import { determineVersionBump, publishToNpm, updateDependentVersions } from '../publish.activities';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -301,6 +301,241 @@ describe('Publishing Activities', () => {
         await fs.readFile(path.join(tempDir, 'package.json'), 'utf-8')
       );
       expect(updatedPackageJson.version).toBe('2.0.0');
+    });
+  });
+
+  describe('updateDependentVersions', () => {
+    let tempWorkspaceRoot: string;
+
+    beforeEach(async () => {
+      // Create temporary workspace structure
+      tempWorkspaceRoot = '/tmp/test-workspace-' + Date.now();
+      const packagesDir = path.join(tempWorkspaceRoot, 'packages');
+
+      await fs.mkdir(packagesDir, { recursive: true });
+
+      // Create package A (the one being updated)
+      const pkgAPath = path.join(packagesDir, 'package-a');
+      await fs.mkdir(pkgAPath, { recursive: true });
+      await fs.writeFile(
+        path.join(pkgAPath, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/package-a',
+          version: '1.0.0'
+        }, null, 2)
+      );
+
+      // Create package B (depends on A)
+      const pkgBPath = path.join(packagesDir, 'package-b');
+      await fs.mkdir(pkgBPath, { recursive: true });
+      await fs.writeFile(
+        path.join(pkgBPath, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/package-b',
+          version: '1.0.0',
+          dependencies: {
+            '@bernierllc/package-a': '^1.0.0'
+          }
+        }, null, 2)
+      );
+
+      // Create package C (depends on A in devDependencies)
+      const pkgCPath = path.join(packagesDir, 'package-c');
+      await fs.mkdir(pkgCPath, { recursive: true });
+      await fs.writeFile(
+        path.join(pkgCPath, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/package-c',
+          version: '1.0.0',
+          devDependencies: {
+            '@bernierllc/package-a': '^1.0.0'
+          }
+        }, null, 2)
+      );
+
+      // Create package D (depends on A in both dependencies and devDependencies)
+      const pkgDPath = path.join(packagesDir, 'package-d');
+      await fs.mkdir(pkgDPath, { recursive: true });
+      await fs.writeFile(
+        path.join(pkgDPath, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/package-d',
+          version: '1.0.0',
+          dependencies: {
+            '@bernierllc/package-a': '^1.0.0'
+          },
+          devDependencies: {
+            '@bernierllc/package-a': '^1.0.0'
+          }
+        }, null, 2)
+      );
+
+      // Create package E (does not depend on A)
+      const pkgEPath = path.join(packagesDir, 'package-e');
+      await fs.mkdir(pkgEPath, { recursive: true });
+      await fs.writeFile(
+        path.join(pkgEPath, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/package-e',
+          version: '1.0.0',
+          dependencies: {
+            '@bernierllc/package-b': '^1.0.0'
+          }
+        }, null, 2)
+      );
+    });
+
+    afterEach(async () => {
+      // Clean up temporary workspace
+      await fs.rm(tempWorkspaceRoot, { recursive: true, force: true });
+    });
+
+    it('should update single dependent package', async () => {
+      const result = await updateDependentVersions({
+        packageName: '@bernierllc/package-a',
+        newVersion: '^2.0.0',
+        workspaceRoot: tempWorkspaceRoot
+      });
+
+      expect(result.updatedPackages).toHaveLength(3); // B, C, D
+
+      // Verify package B was updated
+      const pkgBJson = JSON.parse(
+        await fs.readFile(
+          path.join(tempWorkspaceRoot, 'packages/package-b/package.json'),
+          'utf-8'
+        )
+      );
+      expect(pkgBJson.dependencies['@bernierllc/package-a']).toBe('^2.0.0');
+    });
+
+    it('should update multiple dependent packages', async () => {
+      const result = await updateDependentVersions({
+        packageName: '@bernierllc/package-a',
+        newVersion: '^2.0.0',
+        workspaceRoot: tempWorkspaceRoot
+      });
+
+      expect(result.updatedPackages).toHaveLength(3);
+
+      const packageNames = result.updatedPackages.map(p => p.packageName);
+      expect(packageNames).toContain('@bernierllc/package-b');
+      expect(packageNames).toContain('@bernierllc/package-c');
+      expect(packageNames).toContain('@bernierllc/package-d');
+    });
+
+    it('should return empty array when no dependents exist', async () => {
+      const result = await updateDependentVersions({
+        packageName: '@bernierllc/package-e',
+        newVersion: '^2.0.0',
+        workspaceRoot: tempWorkspaceRoot
+      });
+
+      expect(result.updatedPackages).toHaveLength(0);
+    });
+
+    it('should throw error for empty packageName', async () => {
+      await expect(
+        updateDependentVersions({
+          packageName: '',
+          newVersion: '^2.0.0',
+          workspaceRoot: tempWorkspaceRoot
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error for empty newVersion', async () => {
+      await expect(
+        updateDependentVersions({
+          packageName: '@bernierllc/package-a',
+          newVersion: '',
+          workspaceRoot: tempWorkspaceRoot
+        })
+      ).rejects.toThrow('newVersion cannot be empty');
+    });
+
+    it('should throw error for empty workspaceRoot', async () => {
+      await expect(
+        updateDependentVersions({
+          packageName: '@bernierllc/package-a',
+          newVersion: '^2.0.0',
+          workspaceRoot: ''
+        })
+      ).rejects.toThrow('workspaceRoot cannot be empty');
+    });
+
+    it('should update both dependencies and devDependencies', async () => {
+      const result = await updateDependentVersions({
+        packageName: '@bernierllc/package-a',
+        newVersion: '^2.0.0',
+        workspaceRoot: tempWorkspaceRoot
+      });
+
+      // Find package D in results
+      const pkgDUpdate = result.updatedPackages.find(
+        p => p.packageName === '@bernierllc/package-d'
+      );
+      expect(pkgDUpdate).toBeDefined();
+
+      // Verify package D's package.json was updated in both sections
+      const pkgDJson = JSON.parse(
+        await fs.readFile(
+          path.join(tempWorkspaceRoot, 'packages/package-d/package.json'),
+          'utf-8'
+        )
+      );
+      expect(pkgDJson.dependencies['@bernierllc/package-a']).toBe('^2.0.0');
+      expect(pkgDJson.devDependencies['@bernierllc/package-a']).toBe('^2.0.0');
+    });
+
+    it('should skip packages that do not depend on the updated package', async () => {
+      const result = await updateDependentVersions({
+        packageName: '@bernierllc/package-a',
+        newVersion: '^2.0.0',
+        workspaceRoot: tempWorkspaceRoot
+      });
+
+      // Package E should not be in the results
+      const pkgEUpdate = result.updatedPackages.find(
+        p => p.packageName === '@bernierllc/package-e'
+      );
+      expect(pkgEUpdate).toBeUndefined();
+
+      // Verify package E was not modified
+      const pkgEJson = JSON.parse(
+        await fs.readFile(
+          path.join(tempWorkspaceRoot, 'packages/package-e/package.json'),
+          'utf-8'
+        )
+      );
+      expect(pkgEJson.dependencies['@bernierllc/package-a']).toBeUndefined();
+    });
+
+    it('should include previousVersion in results', async () => {
+      const result = await updateDependentVersions({
+        packageName: '@bernierllc/package-a',
+        newVersion: '^2.0.0',
+        workspaceRoot: tempWorkspaceRoot
+      });
+
+      const pkgBUpdate = result.updatedPackages.find(
+        p => p.packageName === '@bernierllc/package-b'
+      );
+      expect(pkgBUpdate?.previousVersion).toBe('^1.0.0');
+      expect(pkgBUpdate?.newVersion).toBe('^2.0.0');
+    });
+
+    it('should include packagePath in results', async () => {
+      const result = await updateDependentVersions({
+        packageName: '@bernierllc/package-a',
+        newVersion: '^2.0.0',
+        workspaceRoot: tempWorkspaceRoot
+      });
+
+      const pkgBUpdate = result.updatedPackages.find(
+        p => p.packageName === '@bernierllc/package-b'
+      );
+      expect(pkgBUpdate?.packagePath).toContain('packages/package-b');
     });
   });
 });

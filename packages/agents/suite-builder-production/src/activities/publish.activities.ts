@@ -3,7 +3,16 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { VersionBumpInput, VersionBumpResult, PublishInput, PublishToNpmResult } from '../types/index';
+import { glob } from 'glob';
+import type {
+  VersionBumpInput,
+  VersionBumpResult,
+  PublishInput,
+  PublishToNpmResult,
+  UpdateDependentVersionsInput,
+  UpdateDependentVersionsResult,
+  UpdatedPackage
+} from '../types/index';
 
 const execAsync = promisify(exec);
 
@@ -81,4 +90,70 @@ export async function publishToNpm(input: PublishInput): Promise<PublishToNpmRes
       error: error.message
     };
   }
+}
+
+export async function updateDependentVersions(
+  input: UpdateDependentVersionsInput
+): Promise<UpdateDependentVersionsResult> {
+  // Input validation
+  if (!input.packageName || input.packageName.trim() === '') {
+    throw new Error('packageName cannot be empty');
+  }
+
+  if (!input.newVersion || input.newVersion.trim() === '') {
+    throw new Error('newVersion cannot be empty');
+  }
+
+  if (!input.workspaceRoot || input.workspaceRoot.trim() === '') {
+    throw new Error('workspaceRoot cannot be empty');
+  }
+
+  const updatedPackages: UpdatedPackage[] = [];
+
+  // Find all package.json files in workspace
+  const packagesDir = path.join(input.workspaceRoot, 'packages');
+  const packageJsonFiles = await glob('**/package.json', {
+    cwd: packagesDir,
+    absolute: true,
+    ignore: ['**/node_modules/**', '**/dist/**']
+  });
+
+  // Check each package for dependencies on the updated package
+  for (const packageJsonPath of packageJsonFiles) {
+    const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
+    const packageJson = JSON.parse(packageJsonContent);
+
+    let updated = false;
+    let previousVersion: string | undefined;
+
+    // Check dependencies
+    if (packageJson.dependencies?.[input.packageName]) {
+      previousVersion = packageJson.dependencies[input.packageName];
+      packageJson.dependencies[input.packageName] = input.newVersion;
+      updated = true;
+    }
+
+    // Check devDependencies
+    if (packageJson.devDependencies?.[input.packageName]) {
+      if (!previousVersion) {
+        previousVersion = packageJson.devDependencies[input.packageName];
+      }
+      packageJson.devDependencies[input.packageName] = input.newVersion;
+      updated = true;
+    }
+
+    if (updated) {
+      // Write updated package.json
+      await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+
+      updatedPackages.push({
+        packageName: packageJson.name,
+        packagePath: path.dirname(packageJsonPath),
+        previousVersion: previousVersion!,
+        newVersion: input.newVersion
+      });
+    }
+  }
+
+  return { updatedPackages };
 }

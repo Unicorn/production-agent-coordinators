@@ -442,3 +442,21 @@ export interface PublishToNpmResult {
   registryUrl?: string;
   error?: string;
 }
+
+// Update dependent versions types
+export interface UpdateDependentVersionsInput {
+  packageName: string;
+  newVersion: string;
+  workspaceRoot: string;
+}
+
+export interface UpdateDependentVersionsResult {
+  updatedPackages: UpdatedPackage[];
+}
+
+export interface UpdatedPackage {
+  packageName: string;
+  packagePath: string;
+  previousVersion: string;
+  newVersion: string;
+}
