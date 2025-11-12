@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeMeceCompliance, generateSplitPlans, registerSplitPlans } from '../mece.activities';
+import { analyzeMeceCompliance, generateSplitPlans, registerSplitPlans, determineDeprecationCycle } from '../mece.activities';
 import type { MeceViolation, SplitPackagePlan } from '../../types';
 
 describe('MECE Activities', () => {
@@ -416,6 +416,186 @@ Handles video processing functionality extracted from openai-client.
 
       expect(result.success).toBe(true);
       expect(result.registeredCount).toBe(2);
+    });
+  });
+
+  describe('determineDeprecationCycle', () => {
+    it('should return 2-version deprecation cycle for published package with MECE violation', async () => {
+      // Test case: Published package with MECE violation needs 2-version cycle
+      const violation: MeceViolation = {
+        description: 'Video processing functionality does not belong in OpenAI client package',
+        suggestedSplit: '@bernierllc/video-processor',
+        affectedFunctionality: ['video encoding', 'video upload', 'video analysis'],
+        mainPackageStillUsesIt: true
+      };
+
+      const result = await determineDeprecationCycle({
+        packageName: '@bernierllc/openai-client',
+        currentVersion: '1.0.0',
+        violation,
+        isPublished: true
+      });
+
+      expect(result.requiresDeprecation).toBe(true);
+      expect(result.versions).toHaveLength(2);
+
+      // Version 1: Minor bump with deprecation notice
+      expect(result.versions[0].versionType).toBe('minor');
+      expect(result.versions[0].version).toBe('next-minor');
+      expect(result.versions[0].deprecationNotice).toBeDefined();
+      expect(result.versions[0].deprecationNotice).toContain('@bernierllc/video-processor');
+      expect(result.versions[0].changes).toContain('Add deprecation notice for video encoding, video upload, video analysis');
+
+      // Version 2: Major bump with functionality removed
+      expect(result.versions[1].versionType).toBe('major');
+      expect(result.versions[1].version).toBe('next-major');
+      expect(result.versions[1].changes).toContain('Remove video encoding, video upload, video analysis');
+      expect(result.versions[1].changes).toContain('Add dependency on @bernierllc/video-processor');
+    });
+
+    it('should return direct split for unpublished package with MECE violation', async () => {
+      // Test case: Unpublished package can do direct split without deprecation cycle
+      const violation: MeceViolation = {
+        description: 'Video processing functionality does not belong in OpenAI client package',
+        suggestedSplit: '@bernierllc/video-processor',
+        affectedFunctionality: ['video encoding', 'video upload'],
+        mainPackageStillUsesIt: false
+      };
+
+      const result = await determineDeprecationCycle({
+        packageName: '@bernierllc/openai-client',
+        currentVersion: '0.1.0',
+        violation,
+        isPublished: false
+      });
+
+      expect(result.requiresDeprecation).toBe(false);
+      expect(result.versions).toHaveLength(1);
+      expect(result.versions[0].versionType).toBe('direct');
+      expect(result.versions[0].version).toBe('next');
+      expect(result.versions[0].changes).toContain('Direct split - no deprecation needed');
+      expect(result.versions[0].deprecationNotice).toBeUndefined();
+    });
+
+    it('should not add dependency when main package does not use split functionality', async () => {
+      // Test case: Published package where split functionality is being removed entirely
+      const violation: MeceViolation = {
+        description: 'Legacy functionality should be extracted to separate package',
+        suggestedSplit: '@bernierllc/legacy-support',
+        affectedFunctionality: ['deprecated API v1'],
+        mainPackageStillUsesIt: false
+      };
+
+      const result = await determineDeprecationCycle({
+        packageName: '@bernierllc/modern-api',
+        currentVersion: '2.0.0',
+        violation,
+        isPublished: true
+      });
+
+      expect(result.requiresDeprecation).toBe(true);
+      expect(result.versions).toHaveLength(2);
+
+      // Version 2 should not add dependency since main package doesn't use it
+      expect(result.versions[1].changes).toContain('Remove deprecated API v1');
+      expect(result.versions[1].changes).not.toContain('Add dependency on @bernierllc/legacy-support');
+    });
+
+    it('should throw error if packageName is empty', async () => {
+      const violation: MeceViolation = {
+        description: 'Test violation',
+        suggestedSplit: '@bernierllc/test-package',
+        affectedFunctionality: ['test functionality'],
+        mainPackageStillUsesIt: false
+      };
+
+      await expect(
+        determineDeprecationCycle({
+          packageName: '',
+          currentVersion: '1.0.0',
+          violation,
+          isPublished: true
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if packageName is only whitespace', async () => {
+      const violation: MeceViolation = {
+        description: 'Test violation',
+        suggestedSplit: '@bernierllc/test-package',
+        affectedFunctionality: ['test functionality'],
+        mainPackageStillUsesIt: false
+      };
+
+      await expect(
+        determineDeprecationCycle({
+          packageName: '   ',
+          currentVersion: '1.0.0',
+          violation,
+          isPublished: true
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if violation is null', async () => {
+      await expect(
+        determineDeprecationCycle({
+          packageName: '@bernierllc/test-package',
+          currentVersion: '1.0.0',
+          violation: null as any,
+          isPublished: true
+        })
+      ).rejects.toThrow('violation cannot be null or undefined');
+    });
+
+    it('should throw error if violation is undefined', async () => {
+      await expect(
+        determineDeprecationCycle({
+          packageName: '@bernierllc/test-package',
+          currentVersion: '1.0.0',
+          violation: undefined as any,
+          isPublished: true
+        })
+      ).rejects.toThrow('violation cannot be null or undefined');
+    });
+
+    it('should throw error if isPublished is not a boolean', async () => {
+      const violation: MeceViolation = {
+        description: 'Test violation',
+        suggestedSplit: '@bernierllc/test-package',
+        affectedFunctionality: ['test functionality'],
+        mainPackageStillUsesIt: false
+      };
+
+      await expect(
+        determineDeprecationCycle({
+          packageName: '@bernierllc/test-package',
+          currentVersion: '1.0.0',
+          violation,
+          isPublished: 'yes' as any
+        })
+      ).rejects.toThrow('isPublished must be a boolean');
+    });
+
+    it('should handle multiple affected functionalities in deprecation notice', async () => {
+      // Test case: Multiple functionalities in one split
+      const violation: MeceViolation = {
+        description: 'Auth and rate limiting are separate concerns',
+        suggestedSplit: '@bernierllc/auth-service',
+        affectedFunctionality: ['JWT authentication', 'OAuth integration', 'Session management'],
+        mainPackageStillUsesIt: true
+      };
+
+      const result = await determineDeprecationCycle({
+        packageName: '@bernierllc/api-gateway',
+        currentVersion: '1.5.0',
+        violation,
+        isPublished: true
+      });
+
+      expect(result.requiresDeprecation).toBe(true);
+      expect(result.versions[0].changes).toContain('Add deprecation notice for JWT authentication, OAuth integration, Session management');
+      expect(result.versions[1].changes).toContain('Remove JWT authentication, OAuth integration, Session management');
     });
   });
 });

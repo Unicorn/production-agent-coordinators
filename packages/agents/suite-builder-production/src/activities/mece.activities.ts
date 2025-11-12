@@ -4,7 +4,9 @@ import type {
   SplitPlanGenerationInput,
   SplitPlanGenerationResult,
   RegisterSplitPlansInput,
-  RegisterSplitPlansResult
+  RegisterSplitPlansResult,
+  DeprecationCycleInput,
+  DeprecationCycleResult
 } from '../types';
 
 /**
@@ -257,5 +259,85 @@ export async function registerSplitPlans(
   return {
     success: true,
     registeredCount: input.splitPlans.length
+  };
+}
+
+/**
+ * Determine the deprecation cycle for a package with MECE violations
+ *
+ * When a MECE violation is detected in a package, this activity determines
+ * the appropriate migration strategy based on whether the package is published:
+ *
+ * - **Published packages**: Require a 2-version deprecation cycle to avoid breaking changes:
+ *   - Version 1 (Minor bump): Add deprecation notice, update docs
+ *   - Version 2 (Major bump): Remove split functionality, add dependency if needed
+ *
+ * - **Unpublished packages**: Can do direct split without deprecation cycle
+ *
+ * This ensures published packages follow semantic versioning and provide consumers
+ * with proper migration paths, while unpublished packages can be refactored immediately.
+ *
+ * @param input - Object containing package name, current version, violation details, and publish status
+ * @returns Promise resolving to deprecation cycle with version plan
+ * @throws Error if input validation fails
+ */
+export async function determineDeprecationCycle(
+  input: DeprecationCycleInput
+): Promise<DeprecationCycleResult> {
+  // Input validation
+  if (!input.packageName || input.packageName.trim() === '') {
+    throw new Error('packageName cannot be empty');
+  }
+
+  if (input.violation === null || input.violation === undefined) {
+    throw new Error('violation cannot be null or undefined');
+  }
+
+  if (typeof input.isPublished !== 'boolean') {
+    throw new Error('isPublished must be a boolean');
+  }
+
+  // Unpublished packages: Direct split without deprecation
+  if (!input.isPublished) {
+    return {
+      requiresDeprecation: false,
+      versions: [{
+        version: 'next',
+        versionType: 'direct',
+        changes: ['Direct split - no deprecation needed'],
+      }]
+    };
+  }
+
+  // Published packages: 2-version deprecation cycle
+  const affectedFunctionalityList = input.violation.affectedFunctionality.join(', ');
+
+  // Version 1: Minor bump with deprecation notice
+  const minorVersion = {
+    version: 'next-minor',
+    versionType: 'minor' as const,
+    changes: [`Add deprecation notice for ${affectedFunctionalityList}`],
+    deprecationNotice: `This functionality will be moved to ${input.violation.suggestedSplit} in next major version`
+  };
+
+  // Version 2: Major bump with functionality removed
+  const majorVersionChanges: string[] = [
+    `Remove ${affectedFunctionalityList}`
+  ];
+
+  // Only add dependency if main package still uses the split functionality
+  if (input.violation.mainPackageStillUsesIt) {
+    majorVersionChanges.push(`Add dependency on ${input.violation.suggestedSplit}`);
+  }
+
+  const majorVersion = {
+    version: 'next-major',
+    versionType: 'major' as const,
+    changes: majorVersionChanges
+  };
+
+  return {
+    requiresDeprecation: true,
+    versions: [minorVersion, majorVersion]
   };
 }

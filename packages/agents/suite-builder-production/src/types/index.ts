@@ -371,3 +371,23 @@ export interface RegisterSplitPlansResult {
   success: boolean;
   registeredCount: number;
 }
+
+// Deprecation cycle types
+export interface DeprecationCycleInput {
+  packageName: string;
+  currentVersion: string;
+  violation: MeceViolation;
+  isPublished: boolean;
+}
+
+export interface DeprecationCycleResult {
+  requiresDeprecation: boolean;
+  versions: PackageVersion[];
+}
+
+export interface PackageVersion {
+  version: string; // e.g., "1.1.0", "2.0.0", "next-minor", "next-major", "next"
+  versionType: 'minor' | 'major' | 'direct';
+  changes: string[];
+  deprecationNotice?: string;
+}
