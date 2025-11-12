@@ -343,3 +343,21 @@ export interface RemediationResult {
   completed: boolean;
   tasksAttempted: number;
 }
+
+// Split plan generation types
+export interface SplitPlanGenerationInput {
+  packageName: string;
+  violation: MeceViolation;
+}
+
+export interface SplitPlanGenerationResult {
+  splitPlans: SplitPackagePlan[];
+}
+
+export interface SplitPackagePlan {
+  packageName: string;
+  functionality: string[];
+  dependencies: string[];
+  mainPackageDependsOnIt: boolean;
+  planContent: string;
+}

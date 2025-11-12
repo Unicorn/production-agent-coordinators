@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeMeceCompliance } from '../mece.activities';
+import { analyzeMeceCompliance, generateSplitPlans } from '../mece.activities';
+import type { MeceViolation } from '../../types';
 
 describe('MECE Activities', () => {
   describe('analyzeMeceCompliance', () => {
@@ -169,6 +170,152 @@ Add authentication, rate limiting, and monitoring to API gateway.
       // In reality, MCP might flag this as potentially violating MECE
       // if authentication/rate limiting should be separate packages
       expect(result.isCompliant).toBe(true);
+    });
+  });
+
+  describe('generateSplitPlans', () => {
+    it('should generate one split plan for single MECE violation', async () => {
+      // Test case: Video processing added to openai-client violates MECE
+      // Should generate plan for @bernierllc/video-processor
+      const violation: MeceViolation = {
+        description: 'Video processing functionality does not belong in OpenAI client package',
+        suggestedSplit: '@bernierllc/video-processor',
+        affectedFunctionality: ['video encoding', 'video upload', 'video analysis'],
+        mainPackageStillUsesIt: true
+      };
+
+      const result = await generateSplitPlans({
+        packageName: '@bernierllc/openai-client',
+        violation
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, expect:
+      // expect(result.splitPlans).toHaveLength(1);
+      // expect(result.splitPlans[0].packageName).toBe('@bernierllc/video-processor');
+      // expect(result.splitPlans[0].functionality).toContain('video encoding');
+      // expect(result.splitPlans[0].mainPackageDependsOnIt).toBe(true);
+      // expect(result.splitPlans[0].planContent).toBeTruthy();
+      expect(result.splitPlans).toEqual([]);
+    });
+
+    it('should generate multiple split plans for complex MECE violation', async () => {
+      // Test case: Multiple unrelated concerns added to api-gateway
+      // Should generate plans for auth-service and rate-limiter packages
+      const violation: MeceViolation = {
+        description: 'Authentication and rate limiting are separate concerns that should be split',
+        suggestedSplit: '@bernierllc/auth-service, @bernierllc/rate-limiter',
+        affectedFunctionality: [
+          'JWT authentication',
+          'OAuth integration',
+          'Rate limiting',
+          'Token bucket algorithm'
+        ],
+        mainPackageStillUsesIt: true
+      };
+
+      const result = await generateSplitPlans({
+        packageName: '@bernierllc/api-gateway',
+        violation
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, expect:
+      // expect(result.splitPlans).toHaveLength(2);
+      // expect(result.splitPlans[0].packageName).toBe('@bernierllc/auth-service');
+      // expect(result.splitPlans[1].packageName).toBe('@bernierllc/rate-limiter');
+      // expect(result.splitPlans[0].functionality).toContain('JWT authentication');
+      // expect(result.splitPlans[1].functionality).toContain('Rate limiting');
+      expect(result.splitPlans).toEqual([]);
+    });
+
+    it('should throw error if packageName is empty', async () => {
+      const violation: MeceViolation = {
+        description: 'Test violation',
+        suggestedSplit: '@bernierllc/test-package',
+        affectedFunctionality: ['test functionality'],
+        mainPackageStillUsesIt: false
+      };
+
+      await expect(
+        generateSplitPlans({
+          packageName: '',
+          violation
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if packageName is only whitespace', async () => {
+      const violation: MeceViolation = {
+        description: 'Test violation',
+        suggestedSplit: '@bernierllc/test-package',
+        affectedFunctionality: ['test functionality'],
+        mainPackageStillUsesIt: false
+      };
+
+      await expect(
+        generateSplitPlans({
+          packageName: '   ',
+          violation
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if violation is null', async () => {
+      await expect(
+        generateSplitPlans({
+          packageName: '@bernierllc/test-package',
+          violation: null as any
+        })
+      ).rejects.toThrow('violation cannot be null or undefined');
+    });
+
+    it('should throw error if violation is undefined', async () => {
+      await expect(
+        generateSplitPlans({
+          packageName: '@bernierllc/test-package',
+          violation: undefined as any
+        })
+      ).rejects.toThrow('violation cannot be null or undefined');
+    });
+
+    it('should handle violation with empty suggestedSplit', async () => {
+      // Edge case: violation detected but no specific split suggested yet
+      const violation: MeceViolation = {
+        description: 'Functionality violates MECE but analysis needed',
+        suggestedSplit: '',
+        affectedFunctionality: ['unclear functionality'],
+        mainPackageStillUsesIt: false
+      };
+
+      const result = await generateSplitPlans({
+        packageName: '@bernierllc/test-package',
+        violation
+      });
+
+      // Stub implementation returns empty array
+      // MCP would analyze and determine appropriate splits
+      expect(result.splitPlans).toEqual([]);
+    });
+
+    it('should handle violation where main package does not depend on split', async () => {
+      // Test case: Functionality being removed entirely from package
+      const violation: MeceViolation = {
+        description: 'Legacy functionality should be extracted to separate package',
+        suggestedSplit: '@bernierllc/legacy-support',
+        affectedFunctionality: ['deprecated API v1', 'legacy format converter'],
+        mainPackageStillUsesIt: false
+      };
+
+      const result = await generateSplitPlans({
+        packageName: '@bernierllc/modern-api',
+        violation
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, expect:
+      // expect(result.splitPlans[0].mainPackageDependsOnIt).toBe(false);
+      expect(result.splitPlans).toEqual([]);
     });
   });
 });

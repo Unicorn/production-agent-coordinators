@@ -1,4 +1,9 @@
-import type { MeceAnalysisInput, MeceAnalysisResult } from '../types';
+import type {
+  MeceAnalysisInput,
+  MeceAnalysisResult,
+  SplitPlanGenerationInput,
+  SplitPlanGenerationResult
+} from '../types';
 
 /**
  * Analyze MECE (Mutually Exclusive, Collectively Exhaustive) compliance for a package update
@@ -64,5 +69,92 @@ export async function analyzeMeceCompliance(
   // Until MCP integration is implemented, assume all updates are MECE compliant
   return {
     isCompliant: true
+  };
+}
+
+/**
+ * Generate implementation plans for new packages when MECE violations are detected
+ *
+ * When a MECE violation is detected, this activity generates detailed implementation
+ * plans for the suggested split packages. Each plan includes:
+ * - Package name and scope
+ * - Functionality that should be extracted
+ * - Dependencies (both npm and internal)
+ * - Whether the main package will depend on the split package
+ * - Full plan content for implementation
+ *
+ * Example: If video processing is added to @bernierllc/openai-client and violates MECE,
+ * this would generate a plan for @bernierllc/video-processor including:
+ * - Video encoding functionality
+ * - Video upload capabilities
+ * - Video analysis features
+ * - Dependencies: ffmpeg, openai SDK
+ * - Main package dependency: true (openai-client will use video-processor)
+ *
+ * TODO: Implement actual MCP integration using mcp__vibe-kanban__* tools
+ * The implementation will:
+ * 1. Parse the violation to identify suggested split package(s)
+ * 2. For each suggested package, query MCP to generate a detailed plan:
+ *    - Package structure and purpose
+ *    - Specific functionality to extract from main package
+ *    - Required dependencies
+ *    - Integration points with main package
+ *    - Implementation steps
+ * 3. Return array of SplitPackagePlan objects with complete plans
+ *
+ * The MCP server will use AI to:
+ * - Analyze the violation context and affected functionality
+ * - Generate appropriate package names if not explicitly suggested
+ * - Determine optimal dependency relationships
+ * - Create implementation plans that maintain architectural consistency
+ *
+ * @param input - Object containing packageName and MECE violation details
+ * @returns Promise resolving to array of split package plans
+ * @throws Error if input validation fails
+ */
+export async function generateSplitPlans(
+  input: SplitPlanGenerationInput
+): Promise<SplitPlanGenerationResult> {
+  // Input validation
+  if (!input.packageName || input.packageName.trim() === '') {
+    throw new Error('packageName cannot be empty');
+  }
+
+  if (input.violation === null || input.violation === undefined) {
+    throw new Error('violation cannot be null or undefined');
+  }
+
+  // TODO: Implement MCP integration
+  // This will use the mcp__vibe-kanban__* tools to generate detailed plans
+  // for each suggested split package.
+  //
+  // Example MCP query:
+  // const splitPackageNames = parseSuggestedSplits(input.violation.suggestedSplit);
+  // const plans = await Promise.all(
+  //   splitPackageNames.map(async (splitPackageName) => {
+  //     const mcpResponse = await queryMcpForSplitPlan({
+  //       originalPackage: input.packageName,
+  //       splitPackageName,
+  //       affectedFunctionality: input.violation.affectedFunctionality,
+  //       mainPackageStillUsesIt: input.violation.mainPackageStillUsesIt
+  //     });
+  //
+  //     return {
+  //       packageName: splitPackageName,
+  //       functionality: mcpResponse.functionality,
+  //       dependencies: mcpResponse.dependencies,
+  //       mainPackageDependsOnIt: input.violation.mainPackageStillUsesIt,
+  //       planContent: mcpResponse.fullPlan
+  //     };
+  //   })
+  // );
+  //
+  // return { splitPlans: plans };
+
+  // Stub implementation: Return empty array as default
+  // Until MCP integration is implemented, return no split plans
+  // The actual implementation will generate detailed plans using AI
+  return {
+    splitPlans: []
   };
 }
