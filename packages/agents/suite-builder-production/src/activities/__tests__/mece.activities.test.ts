@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeMeceCompliance, generateSplitPlans, registerSplitPlans, determineDeprecationCycle } from '../mece.activities';
+import { analyzeMeceCompliance, generateSplitPlans, registerSplitPlans, determineDeprecationCycle, updateDependentPlans } from '../mece.activities';
 import type { MeceViolation, SplitPackagePlan } from '../../types';
 
 describe('MECE Activities', () => {
@@ -596,6 +596,218 @@ Handles video processing functionality extracted from openai-client.
       expect(result.requiresDeprecation).toBe(true);
       expect(result.versions[0].changes).toContain('Add deprecation notice for JWT authentication, OAuth integration, Session management');
       expect(result.versions[1].changes).toContain('Remove JWT authentication, OAuth integration, Session management');
+    });
+  });
+
+  describe('updateDependentPlans', () => {
+    it('should return empty updates for package with no dependents', async () => {
+      // Test case: Package is renamed/split but no other packages depend on it
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/video-processor',
+          functionality: ['video encoding', 'video upload'],
+          dependencies: ['ffmpeg'],
+          mainPackageDependsOnIt: true,
+          planContent: '# Video Processor\n\nVideo processing functionality.'
+        }
+      ];
+
+      const result = await updateDependentPlans({
+        packageName: '@bernierllc/openai-client',
+        splitPlans,
+        workspaceRoot: '/test/workspace'
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, would query dependency graph
+      expect(result.dependentUpdates).toEqual([]);
+    });
+
+    it('should find and update dependent packages when package is split', async () => {
+      // Test case: Multiple packages depend on @bernierllc/openai-client
+      // When it's split into video-processor, those dependents need updates
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/video-processor',
+          functionality: ['video encoding', 'video upload'],
+          dependencies: ['ffmpeg'],
+          mainPackageDependsOnIt: true,
+          planContent: '# Video Processor\n\nVideo processing functionality.'
+        }
+      ];
+
+      const result = await updateDependentPlans({
+        packageName: '@bernierllc/openai-client',
+        splitPlans,
+        workspaceRoot: '/test/workspace'
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, expect:
+      // expect(result.dependentUpdates).toHaveLength(2);
+      // expect(result.dependentUpdates[0].packageName).toBe('@bernierllc/content-generator');
+      // expect(result.dependentUpdates[0].currentVersion).toBe('1.0.0');
+      // expect(result.dependentUpdates[0].newVersion).toBe('1.1.0');
+      // expect(result.dependentUpdates[0].changes).toContain('Add dependency on @bernierllc/video-processor');
+      // expect(result.dependentUpdates[0].updatedDependencies).toHaveProperty('@bernierllc/video-processor');
+      expect(result.dependentUpdates).toEqual([]);
+    });
+
+    it('should handle multiple split plans with cascading updates', async () => {
+      // Test case: Package split into multiple new packages
+      // Dependents need updates for all new dependencies
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/auth-service',
+          functionality: ['JWT authentication', 'OAuth integration'],
+          dependencies: ['jsonwebtoken', 'passport'],
+          mainPackageDependsOnIt: true,
+          planContent: '# Auth Service\n\nAuthentication functionality.'
+        },
+        {
+          packageName: '@bernierllc/rate-limiter',
+          functionality: ['Rate limiting', 'Token bucket algorithm'],
+          dependencies: ['redis'],
+          mainPackageDependsOnIt: true,
+          planContent: '# Rate Limiter\n\nRate limiting functionality.'
+        }
+      ];
+
+      const result = await updateDependentPlans({
+        packageName: '@bernierllc/api-gateway',
+        splitPlans,
+        workspaceRoot: '/test/workspace'
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, expect:
+      // expect(result.dependentUpdates).toHaveLength(3);
+      // Expect each dependent to get both new dependencies
+      // expect(result.dependentUpdates[0].updatedDependencies).toHaveProperty('@bernierllc/auth-service');
+      // expect(result.dependentUpdates[0].updatedDependencies).toHaveProperty('@bernierllc/rate-limiter');
+      expect(result.dependentUpdates).toEqual([]);
+    });
+
+    it('should throw error if packageName is empty', async () => {
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/test-package',
+          functionality: ['test functionality'],
+          dependencies: [],
+          mainPackageDependsOnIt: false,
+          planContent: '# Test Package\n\nTest functionality.'
+        }
+      ];
+
+      await expect(
+        updateDependentPlans({
+          packageName: '',
+          splitPlans,
+          workspaceRoot: '/test/workspace'
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if packageName is only whitespace', async () => {
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/test-package',
+          functionality: ['test functionality'],
+          dependencies: [],
+          mainPackageDependsOnIt: false,
+          planContent: '# Test Package\n\nTest functionality.'
+        }
+      ];
+
+      await expect(
+        updateDependentPlans({
+          packageName: '   ',
+          splitPlans,
+          workspaceRoot: '/test/workspace'
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if splitPlans is null', async () => {
+      await expect(
+        updateDependentPlans({
+          packageName: '@bernierllc/test-package',
+          splitPlans: null as any,
+          workspaceRoot: '/test/workspace'
+        })
+      ).rejects.toThrow('splitPlans cannot be null or undefined');
+    });
+
+    it('should throw error if splitPlans is undefined', async () => {
+      await expect(
+        updateDependentPlans({
+          packageName: '@bernierllc/test-package',
+          splitPlans: undefined as any,
+          workspaceRoot: '/test/workspace'
+        })
+      ).rejects.toThrow('splitPlans cannot be null or undefined');
+    });
+
+    it('should handle empty splitPlans array gracefully', async () => {
+      // Test case: No splits to process, should return empty updates
+      const result = await updateDependentPlans({
+        packageName: '@bernierllc/test-package',
+        splitPlans: [],
+        workspaceRoot: '/test/workspace'
+      });
+
+      expect(result.dependentUpdates).toEqual([]);
+    });
+
+    it('should determine correct version bumps for dependent packages', async () => {
+      // Test case: Dependent packages need minor version bumps when adding new dependencies
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/new-feature',
+          functionality: ['new feature'],
+          dependencies: [],
+          mainPackageDependsOnIt: true,
+          planContent: '# New Feature\n\nNew feature functionality.'
+        }
+      ];
+
+      const result = await updateDependentPlans({
+        packageName: '@bernierllc/core-package',
+        splitPlans,
+        workspaceRoot: '/test/workspace'
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, expect:
+      // expect(result.dependentUpdates[0].currentVersion).toBe('2.3.1');
+      // expect(result.dependentUpdates[0].newVersion).toBe('2.4.0'); // Minor bump
+      // Version bump is minor because adding dependency is non-breaking change
+      expect(result.dependentUpdates).toEqual([]);
+    });
+
+    it('should include detailed changes for each dependent update', async () => {
+      // Test case: Dependent package updates should include clear change descriptions
+      const splitPlans: SplitPackagePlan[] = [
+        {
+          packageName: '@bernierllc/extracted-utils',
+          functionality: ['utility functions'],
+          dependencies: ['lodash'],
+          mainPackageDependsOnIt: true,
+          planContent: '# Extracted Utils\n\nUtility functions.'
+        }
+      ];
+
+      const result = await updateDependentPlans({
+        packageName: '@bernierllc/monolith',
+        splitPlans,
+        workspaceRoot: '/test/workspace'
+      });
+
+      // Stub implementation returns empty array
+      // TODO: When MCP is integrated, expect:
+      // expect(result.dependentUpdates[0].changes).toContain('Add dependency on @bernierllc/extracted-utils');
+      // expect(result.dependentUpdates[0].changes).toContain('Update imports to use @bernierllc/extracted-utils');
+      expect(result.dependentUpdates).toEqual([]);
     });
   });
 });

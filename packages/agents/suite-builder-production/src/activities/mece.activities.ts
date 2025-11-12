@@ -6,7 +6,9 @@ import type {
   RegisterSplitPlansInput,
   RegisterSplitPlansResult,
   DeprecationCycleInput,
-  DeprecationCycleResult
+  DeprecationCycleResult,
+  UpdateDependentPlansInput,
+  UpdateDependentPlansResult
 } from '../types';
 
 /**
@@ -339,5 +341,107 @@ export async function determineDeprecationCycle(
   return {
     requiresDeprecation: true,
     versions: [minorVersion, majorVersion]
+  };
+}
+
+/**
+ * Update dependent packages when a package is renamed or split due to MECE violations
+ *
+ * When packages are split due to MECE violations, this activity identifies all packages
+ * that depend on the changed package and generates update plans for each dependent.
+ *
+ * The updates cascade through the dependency tree to ensure:
+ * - Dependent packages add new dependencies on split packages
+ * - Version bumps are properly calculated
+ * - Import statements and references are updated
+ * - Breaking changes are communicated
+ *
+ * Example: If @bernierllc/openai-client is split into @bernierllc/video-processor,
+ * any packages depending on openai-client will need to:
+ * 1. Add dependency on @bernierllc/video-processor
+ * 2. Update imports from openai-client to video-processor
+ * 3. Bump their own version (typically minor bump)
+ *
+ * TODO: Implement actual MCP integration using mcp__vibe-kanban__* tools
+ * The implementation will:
+ * 1. Query the dependency graph to find all packages that depend on packageName
+ * 2. For each dependent package, determine what updates are needed:
+ *    - Which new split packages should be added as dependencies
+ *    - What version bump is appropriate (typically minor)
+ *    - What code changes are needed (import updates, etc.)
+ * 3. Generate a DependentPackageUpdate for each dependent with:
+ *    - Package name and current version
+ *    - Calculated new version (based on semver)
+ *    - List of changes to make
+ *    - Updated dependencies map
+ * 4. Return array of all dependent updates
+ *
+ * The MCP server will:
+ * - Query the workspace dependency graph
+ * - Analyze impact on each dependent package
+ * - Generate appropriate version bumps following semver
+ * - Provide detailed change descriptions for each update
+ * - Handle transitive dependencies (dependents of dependents)
+ *
+ * @param input - Object containing packageName, splitPlans, and workspaceRoot
+ * @returns Promise resolving to array of dependent package updates
+ * @throws Error if input validation fails
+ */
+export async function updateDependentPlans(
+  input: UpdateDependentPlansInput
+): Promise<UpdateDependentPlansResult> {
+  // Input validation
+  if (!input.packageName || input.packageName.trim() === '') {
+    throw new Error('packageName cannot be empty');
+  }
+
+  if (input.splitPlans === null || input.splitPlans === undefined) {
+    throw new Error('splitPlans cannot be null or undefined');
+  }
+
+  // Handle empty array - nothing to update is a valid case
+  if (input.splitPlans.length === 0) {
+    return {
+      dependentUpdates: []
+    };
+  }
+
+  // TODO: Implement MCP integration
+  // This will use the mcp__vibe-kanban__* tools to query the dependency graph
+  // and generate update plans for each dependent package.
+  //
+  // Example MCP query:
+  // const dependents = await queryMcpForDependents({
+  //   packageName: input.packageName,
+  //   workspaceRoot: input.workspaceRoot
+  // });
+  //
+  // const updates = await Promise.all(
+  //   dependents.map(async (dependent) => {
+  //     const updatePlan = await generateDependentUpdate({
+  //       dependentPackage: dependent.name,
+  //       currentVersion: dependent.version,
+  //       splitPlans: input.splitPlans,
+  //       changedPackage: input.packageName
+  //     });
+  //
+  //     return {
+  //       packageName: dependent.name,
+  //       currentVersion: dependent.version,
+  //       newVersion: updatePlan.newVersion, // e.g., "1.1.0" -> "1.2.0"
+  //       changes: updatePlan.changes, // e.g., ["Add dependency on @bernierllc/video-processor", "Update imports"]
+  //       updatedDependencies: updatePlan.dependencies // e.g., { "@bernierllc/video-processor": "^1.0.0" }
+  //     };
+  //   })
+  // );
+  //
+  // return { dependentUpdates: updates };
+
+  // Stub implementation: Return empty array as default
+  // Until MCP integration is implemented, return no dependent updates
+  // The actual implementation will query the dependency graph and generate
+  // appropriate updates for each dependent package
+  return {
+    dependentUpdates: []
   };
 }

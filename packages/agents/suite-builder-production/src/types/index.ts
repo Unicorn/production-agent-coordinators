@@ -391,3 +391,24 @@ export interface PackageVersion {
   changes: string[];
   deprecationNotice?: string;
 }
+
+// Update dependent plans types
+export interface UpdateDependentPlansInput {
+  packageName: string;
+  splitPlans: SplitPackagePlan[];
+  workspaceRoot: string;
+}
+
+export interface UpdateDependentPlansResult {
+  dependentUpdates: DependentPackageUpdate[];
+}
+
+export interface DependentPackageUpdate {
+  packageName: string;
+  currentVersion: string;
+  newVersion: string;
+  changes: string[];
+  updatedDependencies: {
+    [key: string]: string; // dependency name -> new version
+  };
+}
