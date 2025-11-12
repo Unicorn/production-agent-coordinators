@@ -66,3 +66,34 @@ export async function searchLocalPlans(input: PlanSearchInput): Promise<string |
     return null;
   }
 }
+
+/**
+ * Query the packages-api MCP server for a plan file
+ *
+ * This function will query the MCP server using the mcp__vibe-kanban__* tools
+ * to retrieve plan content for a given package from the centralized plan registry.
+ *
+ * TODO: Implement actual MCP integration using mcp__vibe-kanban__* tools
+ * The implementation will:
+ * 1. Use MCP tools to query the packages-api server
+ * 2. Search for a plan file matching the packageName
+ * 3. Return the plan content as a string if found
+ * 4. Return null if no plan is registered for the package
+ *
+ * @param input - Object containing packageName to search for
+ * @returns Promise resolving to plan content string or null if not found
+ * @throws Error if input validation fails
+ */
+export async function queryMcpForPlan(input: {
+  packageName: string;
+}): Promise<string | null> {
+  // Input validation
+  if (!input.packageName || input.packageName.trim() === '') {
+    throw new Error('packageName cannot be empty');
+  }
+
+  // TODO: Implement MCP query
+  // This will use the mcp__vibe-kanban__* tools to query the packages-api server
+  // For now, return null as a stub until MCP server is properly configured
+  return null;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { searchLocalPlans } from '../planning.activities';
+import { searchLocalPlans, queryMcpForPlan } from '../planning.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -154,6 +154,48 @@ describe('Planning Activities', () => {
       });
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('queryMcpForPlan', () => {
+    it('should return plan content when package plan is registered in MCP', async () => {
+      // This test will use a mock MCP response
+      const mockPlanContent = '# OpenAI Client Plan\n\nThis is a test plan.';
+
+      // TODO: Mock MCP call here when implementation is ready
+      // For now, we expect null since it's a stub
+      const result = await queryMcpForPlan({
+        packageName: '@bernierllc/openai-client'
+      });
+
+      // Once MCP is implemented, this should return mockPlanContent
+      // For now, stub returns null
+      expect(result).toBeNull();
+    });
+
+    it('should return null when package plan is not found in MCP', async () => {
+      // TODO: Mock MCP call here when implementation is ready
+      const result = await queryMcpForPlan({
+        packageName: '@bernierllc/nonexistent-package'
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('should throw error if packageName is empty', async () => {
+      await expect(
+        queryMcpForPlan({
+          packageName: ''
+        })
+      ).rejects.toThrow('packageName cannot be empty');
+    });
+
+    it('should throw error if packageName is only whitespace', async () => {
+      await expect(
+        queryMcpForPlan({
+          packageName: '   '
+        })
+      ).rejects.toThrow('packageName cannot be empty');
     });
   });
 });
