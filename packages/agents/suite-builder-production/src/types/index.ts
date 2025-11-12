@@ -220,11 +220,20 @@ export interface PlanningResult {
 
 // MECE validation result
 export interface MeceViolation {
-  violation: string;
-  solution: string;
+  description: string;
+  suggestedSplit: string;
   affectedFunctionality: string[];
   mainPackageStillUsesIt: boolean;
-  newPackages: string[];
+}
+
+export interface MeceAnalysisInput {
+  packageName: string;
+  updateContext: string;
+}
+
+export interface MeceAnalysisResult {
+  isCompliant: boolean;
+  violation?: MeceViolation;
 }
 
 export interface MeceValidationResult {
