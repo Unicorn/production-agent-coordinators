@@ -667,6 +667,114 @@ export async function runSecurityAudit(input: {
   };
 }
 
+export async function validateDocumentation(input: {
+  packagePath: string;
+}): Promise<DocumentationResult> {
+  // Input validation
+  if (!input.packagePath || input.packagePath.trim() === '') {
+    throw new Error('packagePath cannot be empty');
+  }
+
+  // Check if packagePath exists
+  try {
+    await fs.promises.access(input.packagePath);
+  } catch (error) {
+    throw new Error(`packagePath does not exist: ${input.packagePath}`);
+  }
+
+  // Check if packagePath is a directory
+  const stats = await fs.promises.stat(input.packagePath);
+  if (!stats.isDirectory()) {
+    throw new Error(`packagePath is not a directory: ${input.packagePath}`);
+  }
+
+  // Check if package.json exists
+  const packageJsonPath = path.join(input.packagePath, 'package.json');
+  try {
+    await fs.promises.access(packageJsonPath);
+  } catch (error) {
+    throw new Error(`package.json not found in ${input.packagePath}`);
+  }
+
+  // Define required sections and their variations
+  const requiredSections = [
+    { name: 'Installation', variations: ['installation', 'install', 'setup'] },
+    { name: 'Usage', variations: ['usage', 'how to use', 'getting started'] },
+    { name: 'API', variations: ['api', 'api reference', 'api documentation'] },
+    { name: 'Configuration', variations: ['configuration', 'config', 'settings'] },
+    { name: 'Examples', variations: ['examples', 'example', 'sample'] },
+    { name: 'Integration Status', variations: ['integration status', 'status', 'integration'] }
+  ];
+
+  // Check if README.md exists
+  const readmePath = path.join(input.packagePath, 'README.md');
+  let readmeContent = '';
+  try {
+    readmeContent = await fs.promises.readFile(readmePath, 'utf-8');
+  } catch (error) {
+    // README not found - all sections are missing
+    const allMissingSections = requiredSections.map(section => section.name);
+    return {
+      passed: false,
+      missing: allMissingSections,
+      details: {
+        sections: [],
+        missing: allMissingSections
+      }
+    };
+  }
+
+  // Parse README for sections
+  const foundSections: string[] = [];
+  const lines = readmeContent.split('\n');
+
+  for (const line of lines) {
+    // Match markdown headers: #, ##, ###, etc.
+    const headerMatch = line.match(/^#{1,6}\s+(.+)$/);
+    if (headerMatch) {
+      const sectionName = headerMatch[1].trim();
+      foundSections.push(sectionName);
+    }
+  }
+
+  // Check which required sections are missing
+  const missingSections: string[] = [];
+
+  for (const required of requiredSections) {
+    let found = false;
+
+    // Check if any variation of this section exists in the README
+    for (const foundSection of foundSections) {
+      const foundSectionLower = foundSection.toLowerCase();
+
+      // Check if the found section matches any variation
+      for (const variation of required.variations) {
+        if (foundSectionLower.includes(variation)) {
+          found = true;
+          break;
+        }
+      }
+
+      if (found) break;
+    }
+
+    if (!found) {
+      missingSections.push(required.name);
+    }
+  }
+
+  const passed = missingSections.length === 0;
+
+  return {
+    passed,
+    missing: missingSections,
+    details: {
+      sections: foundSections,
+      missing: missingSections
+    }
+  };
+}
+
 export function calculateComplianceScore(input: {
   structure: StructureResult;
   typescript: TypeScriptResult;

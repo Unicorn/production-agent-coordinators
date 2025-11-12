@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage, runSecurityAudit } from '../quality.activities';
+import { validatePackageStructure, runTypeScriptCheck, runLintCheck, calculateComplianceScore, runTestsWithCoverage, runSecurityAudit, validateDocumentation } from '../quality.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -1080,6 +1080,249 @@ describe('Quality Activities', () => {
         .rejects.toThrow('packagePath is not a directory');
 
       fs.rmSync(tempFile);
+    });
+  });
+
+  describe('validateDocumentation', () => {
+    it('should pass for package with complete README', async () => {
+      const tempDir = '/tmp/complete-docs-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // Write README with all required sections
+      fs.writeFileSync(
+        path.join(tempDir, 'README.md'),
+        `# Test Package
+
+## Installation
+Install the package via npm.
+
+## Usage
+Here's how to use the package.
+
+## API Reference
+Complete API documentation.
+
+## Configuration
+Configuration options.
+
+## Examples
+Example code snippets.
+
+## Integration Status
+Current integration status.
+`
+      );
+
+      const result = await validateDocumentation({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.missing).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for package with missing sections', async () => {
+      const tempDir = '/tmp/incomplete-docs-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // Write README with only some sections (missing Usage and Integration Status)
+      fs.writeFileSync(
+        path.join(tempDir, 'README.md'),
+        `# Test Package
+
+## Installation
+Install the package via npm.
+
+## API
+Complete API documentation.
+
+## Configuration
+Configuration options.
+
+## Examples
+Example code snippets.
+`
+      );
+
+      const result = await validateDocumentation({ packagePath: tempDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.missing.length).toBeGreaterThan(0);
+      expect(result.missing).toContain('Usage');
+      expect(result.missing).toContain('Integration Status');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should fail for package with no README.md', async () => {
+      const tempDir = '/tmp/no-readme-package';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      const result = await validateDocumentation({ packagePath: tempDir });
+
+      expect(result.passed).toBe(false);
+      expect(result.missing.length).toBeGreaterThan(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for missing package.json', async () => {
+      const tempDir = '/tmp/no-package-json-docs';
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      await expect(validateDocumentation({ packagePath: tempDir }))
+        .rejects.toThrow('package.json not found in');
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should throw error for empty packagePath', async () => {
+      await expect(validateDocumentation({ packagePath: '' }))
+        .rejects.toThrow('packagePath cannot be empty');
+    });
+
+    it('should throw error for non-existent packagePath', async () => {
+      await expect(validateDocumentation({ packagePath: '/tmp/does-not-exist-docs-xyz' }))
+        .rejects.toThrow('packagePath does not exist');
+    });
+
+    it('should throw error if packagePath is not a directory', async () => {
+      const tempFile = '/tmp/test-file-docs.txt';
+      fs.writeFileSync(tempFile, 'test');
+
+      await expect(validateDocumentation({ packagePath: tempFile }))
+        .rejects.toThrow('packagePath is not a directory');
+
+      fs.rmSync(tempFile);
+    });
+
+    it('should match sections case-insensitively', async () => {
+      const tempDir = '/tmp/case-insensitive-docs';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // Write README with lowercase section names
+      fs.writeFileSync(
+        path.join(tempDir, 'README.md'),
+        `# Test Package
+
+## installation
+Install the package via npm.
+
+## usage
+Here's how to use the package.
+
+## api reference
+Complete API documentation.
+
+## config
+Configuration options.
+
+## examples
+Example code snippets.
+
+## status
+Current integration status.
+`
+      );
+
+      const result = await validateDocumentation({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.missing).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
+    });
+
+    it('should accept section variations (e.g., API vs API Reference)', async () => {
+      const tempDir = '/tmp/variation-docs';
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify({
+          name: '@bernierllc/test-package',
+          version: '1.0.0'
+        })
+      );
+
+      // Write README with section variations
+      fs.writeFileSync(
+        path.join(tempDir, 'README.md'),
+        `# Test Package
+
+## Installation
+Install the package via npm.
+
+## Usage
+Here's how to use the package.
+
+### API
+Complete API documentation.
+
+## Config
+Configuration options.
+
+## Examples
+Example code snippets.
+
+### Integration Status
+Current integration status.
+`
+      );
+
+      const result = await validateDocumentation({ packagePath: tempDir });
+
+      expect(result.passed).toBe(true);
+      expect(result.missing).toHaveLength(0);
+
+      fs.rmSync(tempDir, { recursive: true });
     });
   });
 
