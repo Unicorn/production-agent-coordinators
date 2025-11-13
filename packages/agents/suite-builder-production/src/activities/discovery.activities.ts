@@ -62,8 +62,9 @@ async function callMcpTool<T = any>(toolName: string, params: any, mcpServerUrl:
     // Extract actual data from result.content[0].text for MCP tools that return text content
     const result = jsonData.result;
     if (result && result.content && Array.isArray(result.content) && result.content[0]?.type === 'text') {
-      // Parse the text content as JSON
-      return JSON.parse(result.content[0].text) as T;
+      const textContent = result.content[0].text;
+      // If it's already an object, return it directly; otherwise parse as JSON string
+      return (typeof textContent === 'string' ? JSON.parse(textContent) : textContent) as T;
     }
 
     return result as T;
