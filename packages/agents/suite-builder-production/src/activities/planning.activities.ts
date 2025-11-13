@@ -52,17 +52,22 @@ export async function searchLocalPlans(input: PlanSearchInput): Promise<string |
       absolute: true
     });
 
+    console.log(`[searchLocalPlans] Found ${planFiles.length} plan files`);
+    console.log(`[searchLocalPlans] Looking for: "${packageNameWithoutScope}"`);
+
     // Match plan files by package name
     for (const planFile of planFiles) {
       const fileName = path.basename(planFile, '.md');
       if (fileName === packageNameWithoutScope) {
+        console.log(`[searchLocalPlans] MATCH! ${planFile}`);
         return planFile;
       }
     }
 
+    console.log(`[searchLocalPlans] No match found for "${packageNameWithoutScope}"`);
     return null;
   } catch (error) {
-    console.warn('Error searching for plan files:', error);
+    console.warn('[searchLocalPlans] Error searching for plan files:', error);
     return null;
   }
 }
@@ -96,6 +101,40 @@ export async function queryMcpForPlan(input: {
   // This will use the mcp__vibe-kanban__* tools to query the packages-api server
   // For now, return null as a stub until MCP server is properly configured
   return null;
+}
+
+/**
+ * Read the contents of a plan file from disk.
+ * This activity handles file I/O which cannot be done in workflows.
+ *
+ * @param input - Object containing planPath to read
+ * @returns Promise resolving to plan file content as string
+ * @throws Error if input validation fails or file doesn't exist
+ */
+export async function readPlanFile(input: {
+  planPath: string;
+}): Promise<string> {
+  // Input validation
+  if (!input.planPath || input.planPath.trim() === '') {
+    throw new Error('planPath cannot be empty');
+  }
+
+  if (!fs.existsSync(input.planPath)) {
+    throw new Error(`Plan file does not exist: ${input.planPath}`);
+  }
+
+  const stats = fs.statSync(input.planPath);
+  if (!stats.isFile()) {
+    throw new Error(`planPath is not a file: ${input.planPath}`);
+  }
+
+  // Read file content
+  try {
+    const content = fs.readFileSync(input.planPath, 'utf-8');
+    return content;
+  } catch (error) {
+    throw new Error(`Failed to read plan file: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export interface PlanValidationResult {
@@ -223,4 +262,35 @@ export async function registerPlanWithMcp(input: {
   // This will use the mcp__vibe-kanban__* tools to register the plan with packages-api server
   // For now, return true as a stub until MCP server is properly configured
   return true;
+}
+
+/**
+ * Generate a plan for a package
+ * Will be implemented in Task 2 of enhanced-discovery-plan-generation
+ *
+ * TODO: Implement full plan generation logic including:
+ * - Query MCP for dependencies
+ * - Invoke package-planning-writer agent
+ * - Register plan with MCP
+ */
+export async function generatePlanForPackage(input: {
+  packageName: string;
+  requestedBy: string;
+}): Promise<void> {
+  console.log(`[STUB] generatePlanForPackage: ${input.packageName} (requested by ${input.requestedBy})`);
+  // TODO: Implement in Task 2
+}
+
+/**
+ * Discover packages that need plans
+ * Will be implemented in Task 2 of enhanced-discovery-plan-generation
+ *
+ * TODO: Implement full discovery logic including:
+ * - Query MCP for packages in 'planning' status with no plan_file_path
+ * - Return list of package names
+ */
+export async function discoverPackagesNeedingPlans(): Promise<string[]> {
+  console.log('[STUB] discoverPackagesNeedingPlans');
+  // TODO: Implement in Task 2
+  return [];
 }
