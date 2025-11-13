@@ -339,7 +339,37 @@ export async function generatePlanForPackage(input: {
   console.log(`  Dependencies: ${depsData.dependencies?.length || 0}`);
 
   // 2. TODO (Task 7): Invoke package-planning-writer agent
-  // For now, just register a placeholder plan
+  //
+  // Agent Invocation Architecture:
+  // ------------------------------
+  // This activity should invoke a Claude Code agent (package-planning-writer) to generate
+  // the actual plan content based on dependencies and package purpose.
+  //
+  // Implementation Steps:
+  // 1. Prepare agent context with package metadata and dependencies
+  // 2. Invoke agent via subprocess (e.g., `claude code agent package-planning-writer`)
+  // 3. Agent generates plan markdown file at specified path
+  // 4. Wait for agent completion and verify plan file exists
+  // 5. Read generated plan content for registration
+  //
+  // Agent Input (should be passed as JSON):
+  // {
+  //   packageName: string,
+  //   dependencies: Array<{name: string, version: string}>,
+  //   purpose: string (extracted from MCP metadata or inferred),
+  //   outputPath: string (where to write the plan)
+  // }
+  //
+  // Agent Output:
+  // - Writes plan file to outputPath
+  // - Returns summary: { success: boolean, planPath: string, sectionsGenerated: string[] }
+  //
+  // Error Handling:
+  // - If agent invocation fails, fall back to placeholder registration
+  // - Log detailed error for debugging
+  // - Ensure activity doesn't block workflow indefinitely
+  //
+  // For now, just register a placeholder plan path
   const planPath = `/Users/mattbernier/projects/tools/plans/packages/${input.packageName.split('/')[1]}.md`;
   const branchName = `plan/${input.packageName.split('/')[1]}-auto`;
 
