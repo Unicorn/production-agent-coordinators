@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseInput, searchForPackage, readPackageJson, buildDependencyTree, copyEnvFiles } from '../discovery.activities';
+import { describe, it, expect, vi } from 'vitest';
+import { parseInput, searchForPackage, readPackageJson, buildDependencyTree, copyEnvFiles, discoverPlanFromDependencyGraph, pollMcpForPlan } from '../discovery.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -297,6 +297,236 @@ describe('Discovery Activities', () => {
 
       fs.rmSync(sourceRoot, { recursive: true });
       fs.rmSync(worktreePath, { recursive: true });
+    });
+  });
+
+  describe('discoverPlanFromDependencyGraph', () => {
+    it('should find plan through dependency graph when package has no direct plan', async () => {
+      // Mock MCP server to simulate github-parser scenario:
+      // - Package exists in MCP (status: planning)
+      // - Package has no plan_content
+      // - Has dependencies that might have plans
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch as any;
+
+      // First call: Get package metadata (exists but no plan)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                id: '@bernierllc/github-parser',
+                name: '@bernierllc/github-parser',
+                status: 'planning',
+                plan_content: null,
+                plan_summary: null
+              })
+            }]
+          }
+        })}`
+      });
+
+      // Second call: Get dependencies
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                dependencies: [
+                  { package_name: '@bernierllc/webhook-receiver' }
+                ]
+              })
+            }]
+          }
+        })}`
+      });
+
+      // Third call: Get webhook-receiver package (has a plan!)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 3,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                id: '@bernierllc/webhook-receiver',
+                name: '@bernierllc/webhook-receiver',
+                status: 'planning',
+                plan_content: '# Webhook Receiver Plan\n\nThis package handles webhook events...',
+                plan_summary: 'Webhook event handler'
+              })
+            }]
+          }
+        })}`
+      });
+
+      const result = await discoverPlanFromDependencyGraph({
+        packageName: '@bernierllc/github-parser',
+        mcpServerUrl: 'http://localhost:3355/api/mcp'
+      });
+
+      expect(result.found).toBe(true);
+      expect(result.source).toBe('dependency');
+      expect(result.sourcePackage).toBe('@bernierllc/webhook-receiver');
+      expect(result.planContent).toContain('Webhook Receiver Plan');
+    });
+
+    it('should return not found when no plans exist in dependency graph', async () => {
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch as any;
+
+      // Package exists but no plan
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                id: '@bernierllc/orphan-package',
+                name: '@bernierllc/orphan-package',
+                status: 'planning',
+                plan_content: null
+              })
+            }]
+          }
+        })}`
+      });
+
+      // No dependencies
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ dependencies: [] })
+            }]
+          }
+        })}`
+      });
+
+      // No dependents
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 3,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ dependents: [] })
+            }]
+          }
+        })}`
+      });
+
+      const result = await discoverPlanFromDependencyGraph({
+        packageName: '@bernierllc/orphan-package',
+        mcpServerUrl: 'http://localhost:3355/api/mcp'
+      });
+
+      expect(result.found).toBe(false);
+      expect(result.searchedPackages).toContain('@bernierllc/orphan-package');
+    });
+  });
+
+  describe('pollMcpForPlan', () => {
+    it('should poll MCP until plan appears', async () => {
+      global.fetch = vi.fn();
+
+      // First call: no plan yet
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                id: '@bernierllc/github-parser',
+                plan_file_path: null
+              })
+            }]
+          }
+        })}`
+      });
+
+      // Second call: plan appears!
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                id: '@bernierllc/github-parser',
+                plan_file_path: '/Users/mattbernier/projects/tools/plans/packages/github-parser.md'
+              })
+            }]
+          }
+        })}`
+      });
+
+      const result = await pollMcpForPlan({
+        packageName: '@bernierllc/github-parser',
+        mcpServerUrl: 'http://localhost:3355/api/mcp',
+        maxAttempts: 3,
+        initialDelayMs: 100
+      });
+
+      expect(result.found).toBe(true);
+      expect(result.planPath).toContain('github-parser.md');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return not found after max attempts', async () => {
+      global.fetch = vi.fn();
+
+      // Always return no plan
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                id: '@bernierllc/github-parser',
+                plan_file_path: null
+              })
+            }]
+          }
+        })}`
+      });
+
+      const result = await pollMcpForPlan({
+        packageName: '@bernierllc/github-parser',
+        mcpServerUrl: 'http://localhost:3355/api/mcp',
+        maxAttempts: 3,
+        initialDelayMs: 100
+      });
+
+      expect(result.found).toBe(false);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
     });
   });
 });
