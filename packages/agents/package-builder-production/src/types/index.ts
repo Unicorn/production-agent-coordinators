@@ -20,9 +20,9 @@ export interface PackageNode {
 }
 
 // Main workflow state
-export interface SuiteBuilderState {
+export interface PackageBuilderState {
   phase: BuildPhase;
-  suiteId: string;
+  buildId: string;
   packages: PackageNode[];
   completedPackages: string[];
   failedPackages: PackageFailure[];
@@ -62,8 +62,8 @@ export interface BuildConfig {
 }
 
 // Main workflow input
-export interface SuiteBuilderInput {
-  suiteId: string;
+export interface PackageBuilderInput {
+  buildId: string;
   auditReportPath: string;
   config: BuildConfig;
 }
@@ -128,9 +128,9 @@ export interface PackageBuildReport {
   }>;
 }
 
-// Suite aggregate report
-export interface SuiteReport {
-  suiteId: string;
+// Build aggregate report
+export interface BuildReport {
+  buildId: string;
   timestamp: string;
   totalPackages: number;
   successful: number;

@@ -1,4 +1,4 @@
-# Production Suite Builder Implementation Plan
+# Production Package Builder Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
@@ -13,15 +13,15 @@
 ## Task 1: Setup Package Structure
 
 **Files:**
-- Create: `packages/agents/suite-builder-production/package.json`
-- Create: `packages/agents/suite-builder-production/tsconfig.json`
-- Create: `packages/agents/suite-builder-production/src/index.ts`
+- Create: `packages/agents/package-builder-production/package.json`
+- Create: `packages/agents/package-builder-production/tsconfig.json`
+- Create: `packages/agents/package-builder-production/src/index.ts`
 
 **Step 1: Write package.json**
 
 ```json
 {
-  "name": "@coordinator/agent-suite-builder-production",
+  "name": "@coordinator/agent-package-builder-production",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -84,8 +84,8 @@ Expected: Dependencies installed successfully
 **Step 5: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/
-git commit -m "feat: initialize suite-builder-production package structure"
+git add packages/agents/package-builder-production/
+git commit -m "feat: initialize package-builder-production package structure"
 ```
 
 ---
@@ -93,7 +93,7 @@ git commit -m "feat: initialize suite-builder-production package structure"
 ## Task 2: Create Type Definitions
 
 **Files:**
-- Create: `packages/agents/suite-builder-production/src/types/index.ts`
+- Create: `packages/agents/package-builder-production/src/types/index.ts`
 
 **Step 1: Write type definitions**
 
@@ -120,9 +120,9 @@ export interface PackageNode {
 }
 
 // Main workflow state
-export interface SuiteBuilderState {
+export interface PackageBuilderState {
   phase: BuildPhase;
-  suiteId: string;
+  buildId: string;
   packages: PackageNode[];
   completedPackages: string[];
   failedPackages: PackageFailure[];
@@ -162,8 +162,8 @@ export interface BuildConfig {
 }
 
 // Main workflow input
-export interface SuiteBuilderInput {
-  suiteId: string;
+export interface PackageBuilderInput {
+  buildId: string;
   auditReportPath: string;
   config: BuildConfig;
 }
@@ -229,8 +229,8 @@ export interface PackageBuildReport {
 }
 
 // Suite aggregate report
-export interface SuiteReport {
-  suiteId: string;
+export interface BuildReport {
+  buildId: string;
   timestamp: string;
   totalPackages: number;
   successful: number;
@@ -286,8 +286,8 @@ export interface PublishResult {
 **Step 2: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/types/index.ts
-git commit -m "feat: add type definitions for suite builder"
+git add packages/agents/package-builder-production/src/types/index.ts
+git commit -m "feat: add type definitions for package builder"
 ```
 
 ---
@@ -295,8 +295,8 @@ git commit -m "feat: add type definitions for suite builder"
 ## Task 3: Implement Build Activities (Part 1 - Build & Test)
 
 **Files:**
-- Create: `packages/agents/suite-builder-production/src/activities/build.activities.ts`
-- Create: `packages/agents/suite-builder-production/src/activities/__tests__/build.activities.test.ts`
+- Create: `packages/agents/package-builder-production/src/activities/build.activities.ts`
+- Create: `packages/agents/package-builder-production/src/activities/__tests__/build.activities.test.ts`
 
 **Step 1: Write failing test**
 
@@ -376,7 +376,7 @@ describe('Build Activities', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: FAIL with "Cannot find module '../build.activities'"
 
 **Step 3: Write minimal implementation**
@@ -452,13 +452,13 @@ export async function runTests(input: {
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: PASS (2 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/activities/
+git add packages/agents/package-builder-production/src/activities/
 git commit -m "feat: add build and test activities with tests"
 ```
 
@@ -467,8 +467,8 @@ git commit -m "feat: add build and test activities with tests"
 ## Task 4: Implement Build Activities (Part 2 - Quality & Publish)
 
 **Files:**
-- Modify: `packages/agents/suite-builder-production/src/activities/build.activities.ts`
-- Modify: `packages/agents/suite-builder-production/src/activities/__tests__/build.activities.test.ts`
+- Modify: `packages/agents/package-builder-production/src/activities/build.activities.ts`
+- Modify: `packages/agents/package-builder-production/src/activities/__tests__/build.activities.test.ts`
 
 **Step 1: Write failing test for quality checks**
 
@@ -539,7 +539,7 @@ describe('publishPackage', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: FAIL with "runQualityChecks is not defined"
 
 **Step 3: Add imports and implement functions**
@@ -643,13 +643,13 @@ export async function publishPackage(input: {
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: PASS (6 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/activities/
+git add packages/agents/package-builder-production/src/activities/
 git commit -m "feat: add quality check and publish activities"
 ```
 
@@ -658,14 +658,14 @@ git commit -m "feat: add quality check and publish activities"
 ## Task 5: Implement Report Activities
 
 **Files:**
-- Create: `packages/agents/suite-builder-production/src/activities/report.activities.ts`
-- Create: `packages/agents/suite-builder-production/src/activities/__tests__/report.activities.test.ts`
+- Create: `packages/agents/package-builder-production/src/activities/report.activities.ts`
+- Create: `packages/agents/package-builder-production/src/activities/__tests__/report.activities.test.ts`
 
 **Step 1: Write failing test**
 
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { writePackageBuildReport, loadAllPackageReports, writeSuiteReport } from '../report.activities';
+import { writePackageBuildReport, loadAllPackageReports, writeBuildReport } from '../report.activities';
 import * as fs from 'fs/promises';
 import type { PackageBuildReport } from '../../types/index';
 
@@ -719,7 +719,7 @@ describe('Report Activities', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: FAIL with "Cannot find module '../report.activities'"
 
 **Step 3: Write minimal implementation**
@@ -727,7 +727,7 @@ Expected: FAIL with "Cannot find module '../report.activities'"
 ```typescript
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { PackageBuildReport, SuiteReport } from '../types/index';
+import type { PackageBuildReport, BuildReport } from '../types/index';
 
 export async function writePackageBuildReport(
   report: PackageBuildReport,
@@ -745,7 +745,7 @@ export async function writePackageBuildReport(
 }
 
 export async function loadAllPackageReports(
-  suiteId: string,
+  buildId: string,
   workspaceRoot: string
 ): Promise<PackageBuildReport[]> {
   const date = new Date().toISOString().split('T')[0];
@@ -769,8 +769,8 @@ export async function loadAllPackageReports(
   }
 }
 
-export async function writeSuiteReport(
-  report: SuiteReport,
+export async function writeBuildReport(
+  report: BuildReport,
   workspaceRoot: string
 ): Promise<void> {
   const date = new Date().toISOString().split('T')[0];
@@ -786,13 +786,13 @@ export async function writeSuiteReport(
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: PASS (7 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/activities/report.activities.ts
+git add packages/agents/package-builder-production/src/activities/report.activities.ts
 git commit -m "feat: add report writing and loading activities"
 ```
 
@@ -801,7 +801,7 @@ git commit -m "feat: add report writing and loading activities"
 ## Task 6: Implement Agent Coordination Activities
 
 **Files:**
-- Create: `packages/agents/suite-builder-production/src/activities/agent.activities.ts`
+- Create: `packages/agents/package-builder-production/src/activities/agent.activities.ts`
 
 **Step 1: Write implementation (no test - agent spawning is integration-level)**
 
@@ -906,7 +906,7 @@ export async function verifyDependencies(dependencies: string[]): Promise<void> 
 **Step 2: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/activities/agent.activities.ts
+git add packages/agents/package-builder-production/src/activities/agent.activities.ts
 git commit -m "feat: add agent coordination activities"
 ```
 
@@ -915,8 +915,8 @@ git commit -m "feat: add agent coordination activities"
 ## Task 7: Implement Package Build Child Workflow
 
 **Files:**
-- Create: `packages/agents/suite-builder-production/src/workflows/package-build.workflow.ts`
-- Create: `packages/agents/suite-builder-production/src/workflows/__tests__/package-build.workflow.test.ts`
+- Create: `packages/agents/package-builder-production/src/workflows/package-build.workflow.ts`
+- Create: `packages/agents/package-builder-production/src/workflows/__tests__/package-build.workflow.test.ts`
 
 **Step 1: Write failing test**
 
@@ -948,7 +948,7 @@ describe('PackageBuildWorkflow', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: FAIL with "Cannot find module '../package-build.workflow'"
 
 **Step 3: Write workflow implementation**
@@ -1119,22 +1119,22 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: PASS (9 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/workflows/
+git add packages/agents/package-builder-production/src/workflows/
 git commit -m "feat: add package build child workflow"
 ```
 
 ---
 
-## Task 8: Implement Main Suite Builder Workflow (Part 1 - Structure)
+## Task 8: Implement Main Package Builder Workflow (Part 1 - Structure)
 
 **Files:**
-- Create: `packages/agents/suite-builder-production/src/workflows/suite-builder.workflow.ts`
+- Create: `packages/agents/package-builder-production/src/workflows/suite-builder.workflow.ts`
 
 **Step 1: Write workflow scaffolding**
 
@@ -1142,23 +1142,23 @@ git commit -m "feat: add package build child workflow"
 import { proxyActivities, startChild } from '@temporalio/workflow';
 import { PackageBuildWorkflow } from './package-build.workflow';
 import type {
-  SuiteBuilderInput,
-  SuiteBuilderState,
+  PackageBuilderInput,
+  PackageBuilderState,
   BuildPhase,
   PackageNode,
   BuildConfig
 } from '../types/index';
 import type * as reportActivities from '../activities/report.activities';
 
-const { loadAllPackageReports, writeSuiteReport } = proxyActivities<typeof reportActivities>({
+const { loadAllPackageReports, writeBuildReport } = proxyActivities<typeof reportActivities>({
   startToCloseTimeout: '5 minutes'
 });
 
-export async function SuiteBuilderWorkflow(input: SuiteBuilderInput): Promise<void> {
-  console.log(`Starting suite builder for ${input.suiteId}`);
+export async function PackageBuilderWorkflow(input: PackageBuilderInput): Promise<void> {
+  console.log(`Starting package builder for ${input.buildId}`);
 
   // Initialize state
-  const state: SuiteBuilderState = await initializePhase(input);
+  const state: PackageBuilderState = await initializePhase(input);
 
   // PLAN phase
   await planPhase(state);
@@ -1172,17 +1172,17 @@ export async function SuiteBuilderWorkflow(input: SuiteBuilderInput): Promise<vo
   // COMPLETE phase
   await completePhase(state, input.config.workspaceRoot);
 
-  console.log(`Suite builder complete for ${input.suiteId}`);
+  console.log(`Package builder complete for ${input.buildId}`);
 }
 
-async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderState> {
+async function initializePhase(input: PackageBuilderInput): Promise<PackageBuilderState> {
   console.log('Phase: INITIALIZE');
 
   // TODO: Parse audit report and build dependency graph
   // For now, return empty state
-  const state: SuiteBuilderState = {
+  const state: PackageBuilderState = {
     phase: 'PLAN' as BuildPhase,
-    suiteId: input.suiteId,
+    buildId: input.buildId,
     packages: [],
     completedPackages: [],
     failedPackages: [],
@@ -1192,7 +1192,7 @@ async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderSt
   return state;
 }
 
-async function planPhase(state: SuiteBuilderState): Promise<void> {
+async function planPhase(state: PackageBuilderState): Promise<void> {
   console.log('Phase: PLAN');
 
   // TODO: Verify package plans exist
@@ -1200,7 +1200,7 @@ async function planPhase(state: SuiteBuilderState): Promise<void> {
   state.phase = 'BUILD' as BuildPhase;
 }
 
-async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promise<void> {
+async function buildPhase(state: PackageBuilderState, config: BuildConfig): Promise<void> {
   console.log('Phase: BUILD');
 
   // TODO: Implement dynamic parallelism
@@ -1208,7 +1208,7 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
   state.phase = 'VERIFY' as BuildPhase;
 }
 
-async function verifyPhase(state: SuiteBuilderState): Promise<void> {
+async function verifyPhase(state: PackageBuilderState): Promise<void> {
   console.log('Phase: VERIFY');
 
   // TODO: Run integration tests
@@ -1216,15 +1216,15 @@ async function verifyPhase(state: SuiteBuilderState): Promise<void> {
   state.phase = 'COMPLETE' as BuildPhase;
 }
 
-async function completePhase(state: SuiteBuilderState, workspaceRoot: string): Promise<void> {
+async function completePhase(state: PackageBuilderState, workspaceRoot: string): Promise<void> {
   console.log('Phase: COMPLETE');
 
   // Load all package reports
-  const packageReports = await loadAllPackageReports(state.suiteId, workspaceRoot);
+  const packageReports = await loadAllPackageReports(state.buildId, workspaceRoot);
 
   // Generate suite report
   const suiteReport = {
-    suiteId: state.suiteId,
+    buildId: state.buildId,
     timestamp: new Date().toISOString(),
     totalPackages: state.packages.length,
     successful: state.completedPackages.length,
@@ -1237,9 +1237,9 @@ async function completePhase(state: SuiteBuilderState, workspaceRoot: string): P
     packageReports
   };
 
-  await writeSuiteReport(suiteReport, workspaceRoot);
+  await writeBuildReport(suiteReport, workspaceRoot);
 
-  console.log(`✅ Suite build complete: ${state.completedPackages.length} packages`);
+  console.log(`✅ Package build complete: ${state.completedPackages.length} packages`);
   if (state.failedPackages.length > 0) {
     console.log(`❌ Failed: ${state.failedPackages.length} packages`);
   }
@@ -1249,8 +1249,8 @@ async function completePhase(state: SuiteBuilderState, workspaceRoot: string): P
 **Step 2: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/workflows/suite-builder.workflow.ts
-git commit -m "feat: add main suite builder workflow scaffolding"
+git add packages/agents/package-builder-production/src/workflows/suite-builder.workflow.ts
+git commit -m "feat: add main package builder workflow scaffolding"
 ```
 
 ---
@@ -1258,8 +1258,8 @@ git commit -m "feat: add main suite builder workflow scaffolding"
 ## Task 9: Add Dependency Graph Parsing Activity
 
 **Files:**
-- Modify: `packages/agents/suite-builder-production/src/activities/build.activities.ts`
-- Add test: `packages/agents/suite-builder-production/src/activities/__tests__/build.activities.test.ts`
+- Modify: `packages/agents/package-builder-production/src/activities/build.activities.ts`
+- Add test: `packages/agents/package-builder-production/src/activities/__tests__/build.activities.test.ts`
 
 **Step 1: Write failing test**
 
@@ -1295,7 +1295,7 @@ describe('buildDependencyGraph', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: FAIL
 
 **Step 3: Implement dependency graph builder**
@@ -1370,13 +1370,13 @@ function categoryToLayer(category: PackageCategory): number {
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd packages/agents/suite-builder-production && yarn test`
+Run: `cd packages/agents/package-builder-production && yarn test`
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/activities/
+git add packages/agents/package-builder-production/src/activities/
 git commit -m "feat: add dependency graph parsing from audit reports"
 ```
 
@@ -1385,14 +1385,14 @@ git commit -m "feat: add dependency graph parsing from audit reports"
 ## Task 10: Complete Main Workflow BUILD Phase
 
 **Files:**
-- Modify: `packages/agents/suite-builder-production/src/workflows/suite-builder.workflow.ts`
+- Modify: `packages/agents/package-builder-production/src/workflows/suite-builder.workflow.ts`
 
 **Step 1: Implement dynamic parallelism in BUILD phase**
 
 Replace buildPhase function:
 
 ```typescript
-async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promise<void> {
+async function buildPhase(state: PackageBuilderState, config: BuildConfig): Promise<void> {
   console.log('Phase: BUILD');
 
   const maxConcurrent = config.maxConcurrentBuilds || 4;
@@ -1412,7 +1412,7 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
     // Spawn child workflows for batch
     for (const pkg of batch) {
       const child = await startChild(PackageBuildWorkflow, {
-        workflowId: `build-${state.suiteId}-${pkg.name}`,
+        workflowId: `build-${state.buildId}-${pkg.name}`,
         args: [{
           packageName: pkg.name,
           packagePath: `packages/${pkg.category}/${pkg.name.split('/')[1]}`,
@@ -1463,7 +1463,7 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
   state.phase = 'VERIFY' as BuildPhase;
 }
 
-function hasUnbuiltPackages(state: SuiteBuilderState): boolean {
+function hasUnbuiltPackages(state: PackageBuilderState): boolean {
   return state.packages.some(pkg =>
     pkg.buildStatus === 'pending' || pkg.buildStatus === 'building'
   );
@@ -1482,15 +1482,15 @@ const { buildDependencyGraph } = proxyActivities<typeof buildActivities>({
 });
 
 // In initializePhase:
-async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderState> {
+async function initializePhase(input: PackageBuilderInput): Promise<PackageBuilderState> {
   console.log('Phase: INITIALIZE');
 
   // Parse audit report and build dependency graph
   const packages = await buildDependencyGraph(input.auditReportPath);
 
-  const state: SuiteBuilderState = {
+  const state: PackageBuilderState = {
     phase: 'PLAN' as BuildPhase,
-    suiteId: input.suiteId,
+    buildId: input.buildId,
     packages,
     completedPackages: [],
     failedPackages: [],
@@ -1504,7 +1504,7 @@ async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderSt
 **Step 3: Commit**
 
 ```bash
-git add packages/agents/suite-builder-production/src/workflows/suite-builder.workflow.ts
+git add packages/agents/package-builder-production/src/workflows/suite-builder.workflow.ts
 git commit -m "feat: implement dynamic parallelism in BUILD phase"
 ```
 
@@ -1519,7 +1519,7 @@ git commit -m "feat: implement dynamic parallelism in BUILD phase"
 
 ```typescript
 import { Connection, Client } from '@temporalio/client';
-import { SuiteBuilderWorkflow } from '@coordinator/agent-suite-builder-production';
+import { PackageBuilderWorkflow } from '@coordinator/agent-package-builder-production';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -1543,7 +1543,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('🚀 Starting Production Suite Builder');
+  console.log('🚀 Starting Production Package Builder');
   console.log('Suite: content-management-suite');
   console.log(`Workspace: ${config.workspaceRoot}`);
   console.log(`Max Concurrent Builds: ${config.maxConcurrentBuilds}`);
@@ -1560,11 +1560,11 @@ async function main() {
   });
 
   // Start workflow
-  const handle = await client.workflow.start(SuiteBuilderWorkflow, {
+  const handle = await client.workflow.start(PackageBuilderWorkflow, {
     taskQueue: config.temporal.taskQueue,
     workflowId: `suite-builder-content-management-${Date.now()}`,
     args: [{
-      suiteId: 'content-management-suite',
+      buildId: 'content-management-suite',
       auditReportPath,
       config
     }]
@@ -1578,13 +1578,13 @@ async function main() {
   try {
     await handle.result();
     console.log('');
-    console.log('✅ Suite build completed successfully!');
+    console.log('✅ Package build completed successfully!');
     console.log('');
     console.log('Reports available at:');
     console.log(`  ${config.workspaceRoot}/production/reports/${new Date().toISOString().split('T')[0]}/`);
   } catch (error) {
     console.error('');
-    console.error('❌ Suite build failed:', error);
+    console.error('❌ Package build failed:', error);
     process.exit(1);
   }
 }
@@ -1599,7 +1599,7 @@ main().catch((error) => {
 
 ```bash
 git add production/scripts/build-content-suite.ts
-git commit -m "feat: add demo script for running suite builder"
+git commit -m "feat: add demo script for running package builder"
 ```
 
 ---
@@ -1697,7 +1697,7 @@ git commit -m "feat: add build and demo scripts to root package"
 **Step 1: Write production README**
 
 ```markdown
-# Production Suite Builder
+# Production Package Builder
 
 Temporal-based workflow system for building and publishing BernierLLC package suites.
 
@@ -1729,7 +1729,7 @@ cd ../agent-coordinators
 yarn infra:up
 ```
 
-## Running the Suite Builder
+## Running the Package Builder
 
 Build a suite from an audit report:
 
@@ -1803,10 +1803,10 @@ Key settings:
 
 ## Development
 
-Build the suite builder package:
+Build the package builder package:
 
 ```bash
-cd packages/agents/suite-builder-production
+cd packages/agents/package-builder-production
 yarn build
 yarn test
 ```
@@ -1816,7 +1816,7 @@ yarn test
 
 ```bash
 git add production/README.md
-git commit -m "docs: add production suite builder README"
+git commit -m "docs: add production package builder README"
 ```
 
 ---
@@ -1837,7 +1837,7 @@ git commit -m "docs: add production suite builder README"
 
 ```bash
 git add -A
-git commit -m "feat: complete production suite builder implementation
+git commit -m "feat: complete production package builder implementation
 
 - Main and child Temporal workflows
 - Build, test, quality check, and publish activities
@@ -1855,7 +1855,7 @@ git push -u origin feature/production-suite-builder
 
 ## Summary
 
-This plan implements a complete production suite builder using:
+This plan implements a complete production package builder using:
 - Temporal workflows for orchestration
 - Child workflows per package for clean history
 - Dynamic parallelism respecting dependencies

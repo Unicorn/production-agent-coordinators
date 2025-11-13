@@ -1,15 +1,15 @@
 import { proxyActivities, startChild } from '@temporalio/workflow';
 import { PackageBuildWorkflow } from './package-build.workflow';
 import type {
-  SuiteBuilderInput,
-  SuiteBuilderState,
+  PackageBuilderInput,
+  PackageBuilderState,
   BuildPhase,
   BuildConfig
 } from '../types/index';
 import type * as reportActivities from '../activities/report.activities';
 import type * as buildActivities from '../activities/build.activities';
 
-const { loadAllPackageReports, writeSuiteReport } = proxyActivities<typeof reportActivities>({
+const { loadAllPackageReports, writeBuildReport } = proxyActivities<typeof reportActivities>({
   startToCloseTimeout: '5 minutes'
 });
 
@@ -17,11 +17,11 @@ const { buildDependencyGraph } = proxyActivities<typeof buildActivities>({
   startToCloseTimeout: '5 minutes'
 });
 
-export async function SuiteBuilderWorkflow(input: SuiteBuilderInput): Promise<void> {
-  console.log(`Starting suite builder for ${input.suiteId}`);
+export async function PackageBuilderWorkflow(input: PackageBuilderInput): Promise<void> {
+  console.log(`Starting package builder for ${input.buildId}`);
 
   // Initialize state
-  const state: SuiteBuilderState = await initializePhase(input);
+  const state: PackageBuilderState = await initializePhase(input);
 
   // PLAN phase
   await planPhase(state);
@@ -35,18 +35,18 @@ export async function SuiteBuilderWorkflow(input: SuiteBuilderInput): Promise<vo
   // COMPLETE phase
   await completePhase(state, input.config.workspaceRoot);
 
-  console.log(`Suite builder complete for ${input.suiteId}`);
+  console.log(`Package builder complete for ${input.buildId}`);
 }
 
-async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderState> {
+async function initializePhase(input: PackageBuilderInput): Promise<PackageBuilderState> {
   console.log('Phase: INITIALIZE');
 
   // Parse audit report and build dependency graph
   const packages = await buildDependencyGraph(input.auditReportPath);
 
-  const state: SuiteBuilderState = {
+  const state: PackageBuilderState = {
     phase: 'PLAN' as BuildPhase,
-    suiteId: input.suiteId,
+    buildId: input.buildId,
     packages,
     completedPackages: [],
     failedPackages: [],
@@ -56,7 +56,7 @@ async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderSt
   return state;
 }
 
-async function planPhase(state: SuiteBuilderState): Promise<void> {
+async function planPhase(state: PackageBuilderState): Promise<void> {
   console.log('Phase: PLAN');
 
   // TODO: Verify package plans exist
@@ -64,7 +64,7 @@ async function planPhase(state: SuiteBuilderState): Promise<void> {
   state.phase = 'BUILD' as BuildPhase;
 }
 
-async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promise<void> {
+async function buildPhase(state: PackageBuilderState, config: BuildConfig): Promise<void> {
   console.log('Phase: BUILD');
 
   const maxConcurrent = config.maxConcurrentBuilds || 4;
@@ -84,7 +84,7 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
     // Spawn child workflows for batch
     for (const pkg of batch) {
       const child = await startChild(PackageBuildWorkflow, {
-        workflowId: `build-${state.suiteId}-${pkg.name}`,
+        workflowId: `build-${state.buildId}-${pkg.name}`,
         args: [{
           packageName: pkg.name,
           packagePath: `packages/${pkg.category}/${pkg.name.split('/')[1]}`,
@@ -135,13 +135,13 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
   state.phase = 'VERIFY' as BuildPhase;
 }
 
-function hasUnbuiltPackages(state: SuiteBuilderState): boolean {
+function hasUnbuiltPackages(state: PackageBuilderState): boolean {
   return state.packages.some(pkg =>
     pkg.buildStatus === 'pending' || pkg.buildStatus === 'building'
   );
 }
 
-async function verifyPhase(state: SuiteBuilderState): Promise<void> {
+async function verifyPhase(state: PackageBuilderState): Promise<void> {
   console.log('Phase: VERIFY');
 
   // TODO: Run integration tests
@@ -149,15 +149,15 @@ async function verifyPhase(state: SuiteBuilderState): Promise<void> {
   state.phase = 'COMPLETE' as BuildPhase;
 }
 
-async function completePhase(state: SuiteBuilderState, workspaceRoot: string): Promise<void> {
+async function completePhase(state: PackageBuilderState, workspaceRoot: string): Promise<void> {
   console.log('Phase: COMPLETE');
 
   // Load all package reports
-  const packageReports = await loadAllPackageReports(state.suiteId, workspaceRoot);
+  const packageReports = await loadAllPackageReports(state.buildId, workspaceRoot);
 
-  // Generate suite report
-  const suiteReport = {
-    suiteId: state.suiteId,
+  // Generate build report
+  const buildReport = {
+    buildId: state.buildId,
     timestamp: new Date().toISOString(),
     totalPackages: state.packages.length,
     successful: state.completedPackages.length,
@@ -170,9 +170,9 @@ async function completePhase(state: SuiteBuilderState, workspaceRoot: string): P
     packageReports
   };
 
-  await writeSuiteReport(suiteReport, workspaceRoot);
+  await writeBuildReport(buildReport, workspaceRoot);
 
-  console.log(`✅ Suite build complete: ${state.completedPackages.length} packages`);
+  console.log(`✅ Package build complete: ${state.completedPackages.length} packages`);
   if (state.failedPackages.length > 0) {
     console.log(`❌ Failed: ${state.failedPackages.length} packages`);
   }

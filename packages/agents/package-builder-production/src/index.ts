@@ -1,5 +1,5 @@
 // Workflows
-export * from './workflows/suite-builder.workflow';
+export * from './workflows/package-builder.workflow';
 export * from './workflows/package-build.workflow';
 
 // Activities

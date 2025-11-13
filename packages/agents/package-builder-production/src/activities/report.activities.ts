@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { PackageBuildReport, SuiteReport } from '../types/index';
+import type { PackageBuildReport, BuildReport } from '../types/index';
 
 export async function writePackageBuildReport(
   report: PackageBuildReport,
@@ -42,8 +42,8 @@ export async function loadAllPackageReports(
   }
 }
 
-export async function writeSuiteReport(
-  report: SuiteReport,
+export async function writeBuildReport(
+  report: BuildReport,
   workspaceRoot: string
 ): Promise<void> {
   const date = new Date().toISOString().split('T')[0];

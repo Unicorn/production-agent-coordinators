@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { writePackageBuildReport, loadAllPackageReports, writeSuiteReport } from '../report.activities';
+import { writePackageBuildReport, loadAllPackageReports, writeBuildReport } from '../report.activities';
 import * as fs from 'fs/promises';
 import type { PackageBuildReport } from '../../types/index';
 
@@ -211,7 +211,7 @@ describe('Report Activities', () => {
     });
   });
 
-  describe('writeSuiteReport', () => {
+  describe('writeBuildReport', () => {
     it('should write suite report to correct location', async () => {
       const mockPackageReport: PackageBuildReport = {
         packageName: '@bernierllc/test-package',
@@ -254,7 +254,7 @@ describe('Report Activities', () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
-      await writeSuiteReport(suiteReport, '/workspace');
+      await writeBuildReport(suiteReport, '/workspace');
 
       expect(fs.mkdir).toHaveBeenCalledWith(
         expect.stringContaining('production/reports'),
@@ -284,7 +284,7 @@ describe('Report Activities', () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
-      await writeSuiteReport(suiteReport, '/workspace');
+      await writeBuildReport(suiteReport, '/workspace');
 
       expect(fs.mkdir).toHaveBeenCalledWith(
         expect.stringContaining('production/reports'),

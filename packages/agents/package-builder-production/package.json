@@ -1,5 +1,5 @@
 {
-  "name": "@coordinator/agent-suite-builder-production",
+  "name": "@coordinator/agent-package-builder-production",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
