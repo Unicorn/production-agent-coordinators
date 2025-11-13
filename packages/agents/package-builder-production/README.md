@@ -1,6 +1,6 @@
-# Production Suite Builder Agent
+# Production Package Builder Agent
 
-This is the production implementation of the Suite Builder agent with real build, test, and publish capabilities.
+This is the production implementation of the Package Builder agent with real build, test, and publish capabilities.
 
 ## Overview
 
@@ -20,7 +20,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 export class ProductionSuiteBuilderAgent implements Agent {
-  name = 'suite-builder-production';
+  name = 'package-builder-production';
   capabilities = ['build-package', 'test-package', 'publish-package'];
 
   async execute(instruction: string): Promise<string> {
@@ -98,7 +98,7 @@ Register this agent instead of the stub when running production workflows:
 
 ```typescript
 import { Engine } from '@coordinator/engine';
-import { ProductionSuiteBuilderAgent } from './packages/agents/suite-builder-production';
+import { ProductionSuiteBuilderAgent } from './packages/agents/package-builder-production';
 
 const engine = new Engine();
 engine.registerAgent(new ProductionSuiteBuilderAgent());

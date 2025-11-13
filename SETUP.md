@@ -21,7 +21,7 @@ production-agent-coordinators/
 │
 └── packages/
     ├── agents/
-    │   └── suite-builder-production/
+    │   └── package-builder-production/
     │       └── README.md                  # Production agent implementation docs
     ├── specs/
     │   └── .gitkeep

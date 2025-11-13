@@ -1,13 +1,13 @@
 #!/usr/bin/env tsx
 
 /**
- * Suite Builder Multi-Agent Workflow Demo with Temporal
+ * Package Builder Multi-Agent Workflow Demo with Temporal
  *
  * This demonstrates:
  * - Multi-phase workflow orchestration (5 phases)
  * - Dependency graph construction and topological sorting
  * - Sequential package builds respecting dependencies
- * - Suite Builder spec state machine
+ * - Package Builder spec state machine
  * - Durable execution for long-running builds (15-43 hours)
  *
  * Prerequisites:
@@ -18,7 +18,7 @@
  */
 
 import { Connection, Client } from '@temporalio/client';
-import type { SuiteBuilderWorkflowConfig } from '../packages/temporal-coordinator/src/workflows.js';
+import type { PackageBuilderWorkflowConfig } from '../packages/temporal-coordinator/src/workflows.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,12 +27,12 @@ const __dirname = path.dirname(__filename);
 
 async function main() {
   console.log('╔════════════════════════════════════════════════════════════╗');
-  console.log('║   Suite Builder Multi-Agent Workflow Demo                 ║');
+  console.log('║   Package Builder Multi-Agent Workflow Demo                 ║');
   console.log('╚════════════════════════════════════════════════════════════╝\n');
 
   console.log('📦 Building test suite with 3 packages');
   console.log('🔗 Dependency chain: package-a → package-b → package-c');
-  console.log('🤖 Using SuiteBuilderOrchestratorAgent');
+  console.log('🤖 Using PackageBuilderOrchestratorAgent');
   console.log('⚡ Sequential builds (maxConcurrentBuilds: 1)\n');
 
   // Connect to Temporal
@@ -55,7 +55,7 @@ async function main() {
   const workflowId = `suite-builder-workflow-${Date.now()}`;
   const masterPlanPath = path.join(__dirname, 'test-suite', 'master-plan.md');
 
-  const config: SuiteBuilderWorkflowConfig = {
+  const config: PackageBuilderWorkflowConfig = {
     goalId,
     suiteName: 'test-suite',
     masterPlanPath,
@@ -80,10 +80,10 @@ async function main() {
   console.log('   Max Concurrent Builds: 1 (sequential)\n');
 
   // Start workflow
-  console.log('📋 Step 3: Starting Suite Builder Workflow');
+  console.log('📋 Step 3: Starting Package Builder Workflow');
   console.log('   Task Queue: agent-coordinator-queue');
 
-  const handle = await client.workflow.start('suiteBuilderWorkflow', {
+  const handle = await client.workflow.start('packageBuilderWorkflow', {
     taskQueue: 'agent-coordinator-queue',
     workflowId,
     args: [config],
@@ -170,8 +170,8 @@ async function main() {
   console.log('   ✓ Dependency graph construction with topological sorting');
   console.log('   ✓ Sequential package builds respecting dependencies');
   console.log('   ✓ Durable execution (survives restarts)');
-  console.log('   ✓ SuiteBuilderSpec state machine');
-  console.log('   ✓ SuiteBuilderOrchestratorAgent coordination');
+  console.log('   ✓ PackageBuilderSpec state machine');
+  console.log('   ✓ PackageBuilderOrchestratorAgent coordination');
   console.log('   ✓ State persistence across phases\n');
 
   console.log('   🔍 View workflow in Temporal Web UI:');

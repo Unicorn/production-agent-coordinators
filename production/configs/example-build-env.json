@@ -1,9 +1,9 @@
 {
-  "// NOTE": "This is an EXAMPLE file. Copy to build-env.json and add real credentials",
-  "// WARNING": "build-env.json is gitignored - it will NOT be committed",
+  "__NOTE__": "Copy this file to build-env.json and fill in real values",
+  "__WARNING__": "build-env.json is gitignored - it will NOT be committed",
+  "__SECRETS__": "NEVER store secrets in this file. Secrets are loaded from environment variables (NPM_TOKEN). System environment variables for production. .env file fallback for dev/staging only. Hard fail at startup if required env vars are missing.",
 
   "npmRegistry": "https://registry.npmjs.org/",
-  "npmToken": "npm_REPLACE_WITH_REAL_TOKEN",
 
   "workspaceRoot": "/Users/mattbernier/projects/tools",
   "maxConcurrentBuilds": 4,
@@ -12,11 +12,6 @@
     "address": "localhost:7233",
     "namespace": "default",
     "taskQueue": "agent-coordinator-queue"
-  },
-
-  "git": {
-    "defaultBranch": "main",
-    "autoCommit": false
   },
 
   "testing": {

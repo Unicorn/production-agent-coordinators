@@ -1,4 +1,4 @@
-# Production Suite Builder - Design Document
+# Production Package Builder - Design Document
 
 **Date:** 2025-11-10
 **Status:** Approved
@@ -19,7 +19,7 @@ This design describes a Temporal-based workflow system for building and publishi
 
 ### Phase-Based Main Workflow
 
-The main workflow (`SuiteBuilderWorkflow`) progresses through five sequential phases:
+The main workflow (`PackageBuilderWorkflow`) progresses through five sequential phases:
 
 ```
 INITIALIZE → PLAN → BUILD → VERIFY → COMPLETE
@@ -63,9 +63,9 @@ interface PackageNode {
 ### Workflow State
 
 ```typescript
-interface SuiteBuilderState {
+interface PackageBuilderState {
   phase: BuildPhase;
-  suiteId: string;                          // e.g., "content-management-suite"
+  buildId: string;                          // e.g., "content-management-suite"
   packages: PackageNode[];                  // Full dependency graph
   completedPackages: string[];              // Successfully built packages
   failedPackages: PackageFailure[];         // Failed builds with details
@@ -78,7 +78,7 @@ interface SuiteBuilderState {
 #### INITIALIZE Phase
 
 ```typescript
-async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderState> {
+async function initializePhase(input: PackageBuilderInput): Promise<PackageBuilderState> {
   // Activity: Parse audit report and build dependency graph
   const packages = await activities.buildDependencyGraph(input.auditReportPath);
 
@@ -87,7 +87,7 @@ async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderSt
 
   return {
     phase: BuildPhase.PLAN,
-    suiteId: input.suiteId,
+    buildId: input.buildId,
     packages,
     completedPackages: [],
     failedPackages: [],
@@ -99,7 +99,7 @@ async function initializePhase(input: SuiteBuilderInput): Promise<SuiteBuilderSt
 #### PLAN Phase
 
 ```typescript
-async function planPhase(state: SuiteBuilderState): Promise<void> {
+async function planPhase(state: PackageBuilderState): Promise<void> {
   // For each package, verify plan exists
   for (const pkg of state.packages) {
     const planExists = await activities.checkPlanExists(pkg.name);
@@ -121,7 +121,7 @@ async function planPhase(state: SuiteBuilderState): Promise<void> {
 #### BUILD Phase (Dynamic Parallelism)
 
 ```typescript
-async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promise<void> {
+async function buildPhase(state: PackageBuilderState, config: BuildConfig): Promise<void> {
   const maxConcurrent = config.maxConcurrentBuilds || 4;
   const activeBuilds = new Map<string, ChildWorkflowHandle>();
 
@@ -139,7 +139,7 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
     // Spawn child workflows for batch
     for (const pkg of batch) {
       const child = await startChild(PackageBuildWorkflow, {
-        workflowId: `build-${state.suiteId}-${pkg.name}`,
+        workflowId: `build-${state.buildId}-${pkg.name}`,
         args: [{
           packageName: pkg.name,
           packagePath: `packages/${pkg.category}/${pkg.name}`,
@@ -189,9 +189,9 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
 #### VERIFY Phase
 
 ```typescript
-async function verifyPhase(state: SuiteBuilderState): Promise<void> {
+async function verifyPhase(state: PackageBuilderState): Promise<void> {
   // Run integration tests for the full suite
-  const verifyResult = await activities.runSuiteIntegrationTests(state.suiteId);
+  const verifyResult = await activities.runSuiteIntegrationTests(state.buildId);
 
   if (!verifyResult.passed) {
     throw new Error(`Suite integration tests failed: ${verifyResult.failures}`);
@@ -204,17 +204,17 @@ async function verifyPhase(state: SuiteBuilderState): Promise<void> {
 #### COMPLETE Phase
 
 ```typescript
-async function completePhase(state: SuiteBuilderState): Promise<void> {
+async function completePhase(state: PackageBuilderState): Promise<void> {
   // Generate aggregate suite report
-  await activities.generateSuiteReport(state);
+  await activities.generateBuildReport(state);
 
   // Publish main suite package (if all dependencies succeeded)
   if (state.failedPackages.length === 0) {
-    await activities.publishSuitePackage(state.suiteId);
+    await activities.publishSuitePackage(state.buildId);
   }
 
   // Log completion
-  console.log(`✅ Suite build complete: ${state.completedPackages.length} packages`);
+  console.log(`✅ Package build complete: ${state.completedPackages.length} packages`);
   if (state.failedPackages.length > 0) {
     console.log(`❌ Failed: ${state.failedPackages.length} packages`);
   }
@@ -569,8 +569,8 @@ interface PackageBuildReport {
 The main workflow generates a summary report:
 
 ```typescript
-interface SuiteReport {
-  suiteId: string;
+interface BuildReport {
+  buildId: string;
   timestamp: string;
   totalPackages: number;
   successful: number;
@@ -622,7 +622,7 @@ production/
 
 packages/
   agents/
-    suite-builder-production/      # Real agent implementation
+    package-builder-production/      # Real agent implementation
       src/
         workflows/
           suite-builder.workflow.ts
