@@ -6,11 +6,15 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
+    "build:worker": "node build-worker.js",
+    "start:worker": "node dist/worker.bundle.js",
+    "start:client": "npx tsx src/client.ts",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.1",
     "@temporalio/activity": "^1.10.0",
     "@temporalio/client": "^1.10.0",
     "@temporalio/worker": "^1.10.0",

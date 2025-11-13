@@ -1,0 +1,25 @@
+{
+  "mcpServer": {
+    "url": "http://localhost:3355/api/mcp"
+  },
+  "workspaceRoot": "/Users/mattbernier/projects/tools",
+  "npmRegistry": "https://registry.npmjs.org/",
+  "temporal": {
+    "address": "localhost:7233",
+    "namespace": "default",
+    "taskQueue": "suite-builder"
+  },
+  "build": {
+    "maxConcurrentBuilds": 3
+  },
+  "testing": {
+    "enableCoverage": true,
+    "minCoveragePercent": 80,
+    "failOnError": true
+  },
+  "publishing": {
+    "dryRun": false,
+    "requireTests": true,
+    "requireCleanWorkingDirectory": true
+  }
+}

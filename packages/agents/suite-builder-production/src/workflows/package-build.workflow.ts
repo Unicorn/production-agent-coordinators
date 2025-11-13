@@ -9,7 +9,7 @@ const { runBuild, runTests, runQualityChecks, publishPackage } = proxyActivities
   startToCloseTimeout: '10 minutes'
 });
 
-const { verifyDependencies, spawnFixAgent } = proxyActivities<typeof agentActivities>({
+const { spawnFixAgent } = proxyActivities<typeof agentActivities>({
   startToCloseTimeout: '30 minutes'
 });
 
@@ -44,10 +44,7 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
   };
 
   try {
-    // Activity 1: Verify dependencies are published
-    await verifyDependencies(input.dependencies);
-
-    // Activity 2: Run build
+    // Activity 1: Run build
     const buildResult = await runBuild({
       workspaceRoot: input.workspaceRoot,
       packagePath: input.packagePath

@@ -1,5 +1,6 @@
-import { proxyActivities, startChild } from '@temporalio/workflow';
+import { proxyActivities, startChild, getExternalWorkflowHandle, workflowInfo } from '@temporalio/workflow';
 import { PackageBuildWorkflow } from './package-build.workflow';
+import { requestPlanSignal } from '../signals/plan-signals';
 import type {
   PackageWorkflowInput,
   SuiteBuilderState,
@@ -17,8 +18,8 @@ import type * as planningActivities from '../activities/planning.activities';
 import type * as meceActivities from '../activities/mece.activities';
 import type * as publishActivities from '../activities/publish.activities';
 
-// Import pure functions directly (not async activities)
-import { parseInput } from '../activities/discovery.activities';
+// Import workflow-safe utilities
+import { parseInput } from './utils';
 
 // Activity proxies
 const { loadAllPackageReports, writeSuiteReport } = proxyActivities<typeof reportActivities>({
@@ -29,7 +30,11 @@ const {
   searchForPackage,
   readPackageJson,
   buildDependencyTree,
-  copyEnvFiles
+  checkPackagePublished,
+  checkMcpServerReachability,
+  copyEnvFiles,
+  pollMcpForPlan,
+  discoverPlanFromDependencyGraph
 } = proxyActivities<typeof discoveryActivities>({
   startToCloseTimeout: '10 minutes'
 });
@@ -37,6 +42,7 @@ const {
 const {
   searchLocalPlans,
   queryMcpForPlan,
+  readPlanFile,
   validatePlan,
   registerPlanWithMcp
 } = proxyActivities<typeof planningActivities>({
@@ -78,6 +84,9 @@ const {
 export async function SuiteBuilderWorkflow(input: PackageWorkflowInput): Promise<SuiteBuilderResult> {
   console.log(`Starting autonomous suite builder workflow`);
 
+  // PHASE 0: MCP SERVER CHECK - Ensure MCP server is reachable (if localhost)
+  await checkMcpServerReachability({ mcpServerUrl: input.config.mcpServer.url });
+
   // PHASE 1: DISCOVERY - Determine what we're building
   const discovery = await discoveryPhase(input);
   console.log(`✓ Discovery complete for ${discovery.packageName}`);
@@ -90,18 +99,15 @@ export async function SuiteBuilderWorkflow(input: PackageWorkflowInput): Promise
   const meceValidation = await meceValidationPhase(discovery, input);
   console.log(`✓ MECE validation complete, ${meceValidation.additionalPackages.length} additional packages`);
 
-  // Build dependency tree including any split packages
+  // Build complete package list:
+  // 1. Discovered dependencies from dependency tree (all internal packages that need building)
+  // 2. Any split packages from MECE validation
   const allPackages = [
-    ...meceValidation.additionalPackages,
-    {
-      name: discovery.packageName,
-      path: discovery.packagePath,
-      version: discovery.version,
-      dependencies: discovery.dependencies,
-      buildStatus: 'pending' as const,
-      testStatus: 'pending' as const
-    }
+    ...discovery.dependencyTree.packages, // All discovered packages including transitive dependencies
+    ...meceValidation.additionalPackages  // Any split packages from MECE violations
   ];
+
+  console.log(`  Discovered ${discovery.dependencyTree.packages.length} packages total (including dependencies)`);
 
   // Initialize state
   const state: SuiteBuilderState = {
@@ -172,7 +178,51 @@ async function discoveryPhase(input: PackageWorkflowInput): Promise<DiscoveryRes
     });
 
     if (!searchResult.found || !searchResult.packagePath) {
-      throw new Error(`Package ${packageName} not found. Searched: ${searchResult.searchedLocations.join(', ')}`);
+      console.log(`Package ${packageName} not found locally. Attempting plan discovery...`);
+
+      // Step 1: Try to discover plan from dependency graph
+      const discoveryResult = await discoverPlanFromDependencyGraph({
+        packageName,
+        workspaceRoot: input.config.workspaceRoot,
+        mcpServerUrl: input.config.mcpServer.url
+      });
+
+      if (discoveryResult.found && discoveryResult.planPath) {
+        console.log(`✓ Plan discovered at ${discoveryResult.planPath}`);
+        // Note: Plan is registered in MCP, but package still needs to be created
+        // For now, we'll signal Plans Workflow and wait for plan generation
+      }
+
+      // Step 2: Signal Plans Workflow to generate plan (fire-and-forget)
+      console.log(`Signaling Plans Workflow for ${packageName}...`);
+      const currentWfInfo = workflowInfo();
+      const plansWfHandle = getExternalWorkflowHandle('plans-workflow-singleton');
+
+      await plansWfHandle.signal(requestPlanSignal, {
+        packageName,
+        requestedBy: currentWfInfo.workflowId,
+        timestamp: Date.now(),
+        priority: 'high',
+        source: 'workflow-request'
+      });
+
+      // Step 3: Poll MCP for plan to appear
+      console.log(`Polling MCP for plan...`);
+      const pollResult = await pollMcpForPlan({
+        packageName,
+        mcpServerUrl: input.config.mcpServer.url,
+        maxAttempts: 10,
+        initialDelayMs: 5000
+      });
+
+      if (!pollResult.found) {
+        throw new Error(`Package ${packageName} not found and plan generation failed after polling. Searched: ${searchResult.searchedLocations.join(', ')}`);
+      }
+
+      console.log(`✓ Plan generated at ${pollResult.planPath}`);
+      // TODO: Create package directory structure from plan
+      // For now, still throw error as package doesn't exist physically yet
+      throw new Error(`Package ${packageName} plan generated but package directory not created yet. Manual intervention required.`);
     }
 
     packagePath = searchResult.packagePath;
@@ -187,8 +237,8 @@ async function discoveryPhase(input: PackageWorkflowInput): Promise<DiscoveryRes
     packagePath: `${input.config.workspaceRoot}/${packagePath}`
   });
 
-  // Step 4: Build dependency tree (not used directly, but validates dependencies exist)
-  await buildDependencyTree({
+  // Step 4: Build dependency tree - discover all internal dependencies that need to be built
+  const dependencyTree = await buildDependencyTree({
     packageName: metadata.name,
     workspaceRoot: input.config.workspaceRoot
   });
@@ -208,6 +258,7 @@ async function discoveryPhase(input: PackageWorkflowInput): Promise<DiscoveryRes
     packagePath,
     version: metadata.version,
     dependencies: metadata.dependencies,
+    dependencyTree, // Include full dependency tree
     isPublished: false, // TODO: Check npm registry
     npmVersion: null,
     worktreePath
@@ -231,8 +282,7 @@ async function planningPhase(discovery: DiscoveryResult, workspaceRoot: string):
 
   if (planPath) {
     console.log(`  Found local plan at ${planPath}`);
-    const fs = await import('fs/promises');
-    planContent = await fs.readFile(planPath, 'utf-8');
+    planContent = await readPlanFile({ planPath });
   } else {
     // Step 2: Query MCP for plan
     console.log(`  No local plan found, querying MCP...`);
@@ -351,6 +401,23 @@ async function meceValidationPhase(
 async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promise<void> {
   console.log('Phase 4: BUILD');
 
+  // Pre-build step: Check which packages are already published and skip them
+  console.log('  Checking publication status for all packages...');
+  for (const pkg of state.packages) {
+    const publishCheck = await checkPackagePublished({
+      packageName: pkg.name,
+      mcpServerUrl: config.mcpServer.url
+    });
+
+    if (publishCheck.isPublished) {
+      console.log(`  ✓ ${pkg.name} is already published (v${publishCheck.version}), skipping build`);
+      pkg.buildStatus = 'completed';
+      state.completedPackages.push(pkg.name);
+    } else {
+      console.log(`  - ${pkg.name} is not published, will build`);
+    }
+  }
+
   const maxConcurrent = config.maxConcurrentBuilds || 4;
   const activeBuilds = new Map<string, any>();
 
@@ -385,7 +452,8 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
       pkg.buildStatus = 'building';
     }
 
-    // Wait for any child to complete
+    // If we have active builds, wait for at least one to complete
+    // This ensures we yield control to Temporal and don't timeout
     if (activeBuilds.size > 0) {
       const entries = Array.from(activeBuilds.entries());
       const results = await Promise.race(
@@ -414,6 +482,14 @@ async function buildPhase(state: SuiteBuilderState, config: BuildConfig): Promis
           });
         }
       }
+    } else if (readyPackages.length === 0 && hasUnbuiltPackages(state)) {
+      // No active builds and no ready packages, but still have unbuilt packages
+      // This is a deadlock situation - packages waiting for dependencies that will never complete
+      const unbuildablePackages = state.packages
+        .filter(pkg => pkg.buildStatus === 'pending')
+        .map(pkg => `${pkg.name} (waiting for: ${pkg.dependencies.filter(dep => !state.completedPackages.includes(dep)).join(', ')})`)
+        .join('; ');
+      throw new Error(`Build deadlock detected. Packages cannot be built: ${unbuildablePackages}`);
     }
   }
 

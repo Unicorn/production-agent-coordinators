@@ -11,12 +11,23 @@ import type {
   LicenseResult,
   IntegrationResult
 } from '../types/index';
-import * as qualityActivities from '../activities/quality.activities';
 
-// Import calculateComplianceScore directly (it's a pure function, not an activity)
-import { calculateComplianceScore } from '../activities/quality.activities';
+// Import calculateComplianceScore from workflow-safe utils
+import { calculateComplianceScore } from './utils';
 
-// Create activity proxies with timeouts (exclude calculateComplianceScore - it's sync)
+// Define activity interface for quality activities
+interface QualityActivities {
+  validatePackageStructure(input: { packagePath: string }): Promise<StructureResult>;
+  runTypeScriptCheck(input: { packagePath: string }): Promise<TypeScriptResult>;
+  runLintCheck(input: { packagePath: string }): Promise<LintResult>;
+  runTestsWithCoverage(input: { packagePath: string }): Promise<TestResult>;
+  runSecurityAudit(input: { packagePath: string }): Promise<SecurityResult>;
+  validateDocumentation(input: { packagePath: string }): Promise<DocumentationResult>;
+  validateLicenseHeaders(input: { packagePath: string }): Promise<LicenseResult>;
+  validateIntegrationPoints(input: { packagePath: string }): Promise<IntegrationResult>;
+}
+
+// Create activity proxies with timeouts
 const {
   validatePackageStructure,
   runTypeScriptCheck,
@@ -26,7 +37,7 @@ const {
   validateDocumentation,
   validateLicenseHeaders,
   validateIntegrationPoints
-} = proxyActivities<typeof qualityActivities>({
+} = proxyActivities<QualityActivities>({
   startToCloseTimeout: '5 minutes'
 });
 

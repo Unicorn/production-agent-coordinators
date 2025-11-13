@@ -49,6 +49,9 @@ export interface BuildConfig {
   npmToken: string;
   workspaceRoot: string;
   maxConcurrentBuilds: number;
+  mcpServer: {
+    url: string; // e.g., "http://localhost:3355" or "https://mbernier.com"
+  };
   temporal: {
     address: string;
     namespace: string;
@@ -205,6 +208,7 @@ export interface DiscoveryResult {
   packagePath: string;
   version: string;
   dependencies: string[];
+  dependencyTree: DependencyTree; // Full dependency tree including transitive dependencies
   isPublished: boolean;
   npmVersion: string | null;
   worktreePath: string;
