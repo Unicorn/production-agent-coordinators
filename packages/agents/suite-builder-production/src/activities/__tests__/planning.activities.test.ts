@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { searchLocalPlans, queryMcpForPlan, validatePlan, registerPlanWithMcp } from '../planning.activities';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { searchLocalPlans, queryMcpForPlan, validatePlan, registerPlanWithMcp, generatePlanForPackage, discoverPackagesNeedingPlans } from '../planning.activities';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -464,6 +464,79 @@ This plan only has an overview.
           planContent: '   '
         })
       ).rejects.toThrow('planContent cannot be empty');
+    });
+  });
+
+  describe('generatePlanForPackage', () => {
+    it('should generate plan and register with MCP', async () => {
+      // Mock MCP calls
+      global.fetch = vi.fn();
+
+      // Mock packages_get_dependencies
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                dependencies: [
+                  { package_name: '@bernierllc/webhook-receiver' }
+                ]
+              })
+            }]
+          }
+        })}`
+      });
+
+      // Mock packages_update (plan registration)
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          result: {
+            content: [{ type: 'text', text: JSON.stringify({ success: true }) }]
+          }
+        })}`
+      });
+
+      await generatePlanForPackage({
+        packageName: '@bernierllc/github-parser',
+        requestedBy: 'build-workflow-123'
+      });
+
+      // Verify MCP was called for registration
+      expect(global.fetch).toHaveBeenCalled();
+    });
+  });
+
+  describe('discoverPackagesNeedingPlans', () => {
+    it('should query MCP for packages in planning status with no plan', async () => {
+      global.fetch = vi.fn();
+
+      // Mock packages_query
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        text: async () => `event: message\ndata: ${JSON.stringify({
+          jsonrpc: '2.0',
+          result: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                packages: [
+                  { id: '@bernierllc/package-a', plan_file_path: null },
+                  { id: '@bernierllc/package-b', plan_file_path: null }
+                ]
+              })
+            }]
+          }
+        })}`
+      });
+
+      const result = await discoverPackagesNeedingPlans();
+
+      expect(result).toEqual(['@bernierllc/package-a', '@bernierllc/package-b']);
     });
   });
 });

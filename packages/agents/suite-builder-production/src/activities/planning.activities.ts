@@ -265,32 +265,116 @@ export async function registerPlanWithMcp(input: {
 }
 
 /**
+ * Helper function to call MCP tools via HTTP/SSE
+ */
+async function callMcpTool<T = any>(toolName: string, params: any, mcpServerUrl: string): Promise<T> {
+  const authToken = process.env.PACKAGES_API_TOKEN || process.env.MCP_TOKEN || '';
+
+  const jsonRpcRequest = {
+    jsonrpc: '2.0',
+    method: 'tools/call',
+    params: { name: toolName, arguments: params },
+    id: Date.now()
+  };
+
+  const response = await fetch(mcpServerUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': authToken ? `Bearer ${authToken}` : '',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(jsonRpcRequest),
+  });
+
+  if (!response.ok) {
+    throw new Error(`MCP tool ${toolName} failed: ${response.status}`);
+  }
+
+  const responseText = await response.text();
+
+  let jsonData: any;
+  if (responseText.includes('event:') && responseText.includes('data:')) {
+    const dataMatch = responseText.match(/data:\s*({.*})/);
+    if (dataMatch) {
+      jsonData = JSON.parse(dataMatch[1]);
+    } else {
+      throw new Error('Failed to parse SSE response');
+    }
+  } else {
+    jsonData = JSON.parse(responseText);
+  }
+
+  if (jsonData.error) {
+    throw new Error(`MCP error: ${jsonData.error.message}`);
+  }
+
+  const result = jsonData.result;
+  if (result?.content?.[0]?.type === 'text') {
+    return JSON.parse(result.content[0].text) as T;
+  }
+
+  return result as T;
+}
+
+/**
  * Generate a plan for a package
- * Will be implemented in Task 2 of enhanced-discovery-plan-generation
  *
- * TODO: Implement full plan generation logic including:
- * - Query MCP for dependencies
- * - Invoke package-planning-writer agent
- * - Register plan with MCP
+ * Queries MCP for package dependencies and registers a plan.
+ * TODO (Task 7): Invoke package-planning-writer agent for actual plan generation
  */
 export async function generatePlanForPackage(input: {
   packageName: string;
   requestedBy: string;
 }): Promise<void> {
-  console.log(`[STUB] generatePlanForPackage: ${input.packageName} (requested by ${input.requestedBy})`);
-  // TODO: Implement in Task 2
+  const mcpServerUrl = process.env.MCP_SERVER_URL || 'http://localhost:3355/api/mcp';
+
+  console.log(`Generating plan for ${input.packageName}...`);
+
+  // 1. Get dependency chain from MCP
+  const depsData = await callMcpTool<any>('packages_get_dependencies', {
+    id: input.packageName
+  }, mcpServerUrl);
+
+  console.log(`  Dependencies: ${depsData.dependencies?.length || 0}`);
+
+  // 2. TODO (Task 7): Invoke package-planning-writer agent
+  // For now, just register a placeholder plan
+  const planPath = `/Users/mattbernier/projects/tools/plans/packages/${input.packageName.split('/')[1]}.md`;
+  const branchName = `plan/${input.packageName.split('/')[1]}-auto`;
+
+  // 3. Register plan with MCP
+  await callMcpTool('packages_update', {
+    id: input.packageName,
+    data: {
+      plan_file_path: planPath,
+      branch_name: branchName,
+      status: 'planning'
+    }
+  }, mcpServerUrl);
+
+  console.log(`  ✓ Registered plan at ${planPath}`);
 }
 
 /**
  * Discover packages that need plans
- * Will be implemented in Task 2 of enhanced-discovery-plan-generation
  *
- * TODO: Implement full discovery logic including:
- * - Query MCP for packages in 'planning' status with no plan_file_path
- * - Return list of package names
+ * Queries MCP for packages in 'planning' status with no plan_file_path
  */
 export async function discoverPackagesNeedingPlans(): Promise<string[]> {
-  console.log('[STUB] discoverPackagesNeedingPlans');
-  // TODO: Implement in Task 2
-  return [];
+  const mcpServerUrl = process.env.MCP_SERVER_URL || 'http://localhost:3355/api/mcp';
+
+  // Query MCP for packages in planning status with no plan_file_path
+  const result = await callMcpTool<any>('packages_query', {
+    filters: {
+      status: ['planning']
+    },
+    limit: 10
+  }, mcpServerUrl);
+
+  const packagesNeedingPlans = result.packages
+    ?.filter((pkg: any) => !pkg.plan_file_path)
+    .map((pkg: any) => pkg.id) || [];
+
+  return packagesNeedingPlans;
 }
