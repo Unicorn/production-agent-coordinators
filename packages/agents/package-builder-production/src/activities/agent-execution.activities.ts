@@ -13,9 +13,10 @@ export async function executeAgentTask(
   console.log(`[AgentExecution] Agent: ${agent}`)
   console.log(`[AgentExecution] Task: ${taskType}`)
   console.log(`[AgentExecution] Instructions: ${instructions}`)
+  console.log(`[AgentExecution] Package Path: ${packagePath}`)
 
   // For PoC, return success with explanation
-  // Phase 2 will actually execute agent and modify files
+  // Phase 2 will actually execute agent and modify files at packagePath
   return {
     success: true,
     changes: [`Simulated fix by ${agent}`],
