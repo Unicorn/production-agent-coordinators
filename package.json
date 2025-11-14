@@ -23,7 +23,8 @@
     "test:e2e:watch": "vitest --config tests/e2e/vitest.config.ts tests/e2e",
     "lint": "eslint packages --ext .ts",
     "typecheck": "tsc -b --noEmit",
-    "demo:suite-builder": "tsx production/scripts/build-content-suite.ts",
+    "build:package": "tsx production/scripts/build-package.ts",
+    "demo:package-builder": "tsx production/scripts/build-content-suite.ts",
     "infra:up": "docker compose -f docker/docker-compose.yml up -d",
     "infra:down": "docker compose -f docker/docker-compose.yml down",
     "infra:logs": "docker compose -f docker/docker-compose.yml logs -f"
