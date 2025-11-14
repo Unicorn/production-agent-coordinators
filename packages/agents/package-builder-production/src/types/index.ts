@@ -181,3 +181,6 @@ export interface PublishResult {
   duration: number;
   stdout: string;
 }
+
+// Coordinator types
+export * from './coordinator.types.js'
