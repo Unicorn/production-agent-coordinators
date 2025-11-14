@@ -250,3 +250,14 @@ export async function processAgentResponse(
 
   return newState;
 }
+
+/**
+ * Coordinator Activities
+ * Re-export from package-builder-production agent
+ */
+export {
+  loadAgentRegistry,
+  analyzeProblem,
+  writeDiagnosticReport,
+  executeAgentTask
+} from '@coordinator/agent-package-builder-production'

@@ -193,3 +193,10 @@ export async function multiStepWorkflow(
   // For now, it just delegates to helloWorkflow
   return helloWorkflow(config);
 }
+
+/**
+ * Package Builder Coordinator Workflows
+ * Re-export from package-builder-production agent
+ */
+export { CoordinatorWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/coordinator.workflow.js'
+export { AgentExecutorWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/agent-executor.workflow.js'

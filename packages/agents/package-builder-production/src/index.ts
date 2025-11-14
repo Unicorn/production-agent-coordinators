@@ -8,6 +8,9 @@ export * from './workflows/agent-executor.workflow';
 export * from './activities/build.activities';
 export * from './activities/agent.activities';
 export * from './activities/report.activities';
+export * from './activities/agent-registry.activities';
+export * from './activities/coordinator.activities';
+export * from './activities/agent-execution.activities';
 
 // Types
 export * from './types/index';
