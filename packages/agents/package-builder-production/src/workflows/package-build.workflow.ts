@@ -1,8 +1,11 @@
-import { proxyActivities } from '@temporalio/workflow';
+import { proxyActivities, executeChild } from '@temporalio/workflow';
 import type { PackageBuildInput, PackageBuildResult, PackageBuildReport } from '../types/index';
 import type * as activities from '../activities/build.activities';
 import type * as agentActivities from '../activities/agent.activities';
 import type * as reportActivities from '../activities/report.activities';
+import type * as agentRegistryActivities from '../activities/agent-registry.activities';
+import { CoordinatorWorkflow } from './coordinator.workflow.js';
+import type { Problem, CoordinatorAction } from '../types/coordinator.types';
 
 // Create activity proxies with timeouts
 const { runBuild, runTests, runQualityChecks, publishPackage } = proxyActivities<typeof activities>({
@@ -14,6 +17,10 @@ const { verifyDependencies, spawnFixAgent } = proxyActivities<typeof agentActivi
 });
 
 const { writePackageBuildReport } = proxyActivities<typeof reportActivities>({
+  startToCloseTimeout: '1 minute'
+});
+
+const { loadAgentRegistry } = proxyActivities<typeof agentRegistryActivities>({
   startToCloseTimeout: '1 minute'
 });
 
@@ -47,27 +54,130 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     // Activity 1: Verify dependencies are published
     await verifyDependencies(input.dependencies);
 
-    // Activity 2: Run build
-    const buildResult = await runBuild({
+    // Activity 2: Run build with coordinator retry loop
+    let buildResult = await runBuild({
       workspaceRoot: input.workspaceRoot,
       packagePath: input.packagePath
     });
     report.buildMetrics.buildTime = buildResult.duration;
 
-    if (!buildResult.success) {
-      throw new Error(`Build failed: ${buildResult.stderr}`);
+    // Coordinator loop for build failures
+    let coordinatorAttempts = 0;
+    const maxCoordinatorAttempts = 3;
+
+    while (!buildResult.success && coordinatorAttempts < maxCoordinatorAttempts) {
+      // Load agent registry
+      const agentRegistry = await loadAgentRegistry();
+
+      // Create problem description
+      const problem: Problem = {
+        type: 'BUILD_FAILURE',
+        error: {
+          message: buildResult.stderr || 'Build failed',
+          stderr: buildResult.stderr,
+          stdout: buildResult.stdout
+        },
+        context: {
+          packageName: input.packageName,
+          packagePath: input.packagePath,
+          planPath: input.planPath,
+          phase: 'build',
+          attemptNumber: coordinatorAttempts + 1
+        }
+      };
+
+      // Spawn coordinator child workflow
+      const action: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
+        taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'engine',
+        workflowId: `coordinator-build-${input.packageName}-${Date.now()}`,
+        args: [{
+          problem,
+          agentRegistry,
+          maxAttempts: maxCoordinatorAttempts
+        }]
+      });
+
+      // Handle coordinator decision
+      if (action.decision === 'RETRY') {
+        console.log(`[Build] Retrying build after coordinator fixes`);
+        // Retry build with agent modifications
+        buildResult = await runBuild({
+          workspaceRoot: input.workspaceRoot,
+          packagePath: input.packagePath
+        });
+        coordinatorAttempts++;
+      } else if (action.decision === 'ESCALATE') {
+        report.error = `Build escalated: ${action.escalation!.reason}`;
+        throw new Error(`Build escalated: ${action.escalation!.reason}`);
+      } else {
+        report.error = `Build failed after coordination: ${action.reasoning}`;
+        throw new Error(`Build failed after coordination: ${action.reasoning}`);
+      }
     }
 
-    // Activity 3: Run tests
-    const testResult = await runTests({
+    if (!buildResult.success) {
+      report.error = `Build failed after ${coordinatorAttempts} coordinator attempts`;
+      throw new Error(`Build failed after ${coordinatorAttempts} coordinator attempts`);
+    }
+
+    // Activity 3: Run tests with coordinator retry loop
+    let testResult = await runTests({
       workspaceRoot: input.workspaceRoot,
       packagePath: input.packagePath
     });
     report.buildMetrics.testTime = testResult.duration;
     report.quality.testCoverage = testResult.coverage;
 
+    coordinatorAttempts = 0;
+
+    while (!testResult.success && coordinatorAttempts < maxCoordinatorAttempts) {
+      const agentRegistry = await loadAgentRegistry();
+
+      const problem: Problem = {
+        type: 'TEST_FAILURE',
+        error: {
+          message: testResult.stderr || 'Tests failed',
+          stderr: testResult.stderr,
+          stdout: testResult.stdout
+        },
+        context: {
+          packageName: input.packageName,
+          packagePath: input.packagePath,
+          planPath: input.planPath,
+          phase: 'test',
+          attemptNumber: coordinatorAttempts + 1
+        }
+      };
+
+      const action: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
+        taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'engine',
+        workflowId: `coordinator-test-${input.packageName}-${Date.now()}`,
+        args: [{
+          problem,
+          agentRegistry,
+          maxAttempts: maxCoordinatorAttempts
+        }]
+      });
+
+      if (action.decision === 'RETRY') {
+        console.log(`[Test] Retrying tests after coordinator fixes`);
+        testResult = await runTests({
+          workspaceRoot: input.workspaceRoot,
+          packagePath: input.packagePath
+        });
+        coordinatorAttempts++;
+      } else if (action.decision === 'ESCALATE') {
+        report.error = `Tests escalated: ${action.escalation!.reason}`;
+        throw new Error(`Tests escalated: ${action.escalation!.reason}`);
+      } else {
+        report.error = `Tests failed after coordination: ${action.reasoning}`;
+        throw new Error(`Tests failed after coordination: ${action.reasoning}`);
+      }
+    }
+
     if (!testResult.success) {
-      throw new Error(`Tests failed: ${testResult.stderr}`);
+      report.error = `Tests failed after ${coordinatorAttempts} coordinator attempts`;
+      throw new Error(`Tests failed after ${coordinatorAttempts} coordinator attempts`);
     }
 
     // Activity 4: Run quality checks
