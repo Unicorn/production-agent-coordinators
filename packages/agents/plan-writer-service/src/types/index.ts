@@ -98,6 +98,7 @@ export interface PackagePlanNeededPayload {
     existingPlanPath?: string;  // Path to existing plan (if updating)
     requirements?: string[];    // Known requirements
     dependencies?: string[];    // Package dependencies
+    parentPackageId?: string;   // Parent package ID (for discovered children)
   };
 }
 

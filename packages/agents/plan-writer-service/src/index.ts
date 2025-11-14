@@ -6,7 +6,13 @@
  */
 
 // Export workflows
-export { PlanWriterServiceWorkflow, packagePlanNeededSignal, pauseServiceSignal, resumeServiceSignal } from './workflows/plan-writer-service.workflow';
+export {
+  PlanWriterServiceWorkflow,
+  packagePlanNeededSignal,
+  pauseServiceSignal,
+  resumeServiceSignal,
+  discoveredChildPackageSignal
+} from './workflows/plan-writer-service.workflow';
 export { PlanWriterPackageWorkflow } from './workflows/plan-writer-package.workflow';
 
 // Export activities
