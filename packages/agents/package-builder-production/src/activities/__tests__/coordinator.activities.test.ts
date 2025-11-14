@@ -19,6 +19,8 @@ vi.mock('@anthropic-ai/sdk', () => {
 describe('Coordinator Activities', () => {
   beforeEach(() => {
     mockCreate.mockReset()
+    // Set ANTHROPIC_API_KEY for tests
+    process.env.ANTHROPIC_API_KEY = 'test-key-for-unit-tests'
   })
 
   it('should analyze problem and return DELEGATE action', async () => {

@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && npm run copy-templates",
+    "copy-templates": "mkdir -p dist/prompts && cp -r src/prompts/*.hbs dist/prompts/",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest"

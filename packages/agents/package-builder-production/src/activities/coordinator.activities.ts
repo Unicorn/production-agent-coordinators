@@ -12,6 +12,13 @@ export async function analyzeProblem(
   problem: Problem,
   registry: AgentRegistry
 ): Promise<CoordinatorAction> {
+  // Validate ANTHROPIC_API_KEY
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error(
+      'ANTHROPIC_API_KEY environment variable is required. ' +
+      'Please set it before running the coordinator activities.'
+    )
+  }
   // Load prompt template
   const templatePath = path.join(__dirname, '../prompts/coordinator-analysis.hbs')
   const templateContent = await fs.readFile(templatePath, 'utf-8')
@@ -44,7 +51,16 @@ export async function analyzeProblem(
     throw new Error('Expected text response from Claude')
   }
 
-  const action = JSON.parse(content.text) as CoordinatorAction
+  let action: CoordinatorAction
+  try {
+    action = JSON.parse(content.text) as CoordinatorAction
+  } catch (error) {
+    const parseError = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `Failed to parse Claude response as JSON: ${parseError}\n` +
+      `Response content: ${content.text.substring(0, 500)}...`
+    )
+  }
 
   // Validate action structure
   validateCoordinatorAction(action)
