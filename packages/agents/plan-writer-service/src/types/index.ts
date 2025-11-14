@@ -188,3 +188,125 @@ export interface MCPUpdateResult {
   success: boolean;
   error?: string;
 }
+
+// ============================================================================
+// Child Workflow Types (PlanWriterPackageWorkflow)
+// ============================================================================
+
+export const PlanWriterPackageWorkflowMetadata: WorkflowMetadata = {
+  name: 'PlanWriterPackageWorkflow',
+  workflowId: '{packageId}', // Dynamic per package
+  description: 'Short-running workflow that writes plan for a single package with parent context',
+  serviceType: 'short-running',
+  triggers: ['plan-writer-service'],
+  signalsTo: ['plan-writer-service'],
+  signalsFrom: ['plan-writer-service'],
+  mcpOperations: ['packages_get', 'packages_get_dependencies', 'packages_update'],
+  gitOperations: ['commit --no-verify', 'push origin feature/{package-name}'],
+  version: '1.0.0'
+};
+
+export interface PlanWriterPackageInput {
+  packageId: string;
+  reason: string;
+  priority: 'low' | 'normal' | 'high' | 'critical';
+  sourceService: string;
+}
+
+export interface PlanWriterPackageResult {
+  success: boolean;
+  packageId: string;
+  planFilePath?: string;
+  gitBranch?: string;
+  skipped?: boolean;
+  skipReason?: string;
+  error?: string;
+  childrenDiscovered?: string[]; // Package IDs of discovered children
+}
+
+// ============================================================================
+// Package Evaluator Agent Types
+// ============================================================================
+
+export const spawnPackageEvaluatorAgentMetadata: ActivityMetadata = {
+  name: 'spawnPackageEvaluatorAgent',
+  displayName: 'Evaluate package update need (claude-sonnet-4-5 | package-evaluator-agent-v1.0.0)',
+  description: 'Spawns AI agent to compare existing package with parent expectations and decide if update needed',
+  activityType: 'agentic',
+  modelProvider: 'anthropic',
+  modelName: 'claude-sonnet-4-5-20250929',
+  agentPromptId: 'package-evaluator-agent',
+  agentPromptVersion: '1.0.0'
+};
+
+export interface PackageEvaluationInput {
+  packageId: string;
+  existingPlanContent?: string;
+  parentPlanContent?: string;
+  npmPackageInfo?: {
+    version: string;
+    published_at: string;
+    url: string;
+  };
+  packageDetails: {
+    status: string;
+    plan_file_path?: string;
+    plan_git_branch?: string;
+    current_version?: string;
+    dependencies?: string[];
+  };
+}
+
+export interface PackageEvaluationResult {
+  success: boolean;
+  needsUpdate: boolean;
+  reason: string;
+  updateType: 'plan' | 'implementation' | 'none';
+  confidence: 'high' | 'medium' | 'low';
+  error?: string;
+}
+
+// ============================================================================
+// MCP Query Types
+// ============================================================================
+
+export interface MCPPackageDetails {
+  packageId: string;
+  exists: boolean;
+  status?: string;
+  plan_file_path?: string;
+  plan_git_branch?: string;
+  current_version?: string;
+  parent_package?: string;
+  dependencies?: string[];
+  children?: string[];
+  npm_url?: string;
+}
+
+export interface MCPPackageLineage {
+  packageId: string;
+  parents: string[]; // Ordered from immediate parent to root
+  depth: number;
+}
+
+// ============================================================================
+// New Signal Types
+// ============================================================================
+
+export interface DiscoveredChildPackagePayload {
+  childPackageId: string;
+  parentPackageId: string;
+  parentPlanPath: string;
+  reason: string;
+}
+
+// ============================================================================
+// Updated Activity Inputs/Outputs
+// ============================================================================
+
+// Update WritePlanInput to include parent context
+export interface WritePlanInputWithContext extends WritePlanInput {
+  parentPlanContent?: string;
+  parentPackageId?: string;
+  lineage?: string[]; // Full lineage chain
+}
