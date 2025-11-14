@@ -14,10 +14,14 @@
     "@temporalio/workflow": "^1.10.0",
     "@temporalio/activity": "^1.10.0",
     "@temporalio/worker": "^1.10.0",
-    "@temporalio/client": "^1.10.0"
+    "@temporalio/client": "^1.10.0",
+    "@anthropic-ai/sdk": "^0.30.0",
+    "handlebars": "^4.7.8",
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
+    "@types/handlebars": "^4.1.0",
     "typescript": "^5.6.3",
     "vitest": "^1.6.0"
   }
