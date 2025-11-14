@@ -7,9 +7,11 @@
 
 // Export workflows
 export { PlanWriterServiceWorkflow, packagePlanNeededSignal, pauseServiceSignal, resumeServiceSignal } from './workflows/plan-writer-service.workflow';
+export { PlanWriterPackageWorkflow } from './workflows/plan-writer-package.workflow';
 
 // Export activities
 export * as PlanActivities from './activities/plan.activities';
+export * as MCPActivities from './activities/mcp.activities';
 
 // Export types and metadata
 export * from './types/index';

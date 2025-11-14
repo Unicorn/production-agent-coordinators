@@ -6,7 +6,6 @@
  */
 
 import type {
-  WritePlanInput,
   WritePlanResult,
   WritePlanInputWithContext,
   GitCommitInput,

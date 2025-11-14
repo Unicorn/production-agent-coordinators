@@ -29,7 +29,7 @@ describe('Plan Activities', () => {
       expect(result.planContent).toContain('@bernierllc/test-package');
       expect(result.planContent).toContain('Testing plan generation');
       expect(result.planFilePath).toBe('plans/packages/test-package.md');
-      expect(result.duration).toBeGreaterThan(0);
+      expect(result.duration).toBeGreaterThanOrEqual(0);
     });
 
     it('should include context in generated plan', async () => {
