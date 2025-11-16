@@ -79,6 +79,13 @@ export const discoveredChildPackageSignal = defineSignal<[ServiceSignalPayload<D
   'discovered_child_package'
 );
 
+/**
+ * Signal: trigger_mcp_scan
+ * Source: manual/admin
+ * Triggers immediate MCP scan for published packages without plans
+ */
+export const triggerMcpScanSignal = defineSignal<[]>('trigger_mcp_scan');
+
 // ============================================================================
 // Main Workflow
 // ============================================================================
@@ -161,6 +168,39 @@ export async function PlanWriterServiceWorkflow(): Promise<void> {
     });
 
     state.statistics.totalRequests++;
+  });
+
+  setHandler(triggerMcpScanSignal, async () => {
+    console.log('[PlanWriterService] Received trigger_mcp_scan signal');
+    console.log('[PlanWriterService] Executing on-demand MCP scan');
+
+    try {
+      const unplannedPackages = await mcpActivity.scanForUnplannedPackages();
+
+      console.log(`[PlanWriterService] Scan found ${unplannedPackages.length} packages`);
+
+      for (const pkg of unplannedPackages) {
+        requestQueue.push({
+          signalType: 'package_plan_needed',
+          sourceService: 'manual-scan',
+          targetService: 'plan-writer-service',
+          packageId: pkg.id,
+          timestamp: new Date().toISOString(),
+          priority: 'normal',
+          data: {
+            reason: 'Manual scan discovery',
+            context: { discoverySource: 'manual-scan' }
+          }
+        });
+
+        state.statistics.totalRequests++;
+      }
+
+      console.log(`[PlanWriterService] Queued ${unplannedPackages.length} packages from scan`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[PlanWriterService] Scan failed:`, errorMessage);
+    }
   });
 
   // Mark service as running

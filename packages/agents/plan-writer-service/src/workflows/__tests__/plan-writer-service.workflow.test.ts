@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TestWorkflowEnvironment } from '@temporalio/testing';
-import { Worker } from '@temporalio/worker';
-import { PlanWriterServiceWorkflow, packagePlanNeededSignal } from '../plan-writer-service.workflow';
-import * as activities from '../../activities/plan.activities';
-import type { ServiceSignalPayload, PackagePlanNeededPayload } from '../../types/index';
+import { PlanWriterServiceWorkflow, packagePlanNeededSignal, triggerMcpScanSignal } from '../plan-writer-service.workflow';
 
 describe('Plan Writer Service Workflow', () => {
   it('should have correct workflow metadata', () => {
@@ -15,6 +11,12 @@ describe('Plan Writer Service Workflow', () => {
     expect(packagePlanNeededSignal.name).toBe('package_plan_needed');
   });
 
+  it('should define triggerMcpScanSignal', () => {
+    expect(triggerMcpScanSignal).toBeDefined();
+    expect(triggerMcpScanSignal.name).toBe('trigger_mcp_scan');
+  });
+
   // TODO: Add integration tests with TestWorkflowEnvironment
-  // These will test the full workflow execution with mocked activities
+  // Full workflow execution tests require compiled JavaScript and Temporal test environment
+  // These can be added in a future phase when we set up proper integration testing
 });
