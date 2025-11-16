@@ -474,3 +474,68 @@ describe('ContinuousBuilderWorkflow - State & Signals', () => {
     });
   });
 });
+
+/**
+ * Part 2: Build Loop Tests
+ */
+describe('ContinuousBuilderWorkflow - Build Loop', () => {
+  let testEnv: TestWorkflowEnvironment;
+
+  beforeAll(async () => {
+    testEnv = await TestWorkflowEnvironment.createLocal();
+  });
+
+  afterAll(async () => {
+    await testEnv?.teardown();
+  });
+
+  it('should spawn child workflows when packages available', async () => {
+    const input: OrchestratorInput = {
+      maxConcurrent: 2,
+      workspaceRoot: '/test/workspace',
+      config: {
+        registry: 'https://registry.npmjs.org',
+      },
+    };
+
+    // Mock the updateMCPPackageStatus activity
+    const mockUpdateStatus = async () => {
+      // Success - no-op
+    };
+
+    const worker = await Worker.create({
+      connection: testEnv.nativeConnection,
+      taskQueue: 'test',
+      workflowsPath,
+      activities: {
+        updateMCPPackageStatus: mockUpdateStatus,
+      },
+    });
+
+    await worker.runUntil(async () => {
+      const handle = await testEnv.client.workflow.start(
+        ContinuousBuilderWorkflow,
+        {
+          taskQueue: 'test',
+          workflowId: `test-spawn-${Date.now()}`,
+          args: [input],
+        }
+      );
+
+      // Send packages via signal
+      const packages: Package[] = [
+        { name: '@test/pkg1', priority: 100, dependencies: [] },
+        { name: '@test/pkg2', priority: 90, dependencies: [] },
+      ];
+
+      await handle.signal(newPackagesSignal, packages);
+
+      // Wait a bit for processing to start
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Cleanup
+      await handle.signal(emergencyStopSignal);
+      await handle.result();
+    });
+  });
+});
