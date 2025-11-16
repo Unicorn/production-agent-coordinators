@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { queryMCPForPackages, updateMCPPackageStatus } from '../mcp.activities.js';
+import { queryMCPForPackages, updateMCPPackageStatus, signalOrchestrator } from '../mcp.activities.js';
 import type { Package } from '../../types/index.js';
 
 // Mock the MCP client
@@ -9,7 +9,16 @@ vi.mock('../mcp-client.js', () => ({
   },
 }));
 
+// Mock Temporal client
+vi.mock('@temporalio/client', () => ({
+  Connection: {
+    connect: vi.fn(),
+  },
+  WorkflowClient: vi.fn(),
+}));
+
 import { mcpClient } from '../mcp-client.js';
+import { Connection, WorkflowClient } from '@temporalio/client';
 
 describe('MCP Activities', () => {
   beforeEach(() => {
@@ -221,6 +230,83 @@ describe('MCP Activities', () => {
           status: 'published',
         },
       });
+    });
+  });
+
+  describe('signalOrchestrator', () => {
+    it('should signal the orchestrator workflow with packages', async () => {
+      // Arrange
+      const mockPackages: Package[] = [
+        { name: '@bernierllc/pkg-a', priority: 100, dependencies: [] },
+        { name: '@bernierllc/pkg-b', priority: 90, dependencies: ['@bernierllc/pkg-a'] },
+      ];
+
+      const mockSignal = vi.fn();
+      const mockGetHandle = vi.fn().mockReturnValue({ signal: mockSignal });
+      const mockConnection = {};
+
+      vi.mocked(Connection.connect).mockResolvedValue(mockConnection as any);
+      vi.mocked(WorkflowClient).mockReturnValue({ getHandle: mockGetHandle } as any);
+
+      // Act
+      await signalOrchestrator('newPackages', mockPackages);
+
+      // Assert
+      expect(Connection.connect).toHaveBeenCalledWith({
+        address: 'localhost:7233',
+      });
+      expect(WorkflowClient).toHaveBeenCalledWith({ connection: mockConnection });
+      expect(mockGetHandle).toHaveBeenCalledWith('continuous-builder-orchestrator');
+      expect(mockSignal).toHaveBeenCalledWith('newPackages', mockPackages);
+    });
+
+    it('should use TEMPORAL_ADDRESS environment variable if set', async () => {
+      // Arrange
+      const originalEnv = process.env.TEMPORAL_ADDRESS;
+      process.env.TEMPORAL_ADDRESS = 'temporal.example.com:7233';
+
+      const mockSignal = vi.fn();
+      const mockGetHandle = vi.fn().mockReturnValue({ signal: mockSignal });
+      const mockConnection = {};
+
+      vi.mocked(Connection.connect).mockResolvedValue(mockConnection as any);
+      vi.mocked(WorkflowClient).mockReturnValue({ getHandle: mockGetHandle } as any);
+
+      // Act
+      await signalOrchestrator('newPackages', []);
+
+      // Assert
+      expect(Connection.connect).toHaveBeenCalledWith({
+        address: 'temporal.example.com:7233',
+      });
+
+      // Cleanup
+      if (originalEnv) {
+        process.env.TEMPORAL_ADDRESS = originalEnv;
+      } else {
+        delete process.env.TEMPORAL_ADDRESS;
+      }
+    });
+
+    it('should handle connection errors', async () => {
+      // Arrange
+      vi.mocked(Connection.connect).mockRejectedValue(new Error('Connection failed'));
+
+      // Act & Assert
+      await expect(signalOrchestrator('newPackages', [])).rejects.toThrow('Connection failed');
+    });
+
+    it('should handle signal errors', async () => {
+      // Arrange
+      const mockSignal = vi.fn().mockRejectedValue(new Error('Signal failed'));
+      const mockGetHandle = vi.fn().mockReturnValue({ signal: mockSignal });
+      const mockConnection = {};
+
+      vi.mocked(Connection.connect).mockResolvedValue(mockConnection as any);
+      vi.mocked(WorkflowClient).mockReturnValue({ getHandle: mockGetHandle } as any);
+
+      // Act & Assert
+      await expect(signalOrchestrator('newPackages', [])).rejects.toThrow('Signal failed');
     });
   });
 });

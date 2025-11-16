@@ -5,6 +5,7 @@
  * for querying package queues and updating package status.
  */
 
+import { Connection, WorkflowClient } from '@temporalio/client';
 import type { Package, MCPPackage } from '../types/index.js';
 import { mcpClient } from './mcp-client.js';
 
@@ -87,4 +88,32 @@ export async function updateMCPPackageStatus(
     // Re-throw to let Temporal handle retries
     throw error;
   }
+}
+
+/**
+ * Signal the ContinuousBuilderWorkflow orchestrator
+ *
+ * This activity is called by the MCPPollerWorkflow to send packages to the
+ * orchestrator workflow via a signal.
+ *
+ * @param signalName - The name of the signal to send (e.g., 'newPackages')
+ * @param packages - The packages to send to the orchestrator
+ */
+export async function signalOrchestrator(
+  signalName: string,
+  packages: Package[]
+): Promise<void> {
+  // Get the Temporal connection from the activity context
+  const connection = await Connection.connect({
+    address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+  });
+
+  const client = new WorkflowClient({ connection });
+
+  // Get handle to the orchestrator workflow
+  const orchestratorWorkflowId = 'continuous-builder-orchestrator';
+  const handle = client.getHandle(orchestratorWorkflowId);
+
+  // Send the signal with packages
+  await handle.signal(signalName, packages);
 }
