@@ -2,7 +2,7 @@
  * MCP Scanner Cron Workflow
  *
  * Scheduled via Temporal cron: @hourly
- * Queries MCP for unpublished packages without plan files
+ * Queries MCP for published packages without plan files
  * Signals PlanWriterServiceWorkflow with discoveries
  *
  * Workflow ID: mcp-scanner (stable, reused by cron)
@@ -33,7 +33,7 @@ export interface MCPScannerResult {
  * MCP Scanner Workflow
  *
  * Executes on cron schedule (@hourly):
- * 1. Scan MCP for unpublished packages without plan files
+ * 1. Scan MCP for published packages without plan files
  * 2. Signal plan-writer-service for each package found
  * 3. Return scan statistics
  */
