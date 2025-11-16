@@ -11,7 +11,8 @@
     "packages/agents/*",
     "packages/storage",
     "packages/cli",
-    "packages/temporal-coordinator"
+    "packages/temporal-coordinator",
+    "packages/package-queue-orchestrator"
   ],
   "scripts": {
     "build": "tsc -b",
