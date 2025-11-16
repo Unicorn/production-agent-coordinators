@@ -302,6 +302,39 @@ export interface DiscoveredChildPackagePayload {
 }
 
 // ============================================================================
+// Continue-as-New State
+// ============================================================================
+
+/**
+ * State preserved across continue-as-new
+ * Must be fully serializable (no workflow handles, just IDs)
+ */
+export interface ContinueAsNewState {
+  // Pending plan requests
+  requestQueue: ServiceSignalPayload<PackagePlanNeededPayload>[];
+
+  // Active requests (Map entries as array)
+  activeRequests: [string, PlanRequest][];
+
+  // Child workflow IDs for reconnection
+  spawnedChildIds: string[];
+
+  // Statistics
+  statistics: {
+    totalRequests: number;
+    totalCompleted: number;
+    totalFailed: number;
+  };
+
+  // Service operational state
+  serviceStatus: 'running' | 'paused' | 'initializing';
+
+  // History tracking
+  completedPlans: string[];
+  failedPlans: FailedPlan[];
+}
+
+// ============================================================================
 // Updated Activity Inputs/Outputs
 // ============================================================================
 
