@@ -8,7 +8,8 @@
     "build": "tsc -b",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker": "node --loader ts-node/esm src/worker.ts"
   },
   "dependencies": {
     "@temporalio/workflow": "^1.10.0",
