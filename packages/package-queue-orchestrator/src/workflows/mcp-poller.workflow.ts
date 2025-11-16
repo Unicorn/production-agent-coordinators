@@ -26,7 +26,7 @@ const { queryMCPForPackages } = proxyActivities<typeof activities>({
 export async function MCPPollerWorkflow(): Promise<void> {
   // TODO: Implement workflow logic
   // 1. Query MCP for packages ready to build
-  const packages = await queryMCPForPackages();
+  const packages = await queryMCPForPackages(10); // Default limit of 10 packages
 
   // 2. Signal orchestrator with results (if any packages found)
   // TODO: Implement signaling logic

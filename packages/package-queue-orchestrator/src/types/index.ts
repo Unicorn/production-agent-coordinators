@@ -2,6 +2,8 @@
  * Package Queue Orchestrator Types
  */
 
+import type { ChildWorkflowHandle } from '@temporalio/workflow';
+
 /**
  * Package information from MCP
  */
@@ -10,6 +12,19 @@ export interface Package {
   name: string;
   priority: number;
   status: string;
+  dependencies: string[];
+}
+
+/**
+ * MCP Package type matching the MCP API response
+ */
+export interface MCPPackage {
+  id: string;
+  name: string;
+  priority: number;
+  dependencies: string[];
+  category: string;
+  status: string;
 }
 
 /**
@@ -17,7 +32,7 @@ export interface Package {
  */
 export interface OrchestratorState {
   internalQueue: Package[];
-  activeBuilds: Map<string, any>; // Child workflow handles
+  activeBuilds: Map<string, ChildWorkflowHandle>;
   failedRetries: Map<string, number>;
   isPaused: boolean;
   isDraining: boolean;
@@ -25,7 +40,19 @@ export interface OrchestratorState {
 }
 
 /**
+ * Input configuration for the ContinuousBuilderWorkflow
+ */
+export interface OrchestratorInput {
+  maxConcurrent: number;
+  workspaceRoot: string;
+  config: {
+    registry: string;
+  };
+}
+
+/**
  * Configuration for the ContinuousBuilderWorkflow
+ * @deprecated Use OrchestratorInput instead
  */
 export interface OrchestratorConfig {
   maxConcurrent: number;

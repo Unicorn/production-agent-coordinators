@@ -13,7 +13,7 @@ import { defineSignal, setHandler } from '@temporalio/workflow';
 // TODO: Uncomment when implementing build completion handlers
 // import { proxyActivities } from '@temporalio/workflow';
 // import type * as activities from '../activities/index.js';
-import type { Package, OrchestratorConfig, OrchestratorState } from '../types/index.js';
+import type { Package, OrchestratorInput, OrchestratorState } from '../types/index.js';
 
 // Proxy activities with reasonable timeout
 // TODO: Uncomment when implementing build completion handlers
@@ -34,10 +34,10 @@ export const adjustConcurrencySignal = defineSignal<[number]>('adjustConcurrency
  *
  * Long-running orchestrator that manages the build queue and spawns child workflows.
  *
- * @param config - Configuration for the orchestrator
+ * @param input - Configuration for the orchestrator
  */
 export async function ContinuousBuilderWorkflow(
-  config: OrchestratorConfig
+  input: OrchestratorInput
 ): Promise<void> {
   // Initialize state
   const state: OrchestratorState = {
@@ -46,7 +46,7 @@ export async function ContinuousBuilderWorkflow(
     failedRetries: new Map(),
     isPaused: false,
     isDraining: false,
-    maxConcurrent: config.maxConcurrent,
+    maxConcurrent: input.maxConcurrent,
   };
 
   // Set up signal handlers

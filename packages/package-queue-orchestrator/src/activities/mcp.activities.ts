@@ -12,8 +12,10 @@ import type { Package } from '../types/index.js';
  *
  * This activity is called by the MCPPollerWorkflow to get the list of packages
  * that are ready to be built (dependencies satisfied, sorted by priority).
+ *
+ * @param limit - Maximum number of packages to return
  */
-export async function queryMCPForPackages(): Promise<Package[]> {
+export async function queryMCPForPackages(limit: number): Promise<Package[]> {
   // TODO: Implement MCP packages_get_build_queue call
   // For now, return empty array as placeholder
   return [];
