@@ -8,16 +8,27 @@
     "build": "tsc -b",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker": "tsx src/worker.ts",
+    "worker:dev": "tsx watch src/worker.ts",
+    "client": "tsx src/client.ts",
+    "client:start-service": "tsx src/client.ts start-service",
+    "client:start-scanner": "tsx src/client.ts start-scanner",
+    "client:trigger-scan": "tsx src/client.ts trigger-scan",
+    "client:status": "tsx src/client.ts status"
   },
   "dependencies": {
     "@coordinator/contracts": "*",
     "@temporalio/workflow": "^1.13.1",
-    "@temporalio/activity": "^1.13.1"
+    "@temporalio/activity": "^1.13.1",
+    "@temporalio/worker": "^1.13.1",
+    "@temporalio/client": "^1.13.1",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
     "@temporalio/testing": "^1.13.2",
+    "tsx": "^4.7.0",
     "typescript": "^5.6.3",
     "vitest": "^1.6.0"
   }
