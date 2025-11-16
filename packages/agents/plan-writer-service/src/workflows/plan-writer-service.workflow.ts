@@ -10,7 +10,7 @@
  * Signals To: mcp-api
  */
 
-import { defineSignal, setHandler, condition, proxyActivities, startChild } from '@temporalio/workflow';
+import { defineSignal, setHandler, condition, proxyActivities, startChild, continueAsNew, workflowInfo, getExternalWorkflowHandle } from '@temporalio/workflow';
 import type * as planActivities from '../activities/plan.activities';
 import type * as mcpActivities from '../activities/mcp.activities';
 import type {
@@ -19,7 +19,8 @@ import type {
   DiscoveredChildPackagePayload,
   PlanWriterServiceState,
   PlanRequest,
-  PlanWriterPackageInput
+  PlanWriterPackageInput,
+  ContinueAsNewState
 } from '../types/index';
 
 // Create activity proxies with timeouts and retry policies
@@ -99,31 +100,63 @@ export const triggerMcpScanSignal = defineSignal<[]>('trigger_mcp_scan');
  * 3. Evaluates if packages need updates (using evaluator agent)
  * 4. Spawns child workflows (PlanWriterPackageWorkflow) per package
  * 5. Child workflows handle plan writing, git commits, and MCP updates
+ * 6. Uses continue-as-new to prevent unbounded history growth
  */
-export async function PlanWriterServiceWorkflow(): Promise<void> {
+export async function PlanWriterServiceWorkflow(
+  restoredState?: ContinueAsNewState
+): Promise<void> {
   console.log('[PlanWriterService] Starting plan-writer-service');
   console.log('[PlanWriterService] Workflow ID: plan-writer-service');
   console.log('[PlanWriterService] Version: 2.0.0 (parent-child pattern)');
 
+  // Check if restoring from continue-as-new
+  if (restoredState) {
+    console.log('[PlanWriterService] Restoring from continue-as-new');
+    console.log(`[PlanWriterService] Restored ${restoredState.statistics.totalRequests} total requests`);
+    console.log(`[PlanWriterService] Restored ${restoredState.spawnedChildIds.length} child workflows`);
+  }
+
   // Initialize service state
   const state: PlanWriterServiceState = {
-    serviceStatus: 'initializing',
+    serviceStatus: restoredState?.serviceStatus || 'initializing',
     activeRequests: new Map(),
-    completedPlans: [],
-    failedPlans: [],
+    completedPlans: restoredState?.completedPlans || [],
+    failedPlans: restoredState?.failedPlans || [],
     statistics: {
-      totalRequests: 0,
-      totalCompleted: 0,
-      totalFailed: 0,
-      averageDuration: 0
+      totalRequests: restoredState?.statistics.totalRequests ?? 0,
+      totalCompleted: restoredState?.statistics.totalCompleted ?? 0,
+      totalFailed: restoredState?.statistics.totalFailed ?? 0,
+      averageDuration: 0 // Not preserved across continue-as-new
     }
   };
 
   // Queue for incoming plan requests
-  const requestQueue: ServiceSignalPayload<PackagePlanNeededPayload>[] = [];
+  const requestQueue: ServiceSignalPayload<PackagePlanNeededPayload>[] =
+    restoredState?.requestQueue || [];
 
   // Track spawned child workflows
   const spawnedChildren = new Map<string, any>(); // packageId -> childHandle
+
+  // Restore active requests
+  if (restoredState?.activeRequests) {
+    for (const [packageId, request] of restoredState.activeRequests) {
+      state.activeRequests.set(packageId, request);
+    }
+  }
+
+  // Reconnect to child workflows using stored IDs
+  if (restoredState?.spawnedChildIds) {
+    for (const childId of restoredState.spawnedChildIds) {
+      // Extract packageId from workflow ID
+      // Format: plan-writer-package-{org}-{name}
+      const parts = childId.replace('plan-writer-package-', '').split('-');
+      const packageId = `@${parts[0]}/${parts.slice(1).join('-')}`;
+
+      const handle = getExternalWorkflowHandle(childId);
+      spawnedChildren.set(packageId, handle);
+      console.log(`[PlanWriterService] Reconnected to child: ${childId}`);
+    }
+  }
 
   // Set up signal handlers
   setHandler(packagePlanNeededSignal, (signal: ServiceSignalPayload<PackagePlanNeededPayload>) => {
@@ -209,6 +242,36 @@ export async function PlanWriterServiceWorkflow(): Promise<void> {
 
   // Main service loop - runs forever
   while (true) {
+    // Check history length and continue-as-new if needed
+    const info = workflowInfo();
+    if (info.historyLength >= 37500) {
+      console.log(`[PlanWriterService] History at ${info.historyLength} events, continuing-as-new`);
+
+      // Create state snapshot
+      const stateSnapshot: ContinueAsNewState = {
+        requestQueue: Array.from(requestQueue),
+        activeRequests: Array.from(state.activeRequests.entries()),
+        spawnedChildIds: Array.from(spawnedChildren.keys()).map(packageId => {
+          // Convert @bernierllc/package-name to plan-writer-package-bernierllc-package-name
+          return `plan-writer-package-${packageId.replace('@', '').replace('/', '-')}`;
+        }),
+        statistics: {
+          totalRequests: state.statistics.totalRequests,
+          totalCompleted: state.statistics.totalCompleted,
+          totalFailed: state.statistics.totalFailed
+        },
+        serviceStatus: state.serviceStatus,
+        completedPlans: [...state.completedPlans],
+        failedPlans: [...state.failedPlans]
+      };
+
+      console.log(`[PlanWriterService] Preserving ${stateSnapshot.requestQueue.length} queued requests`);
+      console.log(`[PlanWriterService] Preserving ${stateSnapshot.spawnedChildIds.length} child workflows`);
+
+      await continueAsNew<typeof PlanWriterServiceWorkflow>(stateSnapshot);
+      return; // Never reached, but TypeScript needs it
+    }
+
     // Wait for either a new request or service to be unpaused
     await condition(() => requestQueue.length > 0 && state.serviceStatus === 'running');
 
