@@ -147,10 +147,9 @@ export async function PlanWriterServiceWorkflow(
   // Reconnect to child workflows using stored IDs
   if (restoredState?.spawnedChildIds) {
     for (const childId of restoredState.spawnedChildIds) {
-      // Extract packageId from workflow ID
-      // Format: plan-writer-package-{org}-{name}
-      const parts = childId.replace('plan-writer-package-', '').split('-');
-      const packageId = `@${parts[0]}/${parts.slice(1).join('-')}`;
+      // Extract packageId from workflow ID using URL decoding
+      // Format: plan-writer-package-{encoded-package-id}
+      const packageId = decodeURIComponent(childId.replace('plan-writer-package-', ''));
 
       const handle = getExternalWorkflowHandle(childId);
       spawnedChildren.set(packageId, handle);
@@ -252,8 +251,8 @@ export async function PlanWriterServiceWorkflow(
         requestQueue: Array.from(requestQueue),
         activeRequests: Array.from(state.activeRequests.entries()),
         spawnedChildIds: Array.from(spawnedChildren.keys()).map(packageId => {
-          // Convert @bernierllc/package-name to plan-writer-package-bernierllc-package-name
-          return `plan-writer-package-${packageId.replace('@', '').replace('/', '-')}`;
+          // Convert package ID to workflow ID using URL encoding
+          return `plan-writer-package-${encodeURIComponent(packageId)}`;
         }),
         statistics: {
           totalRequests: state.statistics.totalRequests,
@@ -381,7 +380,7 @@ export async function PlanWriterServiceWorkflow(
         const { PlanWriterPackageWorkflow } = await import('./plan-writer-package.workflow');
 
         const childHandle = await startChild(PlanWriterPackageWorkflow, {
-          workflowId: `plan-writer-package-${signal.packageId.replace('@', '').replace('/', '-')}`,
+          workflowId: `plan-writer-package-${encodeURIComponent(signal.packageId)}`,
           args: [childInput],
           taskQueue: 'plan-writer-service' // Use same task queue
         });
