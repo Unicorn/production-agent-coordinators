@@ -30,7 +30,7 @@ export interface MCPPackage {
  */
 export interface OrchestratorState {
   internalQueue: Package[];
-  activeBuilds: Map<string, ChildWorkflowHandle>;
+  activeBuilds: Map<string, ChildWorkflowHandle<any>>;
   failedRetries: Map<string, number>;
   isPaused: boolean;
   isDraining: boolean;

@@ -5,7 +5,18 @@
  * for querying package queues and updating package status.
  */
 
-import type { Package } from '../types/index.js';
+import type { Package, MCPPackage } from '../types/index.js';
+import { mcpClient } from './mcp-client.js';
+
+/**
+ * Interface for package update data sent to MCP
+ */
+interface PackageUpdateData {
+  status: string;
+  metadata?: {
+    error: string;
+  };
+}
 
 /**
  * Query MCP for packages ready to build
@@ -16,9 +27,27 @@ import type { Package } from '../types/index.js';
  * @param limit - Maximum number of packages to return
  */
 export async function queryMCPForPackages(limit: number): Promise<Package[]> {
-  // TODO: Implement MCP packages_get_build_queue call
-  // For now, return empty array as placeholder
-  return [];
+  try {
+    // Call MCP packages_get_build_queue tool
+    const response = await mcpClient.callTool('packages_get_build_queue', {
+      limit,
+      filters: {
+        exclude_blocked: true,
+      },
+    });
+
+    // Transform MCP response to internal Package format
+    const packages: Package[] = (response.packages || []).map((mcpPkg: MCPPackage) => ({
+      name: mcpPkg.name,
+      priority: mcpPkg.priority,
+      dependencies: mcpPkg.dependencies,
+    }));
+
+    return packages;
+  } catch (error) {
+    // Re-throw to let Temporal handle retries
+    throw error;
+  }
 }
 
 /**
@@ -36,7 +65,26 @@ export async function updateMCPPackageStatus(
   status: string,
   errorDetails?: string
 ): Promise<void> {
-  // TODO: Implement MCP packages_update call
-  // For now, just log
-  console.log(`Updating package ${packageName} status to ${status}`, errorDetails);
+  try {
+    // Prepare update data
+    const updateData: PackageUpdateData = {
+      status,
+    };
+
+    // Add error details to metadata if provided
+    if (errorDetails) {
+      updateData.metadata = {
+        error: errorDetails,
+      };
+    }
+
+    // Call MCP packages_update tool
+    await mcpClient.callTool('packages_update', {
+      id: packageName,
+      data: updateData,
+    });
+  } catch (error) {
+    // Re-throw to let Temporal handle retries
+    throw error;
+  }
 }
