@@ -7,13 +7,16 @@
  * Pattern: Child workflow spawned by PlanWriterServiceWorkflow
  */
 
-import { proxyActivities, sleep } from '@temporalio/workflow';
+import { proxyActivities, sleep, getExternalWorkflowHandle } from '@temporalio/workflow';
 import type * as mcpActivities from '../activities/mcp.activities';
 import type * as planActivities from '../activities/plan.activities';
 import type {
   PlanWriterPackageInput,
-  PlanWriterPackageResult
+  PlanWriterPackageResult,
+  ServiceSignalPayload,
+  PackagePlanNeededPayload
 } from '../types/index';
+import { packagePlanNeededSignal } from './plan-writer-service.workflow';
 import { fibonacciBackoff } from '../utils/backoff';
 
 // Export metadata for workflow registry
@@ -63,8 +66,34 @@ export async function PlanWriterPackageWorkflow(
 
       if (!parentDetails.plan_file_path) {
         console.log(`[PlanWriterPackageWorkflow] Parent ${parentId} has no plan`);
-        console.log(`[PlanWriterPackageWorkflow] TODO: Signal service to queue parent`);
-        // TODO: Implement signaling service with discovered parent need
+        console.log(`[PlanWriterPackageWorkflow] Signaling service to queue parent`);
+
+        // Signal parent service to queue parent package
+        try {
+          const serviceHandle = getExternalWorkflowHandle('plan-writer-service');
+          const signalPayload: ServiceSignalPayload<PackagePlanNeededPayload> = {
+            signalType: 'package_plan_needed',
+            sourceService: 'plan-writer-service',
+            targetService: 'plan-writer-service',
+            packageId: parentId,
+            timestamp: new Date().toISOString(),
+            priority: 'high', // Parent dependencies are high priority
+            data: {
+              reason: 'Missing parent plan - queuing parent',
+              context: {
+                discoverySource: 'parent-dependency',
+                parentPackageId: input.packageId
+              }
+            }
+          };
+
+          await serviceHandle.signal(packagePlanNeededSignal, signalPayload);
+          console.log(`[PlanWriterPackageWorkflow] Signaled service for parent ${parentId}`);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          console.warn(`[PlanWriterPackageWorkflow] Failed to signal about parent:`, errorMessage);
+          // Continue - we'll wait for parent anyway
+        }
 
         console.log(`[PlanWriterPackageWorkflow] Waiting for parent plan to exist...`);
 
@@ -177,10 +206,43 @@ export async function PlanWriterPackageWorkflow(
 
     // Step 8: Signal service for each child
     console.log(`[PlanWriterPackageWorkflow] Step 8: Signaling service about children`);
-    // TODO: Implement signaling service with discovered children
-    // For now, just log intent
-    for (const childId of children) {
-      console.log(`[PlanWriterPackageWorkflow] TODO: Signal service about child ${childId}`);
+
+    if (children.length > 0) {
+      const serviceHandle = getExternalWorkflowHandle('plan-writer-service');
+
+      for (const childId of children) {
+        console.log(`[PlanWriterPackageWorkflow] Checking if child ${childId} needs plan`);
+
+        // Check if child already has a plan
+        const childDetails = await mcp.queryPackageDetails(childId);
+
+        if (!childDetails.plan_file_path) {
+          console.log(`[PlanWriterPackageWorkflow] Child ${childId} has no plan, signaling service`);
+
+          const signalPayload: ServiceSignalPayload<PackagePlanNeededPayload> = {
+            signalType: 'package_plan_needed',
+            sourceService: 'plan-writer-service',
+            targetService: 'plan-writer-service',
+            packageId: childId,
+            timestamp: new Date().toISOString(),
+            priority: 'normal',
+            data: {
+              reason: 'Missing child plan - queuing child',
+              context: {
+                discoverySource: 'child-dependency',
+                parentPackageId: input.packageId
+              }
+            }
+          };
+
+          await serviceHandle.signal(packagePlanNeededSignal, signalPayload);
+          console.log(`[PlanWriterPackageWorkflow] Signaled service for child ${childId}`);
+        } else {
+          console.log(`[PlanWriterPackageWorkflow] Child ${childId} already has plan: ${childDetails.plan_file_path}`);
+        }
+      }
+    } else {
+      console.log(`[PlanWriterPackageWorkflow] No children to signal`);
     }
 
     console.log(`[PlanWriterPackageWorkflow] Completed successfully for ${input.packageId}`);

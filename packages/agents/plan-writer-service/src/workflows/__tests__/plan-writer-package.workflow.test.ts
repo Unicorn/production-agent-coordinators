@@ -92,6 +92,76 @@ describe('PlanWriterPackageWorkflow', () => {
     expect(workflowSource).toContain('checkPlanExists');
   });
 
+  it('should import getExternalWorkflowHandle from @temporalio/workflow', async () => {
+    // Verify the import is present by checking the workflow source
+    const workflowSource = PlanWriterPackageWorkflow.toString();
+
+    // Should use getExternalWorkflowHandle
+    expect(workflowSource).toContain('getExternalWorkflowHandle');
+  });
+
+  it('should import packagePlanNeededSignal from plan-writer-service.workflow', async () => {
+    // Verify signal import is used in the workflow
+    const workflowSource = PlanWriterPackageWorkflow.toString();
+
+    // Should reference packagePlanNeededSignal
+    expect(workflowSource).toContain('packagePlanNeededSignal');
+  });
+
+  it('should signal service when parent has no plan', async () => {
+    // Verify workflow signals parent service when parent package has no plan
+    const workflowSource = PlanWriterPackageWorkflow.toString();
+
+    // Should get external workflow handle for plan-writer-service (may be compiled)
+    expect(workflowSource).toMatch(/getExternalWorkflowHandle\(["']plan-writer-service["']\)/);
+
+    // Should create signal payload with correct structure (may be compiled)
+    expect(workflowSource).toMatch(/signalType:\s*["']package_plan_needed["']/);
+    expect(workflowSource).toMatch(/sourceService:\s*["']plan-writer-service["']/);
+    expect(workflowSource).toMatch(/targetService:\s*["']plan-writer-service["']/);
+
+    // Should signal when parent has no plan (may be compiled)
+    expect(workflowSource).toMatch(/reason:\s*["']Missing parent plan - queuing parent["']/);
+    expect(workflowSource).toMatch(/discoverySource:\s*["']parent-dependency["']/);
+  });
+
+  it('should signal service for children needing plans', async () => {
+    // Verify workflow signals service for each child that needs a plan
+    const workflowSource = PlanWriterPackageWorkflow.toString();
+
+    // Should signal for children (may be compiled)
+    expect(workflowSource).toMatch(/reason:\s*["']Missing child plan - queuing child["']/);
+    expect(workflowSource).toMatch(/discoverySource:\s*["']child-dependency["']/);
+
+    // Should check if child has plan before signaling
+    expect(workflowSource).toContain('queryPackageDetails(childId)');
+
+    // Should iterate over children
+    expect(workflowSource).toContain('for (const childId of children)');
+  });
+
+  it('should send signals with correct payload structure', async () => {
+    // Verify signal payload structure matches ServiceSignalPayload<PackagePlanNeededPayload>
+    const workflowSource = PlanWriterPackageWorkflow.toString();
+
+    // Should include required fields
+    expect(workflowSource).toContain('signalType:');
+    expect(workflowSource).toContain('sourceService:');
+    expect(workflowSource).toContain('targetService:');
+    expect(workflowSource).toContain('packageId:');
+    expect(workflowSource).toContain('timestamp:');
+    expect(workflowSource).toContain('priority:');
+
+    // Should include data with reason and context
+    expect(workflowSource).toContain('reason:');
+    expect(workflowSource).toContain('context:');
+    expect(workflowSource).toContain('discoverySource:');
+    expect(workflowSource).toContain('parentPackageId:');
+
+    // Should use signal method
+    expect(workflowSource).toContain('.signal(');
+  });
+
   // TODO: Add integration tests with TestWorkflowEnvironment
   // Full workflow execution tests require compiled JavaScript and Temporal test environment
   // These can be added in a future phase when we set up proper integration testing
