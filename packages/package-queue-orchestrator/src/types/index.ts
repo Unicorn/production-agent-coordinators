@@ -8,10 +8,8 @@ import type { ChildWorkflowHandle } from '@temporalio/workflow';
  * Package information from MCP
  */
 export interface Package {
-  id: string;
   name: string;
   priority: number;
-  status: string;
   dependencies: string[];
 }
 
@@ -67,4 +65,6 @@ export interface BuildResult {
   success: boolean;
   packageName: string;
   error?: string;
+  failedPhase?: string;
+  fixAttempts?: number;
 }
