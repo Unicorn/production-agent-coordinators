@@ -14,6 +14,7 @@ import type {
   PlanWriterPackageInput,
   PlanWriterPackageResult
 } from '../types/index';
+import { fibonacciBackoff } from '../utils/backoff';
 
 // Export metadata for workflow registry
 export { PlanWriterPackageWorkflowMetadata } from '../types/index';
@@ -64,33 +65,26 @@ export async function PlanWriterPackageWorkflow(
         console.log(`[PlanWriterPackageWorkflow] Parent ${parentId} has no plan`);
         console.log(`[PlanWriterPackageWorkflow] TODO: Signal service to queue parent`);
         // TODO: Implement signaling service with discovered parent need
-        // For now, we'll wait with a timeout
 
         console.log(`[PlanWriterPackageWorkflow] Waiting for parent plan to exist...`);
 
-        // Poll for parent plan existence with timeout
-        const maxWaitMs = 30 * 60 * 1000; // 30 minutes
-        const pollIntervalMs = 30 * 1000; // 30 seconds
-        const startTime = Date.now();
-        let planExists = false;
+        // Wait indefinitely with Fibonacci backoff
+        const backoff = fibonacciBackoff(30 * 60 * 1000); // 30min cap
 
-        while (Date.now() - startTime < maxWaitMs) {
+        while (true) {
           const details = await mcp.queryPackageDetails(parentId);
+
           if (details.plan_file_path) {
-            planExists = await mcp.checkPlanExists(details.plan_file_path);
+            const planExists = await mcp.checkPlanExists(details.plan_file_path);
             if (planExists) {
-              console.log(`[PlanWriterPackageWorkflow] Parent plan now exists!`);
+              console.log(`[PlanWriterPackageWorkflow] Parent plan exists!`);
               break;
             }
           }
 
-          await sleep(pollIntervalMs);
-          console.log(`[PlanWriterPackageWorkflow] Still waiting for parent plan...`);
-        }
-
-        if (!planExists) {
-          console.warn(`[PlanWriterPackageWorkflow] Parent plan timeout for ${parentId}`);
-          // Continue anyway - we'll work without parent context
+          const waitMs = backoff.next().value as number;
+          console.log(`[PlanWriterPackageWorkflow] Parent not ready, waiting ${waitMs / 60000}m...`);
+          await sleep(waitMs);
         }
       } else {
         console.log(`[PlanWriterPackageWorkflow] Parent ${parentId} has plan: ${parentDetails.plan_file_path}`);
