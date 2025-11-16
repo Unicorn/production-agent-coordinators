@@ -187,7 +187,7 @@ export async function scanForUnplannedPackages(): Promise<PackageInfo[]> {
     throw new Error('MBERNIER_API_URL and MBERNIER_API_KEY must be set');
   }
 
-  console.log('[scanForUnplannedPackages] Querying MCP for unpublished packages without plans');
+  console.log('[scanForUnplannedPackages] Querying MCP for published packages without plans');
 
   const url = `${apiUrl}/packages?filters[status]=published&filters[no_plan_file]=true`;
 
