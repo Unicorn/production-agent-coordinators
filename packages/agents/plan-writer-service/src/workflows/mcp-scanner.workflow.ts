@@ -59,7 +59,7 @@ export async function MCPScannerWorkflow(): Promise<MCPScannerResult> {
         priority: 'low', // Scanner discoveries are lower priority
         data: {
           reason: 'Published package without plan file',
-          context: { scanType: 'scheduled' }
+          context: { discoverySource: 'mcp-scanner-scheduled' }
         }
       };
 

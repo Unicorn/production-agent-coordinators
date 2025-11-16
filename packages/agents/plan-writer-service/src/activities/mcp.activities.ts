@@ -204,7 +204,7 @@ export async function scanForUnplannedPackages(): Promise<PackageInfo[]> {
     throw new Error(`MCP API error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as { data?: PackageInfo[] };
   const packages = data.data || [];
 
   console.log(`[scanForUnplannedPackages] Found ${packages.length} packages needing plans`);
