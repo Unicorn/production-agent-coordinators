@@ -12,6 +12,14 @@ import type {
   MCPPackageLineage
 } from '../types/index';
 
+export interface PackageInfo {
+  id: string;
+  name: string;
+  status: string;
+  plan_file_path: string | null;
+  current_version?: string;
+}
+
 /**
  * Query package details from MCP
  *
@@ -165,4 +173,41 @@ export async function queryChildPackages(packageId: string): Promise<string[]> {
     console.error(`[queryChildPackages] Failed for ${packageId}:`, errorMessage);
     return [];
   }
+}
+
+/**
+ * Scan MCP for packages that are published but have no plan file
+ * Used by MCPScannerWorkflow for automated discovery
+ */
+export async function scanForUnplannedPackages(): Promise<PackageInfo[]> {
+  const apiUrl = process.env.MBERNIER_API_URL;
+  const apiKey = process.env.MBERNIER_API_KEY;
+
+  if (!apiUrl || !apiKey) {
+    throw new Error('MBERNIER_API_URL and MBERNIER_API_KEY must be set');
+  }
+
+  console.log('[scanForUnplannedPackages] Querying MCP for unpublished packages without plans');
+
+  const url = `${apiUrl}/packages?filters[status]=published&filters[no_plan_file]=true`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`MCP API error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  const packages = data.data || [];
+
+  console.log(`[scanForUnplannedPackages] Found ${packages.length} packages needing plans`);
+
+  return packages;
 }
