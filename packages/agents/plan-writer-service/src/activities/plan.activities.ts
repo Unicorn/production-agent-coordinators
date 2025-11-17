@@ -5,6 +5,9 @@
  * Following naming standards from standardization design doc.
  */
 
+import { execSync } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type {
   WritePlanResult,
   WritePlanInputWithContext,
@@ -41,8 +44,10 @@ export async function spawnPlanWriterAgent(input: WritePlanInputWithContext): Pr
     const planContent = generateMockPlan(input);
     const planFilePath = getPlanFilePath(input.packageId);
 
-    // TODO: Write plan to filesystem
-    // await writeFile(planFilePath, planContent);
+    // Write plan to filesystem
+    const planDir = dirname(planFilePath);
+    await mkdir(planDir, { recursive: true });
+    await writeFile(planFilePath, planContent, 'utf-8');
 
     const duration = Date.now() - startTime;
 
@@ -81,19 +86,49 @@ export async function gitCommitPlan(input: GitCommitInput): Promise<GitCommitRes
     console.log(`[gitCommitPlan] Committing plan for ${input.packageId}`);
     console.log(`[gitCommitPlan] Branch: ${input.gitBranch}`);
 
-    // TODO: Implement actual git operations
-    // 1. Ensure on correct branch (git checkout -b feature/{package-name})
-    // 2. Add plan file (git add {planFilePath})
-    // 3. Commit (git commit --no-verify -m "{commitMessage}")
-    // 4. Push (git push origin {gitBranch} --no-verify)
+    // Get current directory (assume we're in the repo root or plans directory is accessible)
+    const cwd = process.cwd();
 
-    const mockCommitSha = `abc${Date.now().toString(36)}`;
+    // 1. Create and checkout branch (or checkout if exists)
+    try {
+      execSync(`git checkout -b ${input.gitBranch}`, { cwd, stdio: 'pipe' });
+      console.log(`[gitCommitPlan] Created new branch: ${input.gitBranch}`);
+    } catch (error) {
+      // Branch might already exist, try to checkout
+      execSync(`git checkout ${input.gitBranch}`, { cwd, stdio: 'pipe' });
+      console.log(`[gitCommitPlan] Checked out existing branch: ${input.gitBranch}`);
+    }
 
-    console.log(`[gitCommitPlan] Committed as ${mockCommitSha}`);
+    // 2. Add plan file
+    execSync(`git add ${input.planFilePath}`, { cwd, stdio: 'pipe' });
+    console.log(`[gitCommitPlan] Added ${input.planFilePath}`);
+
+    // 3. Commit with message
+    const commitMessage = input.commitMessage || `feat: Add implementation plan for ${input.packageId}
+
+Generated plan for ${input.packageId}
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>`;
+
+    execSync(`git commit --no-verify -m "${commitMessage.replace(/"/g, '\\"')}"`, { cwd, stdio: 'pipe' });
+
+    // Get the commit SHA
+    const commitSha = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
+    console.log(`[gitCommitPlan] Committed as ${commitSha}`);
+
+    // 4. Push to remote (optional - only if remote is configured)
+    try {
+      execSync(`git push origin ${input.gitBranch} --no-verify`, { cwd, stdio: 'pipe' });
+      console.log(`[gitCommitPlan] Pushed to origin/${input.gitBranch}`);
+    } catch (error) {
+      console.log(`[gitCommitPlan] Push skipped (no remote or push failed)`);
+    }
 
     return {
       success: true,
-      commitSha: mockCommitSha,
+      commitSha,
       branch: input.gitBranch
     };
   } catch (error) {
@@ -118,19 +153,51 @@ export async function gitCommitPlan(input: GitCommitInput): Promise<GitCommitRes
  */
 export async function updateMCPStatus(input: MCPUpdateInput): Promise<MCPUpdateResult> {
   try {
-    console.log(`[updateMCPStatus] Updating MCP for ${input.packageId}`);
-    console.log(`[updateMCPStatus] Status: ${input.status}`);
+    console.log(`[updateMCPStatus] Updating package via REST API`);
+    console.log(`[updateMCPStatus] Package: ${input.packageId}`);
     console.log(`[updateMCPStatus] Plan path: ${input.planFilePath}`);
     console.log(`[updateMCPStatus] Git branch: ${input.gitBranch}`);
+    console.log(`[updateMCPStatus] Status: ${input.status}`);
 
-    // TODO: Implement actual MCP API call
-    // await mcpClient.packages.update(input.packageId, {
-    //   plan_file_path: input.planFilePath,
-    //   plan_git_branch: input.gitBranch,
-    //   status: input.status
-    // });
+    const apiUrl = process.env.MBERNIER_API_URL;
+    const apiKey = process.env.MBERNIER_API_KEY;
 
-    console.log(`[updateMCPStatus] MCP updated successfully`);
+    if (!apiUrl || !apiKey) {
+      throw new Error('MBERNIER_API_URL and MBERNIER_API_KEY must be set');
+    }
+
+    // Update package metadata via REST API
+    // Using PATCH /api/v1/packages/{id} endpoint
+    const url = `${apiUrl}/packages/${encodeURIComponent(input.packageId)}`;
+
+    console.log(`[updateMCPStatus] PATCH ${url}`);
+
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        plan_file_path: input.planFilePath,
+        plan_git_branch: input.gitBranch,
+        status: input.status
+      })
+    });
+
+    console.log(`[updateMCPStatus] Response status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const truncatedError = errorText.length > 200
+        ? `${errorText.substring(0, 200)}... (truncated)`
+        : errorText;
+      console.error(`[updateMCPStatus] HTTP ${response.status}: ${truncatedError}`);
+      throw new Error(`API error: ${response.status} - ${truncatedError}`);
+    }
+
+    await response.json(); // Consume response body
+    console.log(`[updateMCPStatus] Package updated successfully`);
 
     return {
       success: true

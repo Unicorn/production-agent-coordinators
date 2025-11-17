@@ -182,14 +182,19 @@ export async function PlanWriterPackageWorkflow(
 
     // Step 6: Update MCP
     console.log(`[PlanWriterPackageWorkflow] Step 6: Updating MCP`);
-    await plan.updateMCPStatus({
+    const mcpResult = await plan.updateMCPStatus({
       packageId: input.packageId,
       planFilePath: planResult.planFilePath,
       gitBranch,
-      status: 'plan_written'
+      status: 'planning' // API expects: planning, development, testing, published, deprecated, archived
     });
 
-    console.log(`[PlanWriterPackageWorkflow] MCP updated with plan metadata`);
+    if (mcpResult.success) {
+      console.log(`[PlanWriterPackageWorkflow] MCP updated successfully`);
+    } else {
+      console.warn(`[PlanWriterPackageWorkflow] MCP update failed: ${mcpResult.error}`);
+      console.warn(`[PlanWriterPackageWorkflow] Continuing anyway - plan is committed to Git`);
+    }
 
     // Step 7: Discover children
     console.log(`[PlanWriterPackageWorkflow] Step 7: Discovering children`);
