@@ -38,7 +38,8 @@ export async function queryMCPForPackages(limit: number): Promise<Package[]> {
     });
 
     // Transform MCP response to internal Package format
-    const packages: Package[] = (response.packages || []).map((mcpPkg: MCPPackage) => ({
+    // MCP returns { queue: [...], blocked: [...] }
+    const packages: Package[] = (response.queue || []).map((mcpPkg: MCPPackage) => ({
       name: mcpPkg.name,
       priority: mcpPkg.priority,
       dependencies: mcpPkg.dependencies,

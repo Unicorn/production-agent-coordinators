@@ -1,0 +1,283 @@
+TEMPORAL WORKFLOW & ACTIVITY STRUCTURE EXPLORATION - COMPLETE SUMMARY
+=====================================================================
+
+Date: November 13, 2025
+Thoroughness Level: Very Thorough - Comprehensive Understanding
+
+EXECUTIVE SUMMARY
+=================
+
+Explored the production-agent-coordinators codebase to understand:
+1. All workflow definitions (both simple and complex)
+2. Naming conventions for workflows, activities, and agents
+3. Examples of agentic activities and their patterns
+4. Directory structure for workflows, activities, and agents
+5. Existing standardization and naming patterns
+
+KEY FINDINGS
+============
+
+1. WORKFLOW DEFINITIONS (2 Main Systems)
+
+   A. Temporal Coordinator Workflows
+      Location: /packages/temporal-coordinator/src/workflows.ts
+      
+      - helloWorkflow() - Simple demo/integration example
+      - multiStepWorkflow() - Multi-step example
+      
+      Pattern: <purpose>Workflow (camelCase for simple)
+      Characteristics: Loop-based iteration, activity delegation
+
+   B. Package Builder Production Workflows
+      Location: /packages/agents/package-builder-production/src/workflows/
+      
+      - PackageBuilderWorkflow() - Parent orchestrator
+      - PackageBuildWorkflow() - Child executor for single package
+      
+      Pattern: <Entity><Purpose>Workflow (PascalCase for complex)
+      Characteristics: Multi-phase, dependency-aware, dynamic child spawning
+
+2. NAMING CONVENTIONS ESTABLISHED
+
+   Workflows:
+   - Simple/Demo: <purpose>Workflow (camelCase)
+   - Complex: <Entity><Purpose>Workflow (PascalCase)
+   - ALWAYS ends with "Workflow" suffix
+   
+   Activities:
+   - General: <verb><noun> or <verb><Entity> (camelCase)
+   - CLI-style: run<Command> (e.g., runBuild, runTests)
+   - Complex: <verb><Entity><noun> (e.g., writePackageBuildReport)
+   - Agentic: spawn<Agent> (e.g., spawnFixAgent)
+   - Verification: verify<Resource> (e.g., verifyDependencies)
+   - NO "Activity" suffix (proxy pattern handles this)
+   
+   Types:
+   - Pattern: <Entity><Purpose><Kind> (PascalCase)
+   - Examples: PackageBuildInput, PackageBuildResult, BuildReport
+
+3. AGENTIC ACTIVITIES - CRITICAL DISCOVERY
+
+   Definition: Activities that invoke external agents to perform work
+   
+   Primary Example: spawnFixAgent()
+   Location: /packages/agents/package-builder-production/src/activities/agent.activities.ts
+   
+   Characteristics:
+   - Names use "spawn<Agent>" pattern
+   - Receives failure context, plan, and package information
+   - Manages prompt template selection/creation
+   - Currently TODO: actual agent spawning not integrated
+   - Would use task-based agent invocation system
+   - Prompt templates stored in .claude/agents/fix-prompts/
+   
+   Usage Pattern:
+   - Called from workflows when quality checks fail
+   - Up to 3 retry attempts in build workflow
+   - Categorizes failure types for prompt selection
+
+4. DIRECTORY STRUCTURE
+
+   /packages/temporal-coordinator/
+   - workflows.ts (hello, multiStep examples)
+   - activities.ts (engine/coordinator wrapper activities)
+   - worker.ts (temporal worker setup)
+   
+   /packages/agents/package-builder-production/
+   - workflows/*.workflow.ts (orchestrators and executors)
+   - activities/*.activities.ts (organized by domain: build, agent, report)
+   - types/index.ts (centralized type definitions)
+   - worker.ts (worker setup)
+   
+   /production/scripts/
+   - build-package.ts (single package build orchestration)
+   - build-content-suite.ts (suite-level orchestration)
+   
+   Convention: Files named with *.workflow.ts and *.activities.ts suffixes
+
+5. STANDARDIZATION PATTERNS FOUND
+
+   Activity Organization:
+   - build.activities.ts - runBuild, runTests, runQualityChecks, publishPackage
+   - agent.activities.ts - spawnFixAgent, verifyDependencies
+   - report.activities.ts - writePackageBuildReport, loadAllPackageReports
+   
+   Type Safety:
+   - All activities have explicit input/output types
+   - Workflow inputs/outputs properly typed
+   - Enums for status values (BuildPhase, category types)
+   
+   Activity Proxy Configuration:
+   - Grouped by timeout requirements
+   - General: 5 minutes
+   - Build operations: 10 minutes
+   - Agent activities: 30 minutes
+   - Reporting: 1 minute
+   - Retry policy: 3 attempts, exponential backoff
+   
+   Error Handling:
+   - Workflows: Try/catch with error categorization
+   - Activities: Try/catch with explicit return structures
+   - Success/failure fields in all result types
+   
+   Testing:
+   - Tests in __tests__ subdirectories
+   - Parallel structure to source files
+
+6. CODE EXAMPLES PROVIDED
+
+   Three comprehensive documents created with actual code:
+   
+   A. WORKFLOW_STRUCTURE_ANALYSIS.md (18KB)
+      - Complete structural overview
+      - All 2 workflow systems analyzed
+      - Activity definitions from all 3 modules
+      - Type definitions
+      - Worker setup patterns
+      - Existing standardization
+      
+   B. NAMING_PATTERNS_REFERENCE.md (9.1KB)
+      - Quick reference tables
+      - Pattern summary
+      - Decision trees for naming
+      - Anti-patterns to avoid
+      - Consistency checklist
+      - Verb inventory
+      
+   C. CODE_EXAMPLES.md (19KB)
+      - Actual code from workflows
+      - Actual code from activities
+      - Activity proxy examples
+      - Type definition examples
+      - Real file locations and line numbers
+
+7. SPECIFIC FILE LOCATIONS
+
+   Workflows:
+   - /packages/temporal-coordinator/src/workflows.ts (simple examples)
+   - /packages/agents/package-builder-production/src/workflows/package-builder.workflow.ts
+   - /packages/agents/package-builder-production/src/workflows/package-build.workflow.ts
+   
+   Activities:
+   - /packages/temporal-coordinator/src/activities.ts
+   - /packages/agents/package-builder-production/src/activities/build.activities.ts
+   - /packages/agents/package-builder-production/src/activities/agent.activities.ts
+   - /packages/agents/package-builder-production/src/activities/report.activities.ts
+   
+   Types:
+   - /packages/agents/package-builder-production/src/types/index.ts
+   
+   Workers:
+   - /packages/temporal-coordinator/src/worker.ts
+   - /packages/agents/package-builder-production/src/worker.ts
+
+8. ACTIVITY TIMEOUT STANDARDS
+
+   Pattern Identified:
+   - General coordination: 5 minutes
+   - Build operations: 10 minutes
+   - Agent spawning: 30 minutes (longer for agentic work)
+   - Reporting: 1 minute (quick)
+   - Retry: 3 attempts with exponential backoff
+
+9. AGENT INTEGRATION PATTERN
+
+   Current Implementation:
+   - spawnFixAgent() receives QualityFailure[] array
+   - Categorizes failures by type
+   - Looks up or creates fix prompt in .claude/agents/fix-prompts/
+   - Falls back to generic-developer.md template
+   - Currently logs what would be spawned (TODO)
+   - Would eventually invoke external agent system
+   
+   Prompt Management:
+   - Specific prompts: <failure-types-sorted>.md
+   - Generic fallback: generic-developer.md
+   - Fallback source: ~/.claude/agents/package-development-agent.md
+
+10. NAMING CONSISTENCY OBSERVATIONS
+
+    Strong Patterns:
+    - Workflow suffix universally applied
+    - Verb-first activity naming consistent
+    - Type naming follows <Entity><Purpose><Kind> pattern
+    - File naming conventions (*.workflow.ts, *.activities.ts) consistent
+    
+    Areas Needing Standardization:
+    - Agentic activity documentation (currently sparse)
+    - Error type structures could be standardized
+    - Activity timeout standards documented here but not in code
+    - Plan writer workflows not yet examined
+
+DELIVERABLES CREATED
+====================
+
+Three comprehensive documentation files saved to repository root:
+
+1. WORKFLOW_STRUCTURE_ANALYSIS.md
+   - 13 sections with detailed analysis
+   - Complete directory structure
+   - All workflow definitions with code
+   - Activity definitions with code
+   - Naming conventions summary
+   - Type definitions explained
+   - Worker setup patterns
+   - Current examples
+   - Scripts and integration points
+
+2. NAMING_PATTERNS_REFERENCE.md
+   - Quick reference format
+   - Pattern summary tables
+   - File organization reference
+   - Activity proxy configuration
+   - Import patterns
+   - Workflow ID naming
+   - Verb inventory
+   - Anti-patterns (what NOT to do)
+   - Decision trees for naming
+   - Consistency checklist
+   - Related files reference
+
+3. CODE_EXAMPLES.md
+   - Real workflow examples (3)
+   - Real activity examples (3)
+   - Activity proxy configuration
+   - Type definition examples
+   - Exact file locations
+   - Line numbers
+   - Pattern analysis for each example
+
+ANALYSIS METHODOLOGY
+====================
+
+1. Located all workflow files using glob patterns
+2. Examined both simple (hello world) and complex (package builder) systems
+3. Analyzed activity organization across 3 separate files
+4. Studied type definitions and interfaces
+5. Reviewed worker setup configurations
+6. Examined production scripts for integration patterns
+7. Documented existing standardization
+8. Extracted real code examples with line numbers
+9. Created decision trees for naming guidance
+10. Compiled consistency checklist
+
+FINDINGS NOT YET EXPLORED
+=========================
+
+Per requirements, the following remain for follow-up:
+- Plan writer workflows (mentioned but not found in initial search)
+- Exact integration of agentic activities with external agent system
+- Full testing patterns and mocking strategies
+- Performance characteristics of current workflows
+
+RECOMMENDATIONS
+===============
+
+1. Codify naming patterns from NAMING_PATTERNS_REFERENCE.md
+2. Create linting rules to enforce patterns
+3. Complete agentic activity integration (TODO items)
+4. Document plan writer workflow once created
+5. Establish standard activity timeout values
+6. Standardize error response types
+7. Update CLAUDE.md with workflow/activity naming guidelines
+

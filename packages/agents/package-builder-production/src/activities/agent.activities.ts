@@ -78,9 +78,14 @@ async function getOrCreateFixPrompt(failureTypes: string[]): Promise<string> {
   return fs.readFileSync(genericPrompt, 'utf-8');
 }
 
-export async function verifyDependencies(dependencies: string[]): Promise<void> {
+export async function verifyDependencies(dependencies: string[] = []): Promise<void> {
   // In production, this would check npm registry or local registry
   // For now, we'll just validate the list isn't empty
+  if (!dependencies || !Array.isArray(dependencies)) {
+    console.log('No dependencies to verify');
+    return;
+  }
+
   if (dependencies.length > 0) {
     console.log(`Verifying ${dependencies.length} dependencies...`);
   }

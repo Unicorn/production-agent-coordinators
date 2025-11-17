@@ -2,7 +2,7 @@
  * Coordinator workflow types for AI-powered error recovery
  */
 
-export type ProblemType = 'BUILD_FAILURE' | 'TEST_FAILURE' | 'QUALITY_FAILURE' | 'ENVIRONMENT_ERROR'
+export type ProblemType = 'BUILD_FAILURE' | 'TEST_FAILURE' | 'QUALITY_FAILURE' | 'ENVIRONMENT_ERROR' | 'PACKAGE_SCAFFOLDING'
 
 export interface Problem {
   type: ProblemType
@@ -34,7 +34,7 @@ export interface AgentRegistry {
   agents: AgentRegistryEntry[]
 }
 
-export type CoordinatorDecision = 'RETRY' | 'DELEGATE' | 'ESCALATE' | 'FAIL'
+export type CoordinatorDecision = 'RETRY' | 'DELEGATE' | 'ESCALATE' | 'FAIL' | 'RESOLVED'
 
 export interface CoordinatorAction {
   decision: CoordinatorDecision
@@ -83,4 +83,5 @@ export interface CoordinatorInput {
   problem: Problem
   agentRegistry: AgentRegistry
   maxAttempts: number
+  workspaceRoot: string
 }

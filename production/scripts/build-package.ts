@@ -89,7 +89,7 @@ async function main() {
     temporal: {
       address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
       namespace: process.env.TEMPORAL_NAMESPACE || 'default',
-      taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'agent-coordinator-queue'
+      taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'engine'
     },
     testing: {
       enableCoverage: true,
@@ -128,7 +128,7 @@ async function main() {
   };
 
   // Start workflow
-  const workflowId = `build-${fileName}-${Date.now()}`;
+  const workflowId = `build-${fileName}`;
 
   console.log('🎬 Starting PackageBuildWorkflow...');
   console.log(`   Workflow ID: ${workflowId}`);

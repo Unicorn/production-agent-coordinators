@@ -7,8 +7,13 @@ import type * as agentRegistryActivities from '../activities/agent-registry.acti
 import { CoordinatorWorkflow } from './coordinator.workflow.js';
 import type { Problem, CoordinatorAction } from '../types/coordinator.types';
 
+// MCP activities (registered by orchestrator worker)
+interface MCPActivities {
+  updateMCPPackageStatus(packageName: string, status: string, errorDetails?: string): Promise<void>;
+}
+
 // Create activity proxies with timeouts
-const { runBuild, runTests, runQualityChecks, publishPackage } = proxyActivities<typeof activities>({
+const { runBuild, runTests, runQualityChecks, publishPackage, commitChanges, pushChanges, checkPackageExists, checkNpmPublished, checkIfUpgradePlan, auditPackageState, auditPackageUpgrade } = proxyActivities<typeof activities>({
   startToCloseTimeout: '10 minutes'
 });
 
@@ -21,6 +26,10 @@ const { writePackageBuildReport } = proxyActivities<typeof reportActivities>({
 });
 
 const { loadAgentRegistry } = proxyActivities<typeof agentRegistryActivities>({
+  startToCloseTimeout: '1 minute'
+});
+
+const { updateMCPPackageStatus } = proxyActivities<MCPActivities>({
   startToCloseTimeout: '1 minute'
 });
 
@@ -51,10 +60,166 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
   };
 
   try {
+    // ========================================================================
+    // PRE-FLIGHT VALIDATION: Check package state before proceeding
+    // ========================================================================
+
+    console.log(`[PreFlight] Validating package state for ${input.packageName}...`);
+
+    // Check if package code already exists
+    const codeExists = await checkPackageExists({
+      workspaceRoot: input.workspaceRoot,
+      packagePath: input.packagePath
+    });
+
+    if (codeExists) {
+      console.log(`[PreFlight] Package code exists at ${input.packagePath}`);
+
+      // Check npm registry
+      const npmStatus = await checkNpmPublished(input.packageName);
+
+      if (npmStatus.published) {
+        console.log(`[PreFlight] Package already published at v${npmStatus.version}`);
+
+        // Check if this is an upgrade plan
+        const isUpgrade = await checkIfUpgradePlan({
+          workspaceRoot: input.workspaceRoot,
+          planPath: input.planPath
+        });
+
+        if (isUpgrade) {
+          // SCENARIO 2: Upgrade existing published package
+          console.log(`[PreFlight] Upgrade plan detected, auditing changes needed...`);
+
+          const audit = await auditPackageUpgrade({
+            workspaceRoot: input.workspaceRoot,
+            packagePath: input.packagePath,
+            planPath: input.planPath,
+            currentVersion: npmStatus.version!
+          });
+
+          console.log(`[PreFlight] Upgrade audit:`, audit);
+
+          // TODO: Continue with upgrade implementation based on audit
+          // For now, this will fall through to normal flow
+          // In future, we'll skip to implementation phase based on audit.nextSteps
+
+        } else {
+          // Already published, no upgrade needed - we're done!
+          console.log(`[PreFlight] Package already published, no upgrade plan. Workflow complete.`);
+
+          // Update MCP status to 'published' in case it wasn't synced
+          await updateMCPPackageStatus(input.packageName, 'published');
+
+          report.status = 'success';
+          report.quality.passed = true;
+
+          return {
+            success: true,
+            packageName: input.packageName,
+            report
+          };
+        }
+
+      } else {
+        // SCENARIO 1: Partial implementation (code exists, not published)
+        console.log(`[PreFlight] Code exists but not published, auditing state...`);
+
+        const audit = await auditPackageState({
+          workspaceRoot: input.workspaceRoot,
+          packagePath: input.packagePath,
+          planPath: input.planPath
+        });
+
+        console.log(`[PreFlight] Audit results:`, audit);
+        console.log(`[PreFlight] Completion: ${audit.completionPercentage}%`);
+
+        report.quality.lintScore = audit.completionPercentage;
+
+        if (audit.status === 'complete') {
+          // Code is complete, skip to build/test/publish
+          console.log(`[PreFlight] Package complete, skipping to build phase`);
+          // Skip scaffolding, jump to build below
+        } else {
+          // Continue with implementation based on audit findings
+          console.log(`[PreFlight] Package needs work:`, audit.nextSteps);
+          // For now, continue with normal flow
+          // TODO: In future, spawn agents for specific gaps from audit.nextSteps
+        }
+      }
+    } else {
+      // Fresh start - no code exists, not published
+      console.log(`[PreFlight] No existing code found, starting fresh scaffolding`);
+    }
+
+    // ========================================================================
+    // NORMAL WORKFLOW: Continue with package building
+    // ========================================================================
+
     // Activity 1: Verify dependencies are published
     await verifyDependencies(input.dependencies);
 
-    // Activity 2: Run build with coordinator retry loop
+    // Activity 2: Scaffold package using package-development-agent
+    const agentRegistry = await loadAgentRegistry(
+      '/Users/mattbernier/projects/tools/.claude/agents'
+    );
+
+    const scaffoldProblem: Problem = {
+      type: 'PACKAGE_SCAFFOLDING',
+      error: {
+        message: `Scaffold package ${input.packageName} from plan`,
+        stderr: '',
+        stdout: `Plan: ${input.planPath}\nPackage path: ${input.packagePath}`
+      },
+      context: {
+        packageName: input.packageName,
+        packagePath: input.packagePath,
+        planPath: input.planPath,
+        phase: 'scaffold',
+        attemptNumber: 1
+      }
+    };
+
+    const scaffoldAction: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
+      taskQueue: 'engine',
+      workflowId: `coordinator-scaffold-${input.packageName}`,
+      args: [{
+        problem: scaffoldProblem,
+        agentRegistry,
+        maxAttempts: 1,
+        workspaceRoot: input.workspaceRoot
+      }]
+    });
+
+    if (scaffoldAction.decision !== 'RESOLVED') {
+      report.error = `Scaffolding failed: ${scaffoldAction.reasoning}`;
+      throw new Error(`Scaffolding failed: ${scaffoldAction.reasoning}`);
+    }
+
+    console.log(`[Scaffold] Package scaffolded successfully`);
+
+    // Commit scaffolded package
+    const commitResult = await commitChanges({
+      workspaceRoot: input.workspaceRoot,
+      packagePath: input.packagePath,
+      message: `chore: scaffold ${input.packageName}
+
+Generated package structure from plan file.
+
+[Automated commit by PackageBuildWorkflow]`,
+      gitUser: {
+        name: 'Package Builder',
+        email: 'builder@bernier.llc'
+      }
+    });
+
+    if (commitResult.success && commitResult.commitHash) {
+      console.log(`[Git] Scaffolding committed: ${commitResult.commitHash}`);
+    } else {
+      console.warn(`[Git] Failed to commit scaffolding: ${commitResult.stderr || 'Unknown error'}`);
+    }
+
+    // Activity 3: Run build with coordinator retry loop
     let buildResult = await runBuild({
       workspaceRoot: input.workspaceRoot,
       packagePath: input.packagePath
@@ -67,7 +232,9 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
 
     while (!buildResult.success && coordinatorAttempts < maxCoordinatorAttempts) {
       // Load agent registry
-      const agentRegistry = await loadAgentRegistry();
+      const agentRegistry = await loadAgentRegistry(
+        '/Users/mattbernier/projects/tools/.claude/agents'
+      );
 
       // Create problem description
       const problem: Problem = {
@@ -88,12 +255,13 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
 
       // Spawn coordinator child workflow
       const action: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
-        taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'engine',
+        taskQueue: 'engine',
         workflowId: `coordinator-build-${input.packageName}-${Date.now()}`,
         args: [{
           problem,
           agentRegistry,
-          maxAttempts: maxCoordinatorAttempts
+          maxAttempts: maxCoordinatorAttempts,
+          workspaceRoot: input.workspaceRoot
         }]
       });
 
@@ -131,7 +299,9 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     coordinatorAttempts = 0;
 
     while (!testResult.success && coordinatorAttempts < maxCoordinatorAttempts) {
-      const agentRegistry = await loadAgentRegistry();
+      const agentRegistry = await loadAgentRegistry(
+        '/Users/mattbernier/projects/tools/.claude/agents'
+      );
 
       const problem: Problem = {
         type: 'TEST_FAILURE',
@@ -150,12 +320,13 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
       };
 
       const action: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
-        taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'engine',
+        taskQueue: 'engine',
         workflowId: `coordinator-test-${input.packageName}-${Date.now()}`,
         args: [{
           problem,
           agentRegistry,
-          maxAttempts: maxCoordinatorAttempts
+          maxAttempts: maxCoordinatorAttempts,
+          workspaceRoot: input.workspaceRoot
         }]
       });
 
@@ -178,6 +349,26 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     if (!testResult.success) {
       report.error = `Tests failed after ${coordinatorAttempts} coordinator attempts`;
       throw new Error(`Tests failed after ${coordinatorAttempts} coordinator attempts`);
+    }
+
+    // Commit successful build and tests
+    const testCommitResult = await commitChanges({
+      workspaceRoot: input.workspaceRoot,
+      packagePath: input.packagePath,
+      message: `test: passing tests for ${input.packageName}
+
+Build and tests completed successfully.
+Coverage: ${testResult.coverage}%
+
+[Automated commit by PackageBuildWorkflow]`,
+      gitUser: {
+        name: 'Package Builder',
+        email: 'builder@bernier.llc'
+      }
+    });
+
+    if (testCommitResult.success && testCommitResult.commitHash) {
+      console.log(`[Git] Tests committed: ${testCommitResult.commitHash}`);
     }
 
     // Activity 4: Run quality checks
@@ -232,6 +423,21 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
 
     if (!publishResult.success) {
       throw new Error(`Publish failed: ${publishResult.stdout}`);
+    }
+
+    // Push all commits to remote
+    const pushResult = await pushChanges({
+      workspaceRoot: input.workspaceRoot,
+      packagePath: input.packagePath,
+      remote: 'origin',
+      branch: 'main'
+    });
+
+    if (pushResult.success) {
+      console.log(`[Git] Changes pushed to origin/main`);
+    } else {
+      console.warn(`[Git] Failed to push changes: ${pushResult.stderr || 'Unknown error'}`);
+      // Don't fail the workflow if push fails - package is already published
     }
 
     report.status = 'success';

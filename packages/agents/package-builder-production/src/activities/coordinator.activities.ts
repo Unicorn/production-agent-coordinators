@@ -8,6 +8,19 @@ import type { Problem, AgentRegistry, CoordinatorAction } from '../types/coordin
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+/**
+ * Strip markdown code blocks from text
+ * Handles both ```json ... ``` and ``` ... ``` formats
+ */
+function stripMarkdownCodeBlocks(text: string): string {
+  // Remove ```json ... ``` or ``` ... ``` wrappers
+  const match = text.match(/```(?:json)?\s*\n([\s\S]*?)\n```/)
+  if (match) {
+    return match[1].trim()
+  }
+  return text.trim()
+}
+
 export async function analyzeProblem(
   problem: Problem,
   registry: AgentRegistry
@@ -51,9 +64,12 @@ export async function analyzeProblem(
     throw new Error('Expected text response from Claude')
   }
 
+  // Strip markdown code blocks if present
+  const cleanedText = stripMarkdownCodeBlocks(content.text)
+
   let action: CoordinatorAction
   try {
-    action = JSON.parse(content.text) as CoordinatorAction
+    action = JSON.parse(cleanedText) as CoordinatorAction
   } catch (error) {
     const parseError = error instanceof Error ? error.message : String(error)
     throw new Error(

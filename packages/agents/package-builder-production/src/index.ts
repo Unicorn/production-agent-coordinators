@@ -1,16 +1,16 @@
 // Workflows
-export * from './workflows/package-builder.workflow';
-export * from './workflows/package-build.workflow';
-export * from './workflows/coordinator.workflow';
-export * from './workflows/agent-executor.workflow';
+export * from './workflows/package-builder.workflow.js';
+export * from './workflows/package-build.workflow.js';
+export * from './workflows/coordinator.workflow.js';
+export * from './workflows/agent-executor.workflow.js';
 
 // Activities
-export * from './activities/build.activities';
-export * from './activities/agent.activities';
-export * from './activities/report.activities';
-export * from './activities/agent-registry.activities';
-export * from './activities/coordinator.activities';
-export * from './activities/agent-execution.activities';
+export * from './activities/build.activities.js';
+export * from './activities/agent.activities.js';
+export * from './activities/report.activities.js';
+export * from './activities/agent-registry.activities.js';
+export * from './activities/coordinator.activities.js';
+export * from './activities/agent-execution.activities.js';
 
 // Types
-export * from './types/index';
+export * from './types/index.js';

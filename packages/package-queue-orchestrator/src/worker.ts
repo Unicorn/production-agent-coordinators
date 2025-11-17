@@ -10,6 +10,7 @@
  *   tsx src/worker.ts
  */
 
+import { config as loadDotenv } from 'dotenv';
 import { Worker, NativeConnection } from '@temporalio/worker';
 import { WorkflowClient, WorkflowNotFoundError } from '@temporalio/client';
 import * as activities from './activities/index.js';
@@ -20,6 +21,16 @@ import { dirname, join } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Load environment variables from .env file (development)
+// In production, environment variables should be set at system level
+try {
+  // Load from project root (go up two levels from package directory)
+  const projectRoot = join(__dirname, '..', '..', '..');
+  loadDotenv({ path: join(projectRoot, '.env') });
+} catch (error) {
+  // .env file not found - OK if system env is set
+}
 
 const ORCHESTRATOR_WORKFLOW_ID = 'continuous-builder-orchestrator';
 

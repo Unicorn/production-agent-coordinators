@@ -1,5 +1,5 @@
 import { proxyActivities, startChild } from '@temporalio/workflow';
-import { PackageBuildWorkflow } from './package-build.workflow';
+import { PackageBuildWorkflow } from './package-build.workflow.js';
 import type {
   PackageBuilderInput,
   PackageBuilderState,

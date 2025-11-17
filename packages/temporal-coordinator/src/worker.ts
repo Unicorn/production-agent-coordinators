@@ -43,6 +43,8 @@ async function run() {
   console.log('   Task Queue:', process.env.TEMPORAL_TASK_QUEUE || 'agent-coordinator-queue');
   console.log('   Workflows:', workflowsPath);
   console.log('   Activities: Loaded from activities module');
+  console.log('\n   📋 Registered Activities:');
+  console.log('   ', Object.keys(activities).sort().join(', '));
 
   // Create worker
   const worker = await Worker.create({

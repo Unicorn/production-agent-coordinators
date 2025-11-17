@@ -9,7 +9,8 @@
     "copy-templates": "mkdir -p dist/prompts && cp -r src/prompts/*.hbs dist/prompts/",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "start:worker": "node dist/worker.js"
   },
   "dependencies": {
     "@temporalio/workflow": "^1.10.0",

@@ -35,7 +35,7 @@ export const signals = {
 export async function CoordinatorWorkflow(
   input: CoordinatorInput
 ): Promise<CoordinatorAction> {
-  const { problem, agentRegistry, maxAttempts } = input
+  const { problem, agentRegistry, maxAttempts, workspaceRoot } = input
 
   console.log(`[Coordinator] Analyzing ${problem.type} (attempt ${problem.context.attemptNumber}/${maxAttempts})`)
 
@@ -51,14 +51,14 @@ export async function CoordinatorWorkflow(
 
     // Execute agent via child workflow
     const result = await executeChild(AgentExecutorWorkflow, {
-      taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'engine',
+      taskQueue: 'engine',
       workflowId: `agent-${analysis.agent}-${Date.now()}`,
       args: [{
         agent: analysis.agent,
         task: analysis.task,
         context: {
           packagePath: problem.context.packagePath,
-          workspaceRoot: process.env.WORKSPACE_ROOT || '/workspace'
+          workspaceRoot
         }
       }]
     })
