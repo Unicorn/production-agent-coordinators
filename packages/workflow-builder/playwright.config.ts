@@ -44,9 +44,14 @@ export default defineConfig({
   /* Configure projects for major browsers */
   projects: [
     // Setup project - runs first to authenticate and save session
+    // Runs in HEADED mode to avoid headless auth issues
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: false, // Run setup in headed mode to avoid auth issues
+      },
     },
     
     // Authenticated tests - use saved session from setup

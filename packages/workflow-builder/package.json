@@ -17,7 +17,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:auth": "tsx scripts/generate-test-auth.ts",
+    "test:e2e:refresh": "tsx scripts/generate-test-auth.ts && playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
