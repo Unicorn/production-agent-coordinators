@@ -1,0 +1,167 @@
+/**
+ * Workflow API Route Handler (v1)
+ * 
+ * Handles requests routed through Kong Gateway with hash-based routing.
+ * Format: /api/v1/{hash}/{endpoint-path}
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getTemporalClient } from '@/lib/temporal/connection';
+import { getSupabaseClient } from '@/lib/supabase/client';
+
+// Regex to extract hash and endpoint path from URL
+// Format: /api/v1/{hash}/{endpoint-path}
+const HASH_REGEX = /^\/api\/v1\/([a-f0-9]{8}-[a-f0-9]{8})\/(.+)$/;
+
+export async function GET(req: NextRequest) {
+  return handleEndpoint(req, 'GET');
+}
+
+export async function POST(req: NextRequest) {
+  return handleEndpoint(req, 'POST');
+}
+
+export async function PUT(req: NextRequest) {
+  return handleEndpoint(req, 'PUT');
+}
+
+export async function DELETE(req: NextRequest) {
+  return handleEndpoint(req, 'DELETE');
+}
+
+export async function PATCH(req: NextRequest) {
+  return handleEndpoint(req, 'PATCH');
+}
+
+async function handleEndpoint(req: NextRequest, method: string) {
+  try {
+    const url = new URL(req.url);
+    const pathname = url.pathname;
+
+    // Extract hash and endpoint path from URL
+    // Format: /api/v1/{hash}/{endpoint-path}
+    const match = pathname.match(HASH_REGEX);
+    if (!match) {
+      return NextResponse.json(
+        { error: 'Invalid endpoint path format. Expected: /api/v1/{hash}/{endpoint-path}' },
+        { status: 400 }
+      );
+    }
+
+    const [, routeHash, endpointPath] = match;
+    const fullEndpointPath = `/${endpointPath}`;
+
+    // Look up endpoint by hash (indexed, fast lookup)
+    const supabase = getSupabaseClient();
+    const { data: endpoint, error: endpointError } = await supabase
+      .from('workflow_endpoints')
+      .select('*, workflow:workflows(*, project:projects(*))')
+      .eq('route_hash', routeHash)
+      .eq('endpoint_path', fullEndpointPath)
+      .eq('method', method)
+      .eq('is_active', true)
+      .single();
+
+    if (endpointError || !endpoint) {
+      return NextResponse.json(
+        { error: 'Endpoint not found or inactive' },
+        { status: 404 }
+      );
+    }
+
+    // Validate request schema if provided
+    if (endpoint.request_schema) {
+      try {
+        const body = await req.json();
+        // TODO: Implement JSON schema validation
+        // const valid = validateSchema(body, endpoint.request_schema);
+        // if (!valid) {
+        //   return NextResponse.json(
+        //     { error: 'Invalid request body' },
+        //     { status: 400 }
+        //   );
+        // }
+      } catch {
+        // No body or invalid JSON - that's okay for some endpoints
+      }
+    }
+
+    const client = await getTemporalClient();
+    const workflow = endpoint.workflow as any;
+    const project = workflow.project as any;
+
+    // Handle different target types
+    if (endpoint.target_type === 'start') {
+      // Start new workflow execution
+      let body = {};
+      try {
+        body = await req.json();
+      } catch {
+        // No body is okay for workflow start
+      }
+
+      const executionId = `${workflow.kebab_name || workflow.name}-${Date.now()}`;
+      const handle = await client.workflow.start(workflow.kebab_name || workflow.name, {
+        taskQueue: project.task_queue_name,
+        workflowId: executionId,
+        args: [body],
+      });
+
+      return NextResponse.json({
+        executionId,
+        runId: handle.firstExecutionRunId,
+        status: 'started',
+      });
+    } else if (endpoint.target_type === 'signal') {
+      // Send signal to running workflow
+      const workflowExecutionId = req.headers.get('X-Workflow-Execution-Id');
+      if (!workflowExecutionId) {
+        return NextResponse.json(
+          { error: 'X-Workflow-Execution-Id header required for signals' },
+          { status: 400 }
+        );
+      }
+
+      let body = {};
+      try {
+        body = await req.json();
+      } catch {
+        // Empty body is okay for signals
+      }
+
+      const handle = client.workflow.getHandle(workflowExecutionId);
+      await handle.signal(endpoint.target_name, body);
+
+      return NextResponse.json({ success: true });
+    } else if (endpoint.target_type === 'query') {
+      // Query workflow state
+      const workflowExecutionId = req.headers.get('X-Workflow-Execution-Id');
+      if (!workflowExecutionId) {
+        return NextResponse.json(
+          { error: 'X-Workflow-Execution-Id header required for queries' },
+          { status: 400 }
+        );
+      }
+
+      const handle = client.workflow.getHandle(workflowExecutionId);
+      const result = await handle.query(endpoint.target_name);
+
+      return NextResponse.json(result);
+    }
+
+    return NextResponse.json(
+      { error: 'Invalid target type' },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error('Error handling endpoint:', error);
+    return NextResponse.json(
+      { 
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+

@@ -1,22 +1,161 @@
 # Kong API Gateway Integration
 
-Auto-generate HTTP endpoints for workflows using Kong API Gateway.
+Auto-generate HTTP endpoints for workflows using Kong API Gateway with hash-based routing for unique, scalable URLs.
 
 ## Overview
 
 When users publish workflows, we can automatically:
-1. Create Kong routes that map HTTP endpoints to workflow signals/queries
-2. Provide UI components for configuring endpoints
-3. Generate and display API URLs to users
-4. Handle authentication, rate limiting, and request/response transformation
+1. Generate unique hash-based URLs per user/project/workflow
+2. Create Kong routes that map directly to workflow signals/queries
+3. Provide UI components for configuring endpoints
+4. Generate and display API URLs to users
+5. Handle authentication, rate limiting, and request/response transformation
 
 ## Architecture
 
 ```
 HTTP Request → Kong Gateway → Next.js API Route → Temporal Workflow
-                                    ↓
-                            Signal/Query Handler
+  /api/v1/{hash}/orders          (hash lookup)      Signal/Query Handler
 ```
+
+### Hash-Based Routing
+
+Each endpoint gets a unique hash derived from:
+- User ID
+- Project ID  
+- Workflow ID
+- Endpoint path
+
+This ensures:
+- **Uniqueness**: No naming conflicts across users/projects
+- **Direct Routing**: Kong maps hash directly to service (minimal lookup)
+- **Future-Proof**: Can be replaced with custom domains in SaaS mode
+
+## Environment Configuration
+
+### Local Development (Docker Kong)
+
+```env
+# Kong Configuration
+KONG_ADMIN_URL=http://localhost:8001
+KONG_ADMIN_API_KEY=your-admin-key
+KONG_GATEWAY_URL=http://localhost:8000
+
+# Application URLs
+NEXT_PUBLIC_APP_URL=http://localhost:3010
+WORKFLOW_API_BASE_URL=http://localhost:3010/api/workflows
+
+# Environment
+NODE_ENV=development
+```
+
+### Ngrok Development
+
+```env
+# Kong Configuration (Kong still runs locally)
+KONG_ADMIN_URL=http://localhost:8001
+KONG_ADMIN_API_KEY=your-admin-key
+KONG_GATEWAY_URL=https://your-ngrok-url.ngrok.io
+
+# Application URLs (via ngrok)
+NEXT_PUBLIC_APP_URL=https://your-ngrok-url.ngrok.io
+WORKFLOW_API_BASE_URL=https://your-ngrok-url.ngrok.io/api/workflows
+
+# Environment
+NODE_ENV=development
+```
+
+### Production (Domain-Based)
+
+```env
+# Kong Configuration
+KONG_ADMIN_URL=http://kong-admin.internal:8001
+KONG_ADMIN_API_KEY=your-secure-admin-key
+KONG_GATEWAY_URL=https://api.yourdomain.com
+
+# Application URLs
+NEXT_PUBLIC_APP_URL=https://app.yourdomain.com
+WORKFLOW_API_BASE_URL=https://api.yourdomain.com/api/workflows
+
+# Environment
+NODE_ENV=production
+```
+
+## Hash Generation
+
+```typescript
+// src/lib/kong/hash-generator.ts
+import { createHash } from 'crypto';
+
+export interface HashInput {
+  userId: string;
+  projectId: string;
+  workflowId: string;
+  endpointPath: string;
+}
+
+/**
+ * Generate deterministic hash for endpoint routing
+ * Format: {first8chars}-{next8chars} = 16 char hash
+ * Example: a3f2b1c4-d5e6f7g8
+ */
+export function generateEndpointHash(input: HashInput): string {
+  const combined = `${input.userId}:${input.projectId}:${input.workflowId}:${input.endpointPath}`;
+  const hash = createHash('sha256').update(combined).digest('hex');
+  
+  // Return 16-char hash (8-8 format for readability)
+  return `${hash.substring(0, 8)}-${hash.substring(8, 16)}`;
+}
+
+/**
+ * Parse hash to extract components (for validation/debugging)
+ * Note: Hash is one-way, but we can validate against stored hash
+ */
+export function validateHash(
+  hash: string,
+  userId: string,
+  projectId: string,
+  workflowId: string,
+  endpointPath: string
+): boolean {
+  const expected = generateEndpointHash({ userId, projectId, workflowId, endpointPath });
+  return hash === expected;
+}
+```
+
+## URL Structure
+
+### Format
+
+```
+{KONG_GATEWAY_URL}/api/v1/{hash}/{endpoint-path}
+```
+
+### Examples
+
+**Local Development:**
+```
+http://localhost:8000/api/v1/a3f2b1c4-d5e6f7g8/orders
+```
+
+**Ngrok:**
+```
+https://abc123.ngrok.io/api/v1/a3f2b1c4-d5e6f7g8/orders
+```
+
+**Production:**
+```
+https://api.yourdomain.com/api/v1/a3f2b1c4-d5e6f7g8/orders
+```
+
+### Future SaaS Custom Domains
+
+When custom domains are enabled:
+```
+https://api.userdomain.com/orders  (hash removed, custom domain)
+```
+
+The hash is still used internally for routing, but the user-facing URL is clean.
 
 ### Components
 
@@ -33,11 +172,17 @@ HTTP Request → Kong Gateway → Next.js API Route → Temporal Workflow
 CREATE TABLE workflow_endpoints (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   
   -- Endpoint configuration
-  path VARCHAR(255) NOT NULL, -- e.g., "/api/v1/orders"
+  endpoint_path VARCHAR(255) NOT NULL, -- e.g., "/orders" (relative path)
   method VARCHAR(10) NOT NULL, -- GET, POST, PUT, DELETE, PATCH
   description TEXT,
+  
+  -- Hash-based routing
+  route_hash VARCHAR(17) NOT NULL UNIQUE, -- e.g., "a3f2b1c4-d5e6f7g8"
+  full_path VARCHAR(500) NOT NULL, -- e.g., "/api/v1/a3f2b1c4-d5e6f7g8/orders"
   
   -- Workflow mapping
   target_type VARCHAR(50) NOT NULL, -- 'signal', 'query', 'start'
@@ -65,11 +210,45 @@ CREATE TABLE workflow_endpoints (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   
-  UNIQUE(workflow_id, path, method)
+  UNIQUE(workflow_id, endpoint_path, method)
 );
 
 CREATE INDEX idx_workflow_endpoints_workflow ON workflow_endpoints(workflow_id);
+CREATE INDEX idx_workflow_endpoints_hash ON workflow_endpoints(route_hash);
 CREATE INDEX idx_workflow_endpoints_kong ON workflow_endpoints(kong_route_id);
+CREATE INDEX idx_workflow_endpoints_user_project ON workflow_endpoints(user_id, project_id);
+```
+
+## Configuration Helper
+
+```typescript
+// src/lib/kong/config.ts
+export interface KongConfig {
+  adminUrl: string;
+  adminApiKey?: string;
+  gatewayUrl: string;
+  appUrl: string;
+  apiBaseUrl: string;
+  environment: 'development' | 'production';
+}
+
+export function getKongConfig(): KongConfig {
+  const adminUrl = process.env.KONG_ADMIN_URL || 'http://localhost:8001';
+  const adminApiKey = process.env.KONG_ADMIN_API_KEY;
+  const gatewayUrl = process.env.KONG_GATEWAY_URL || 'http://localhost:8000';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3010';
+  const apiBaseUrl = process.env.WORKFLOW_API_BASE_URL || `${appUrl}/api/workflows`;
+  const environment = (process.env.NODE_ENV || 'development') as 'development' | 'production';
+
+  return {
+    adminUrl,
+    adminApiKey,
+    gatewayUrl,
+    appUrl,
+    apiBaseUrl,
+    environment,
+  };
+}
 ```
 
 ## Kong Integration Service
@@ -182,14 +361,17 @@ export class KongClient {
 
 ```typescript
 // src/lib/kong/endpoint-registry.ts
+import { generateEndpointHash } from './hash-generator';
+import { getKongConfig } from './config';
+
 export async function registerWorkflowEndpoints(
   workflowId: string,
+  userId: string,
+  projectId: string,
   endpoints: WorkflowEndpoint[]
 ): Promise<RegisteredEndpoint[]> {
-  const kong = new KongClient(
-    process.env.KONG_ADMIN_URL!,
-    process.env.KONG_ADMIN_API_KEY
-  );
+  const config = getKongConfig();
+  const kong = new KongClient(config.adminUrl, config.adminApiKey);
 
   const supabase = getSupabaseClient();
   const { data: workflow } = await supabase
@@ -202,9 +384,9 @@ export async function registerWorkflowEndpoints(
     throw new Error('Workflow not found');
   }
 
-  // Create or get Kong service for this workflow
-  const serviceName = `workflow-${workflow.kebab_name}`;
-  const serviceUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/workflows/${workflowId}`;
+  // Create or get Kong service for workflow API handler
+  const serviceName = `workflow-api-handler`;
+  const serviceUrl = `${config.apiBaseUrl}`;
   
   let serviceId: string;
   try {
@@ -218,12 +400,23 @@ export async function registerWorkflowEndpoints(
   const registered: RegisteredEndpoint[] = [];
 
   for (const endpoint of endpoints) {
-    // Create Kong route
-    const routeName = `${serviceName}-${endpoint.method.toLowerCase()}-${endpoint.path.replace(/\//g, '-')}`;
+    // Generate hash for this endpoint
+    const routeHash = generateEndpointHash({
+      userId,
+      projectId,
+      workflowId,
+      endpointPath: endpoint.endpointPath,
+    });
+
+    // Full path with hash: /api/v1/{hash}/{endpoint-path}
+    const fullPath = `/api/v1/${routeHash}${endpoint.endpointPath}`;
+
+    // Create Kong route with hash-based path
+    const routeName = `wf-${routeHash}-${endpoint.method.toLowerCase()}`;
     const routeId = await kong.createRoute(
       serviceId,
       routeName,
-      [endpoint.path],
+      [fullPath], // Kong routes to this exact path
       [endpoint.method]
     );
 
@@ -248,9 +441,13 @@ export async function registerWorkflowEndpoints(
       .from('workflow_endpoints')
       .insert({
         workflow_id: workflowId,
-        path: endpoint.path,
+        project_id: projectId,
+        user_id: userId,
+        endpoint_path: endpoint.endpointPath,
         method: endpoint.method,
         description: endpoint.description,
+        route_hash: routeHash,
+        full_path: fullPath,
         target_type: endpoint.targetType,
         target_name: endpoint.targetName,
         kong_route_id: routeId,
@@ -268,9 +465,11 @@ export async function registerWorkflowEndpoints(
 
     registered.push({
       id: endpointRecord.id,
-      path: endpoint.path,
+      hash: routeHash,
+      path: endpoint.endpointPath,
+      fullPath,
       method: endpoint.method,
-      url: `${process.env.KONG_GATEWAY_URL}${endpoint.path}`,
+      url: `${config.gatewayUrl}${fullPath}`,
       kongRouteId: routeId,
     });
   }
@@ -281,54 +480,59 @@ export async function registerWorkflowEndpoints(
 
 ## API Route Handler
 
+The handler extracts the hash from the URL path and looks up the endpoint configuration.
+
 ```typescript
-// app/api/workflows/[id]/endpoints/[...path]/route.ts
+// app/api/workflows/[...path]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getTemporalClient } from '@/lib/temporal/connection';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string; path: string[] } }
-) {
-  return handleEndpoint(req, params, 'GET');
+// Kong routes to: /api/workflows/api/v1/{hash}/{endpoint-path}
+// We need to extract: hash and endpoint-path
+const PATH_PREFIX = '/api/v1/';
+const HASH_REGEX = /^\/api\/v1\/([a-f0-9]{8}-[a-f0-9]{8})\/(.+)$/;
+
+export async function GET(req: NextRequest) {
+  return handleEndpoint(req, 'GET');
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string; path: string[] } }
-) {
-  return handleEndpoint(req, params, 'POST');
+export async function POST(req: NextRequest) {
+  return handleEndpoint(req, 'POST');
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { id: string; path: string[] } }
-) {
-  return handleEndpoint(req, params, 'PUT');
+export async function PUT(req: NextRequest) {
+  return handleEndpoint(req, 'PUT');
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string; path: string[] } }
-) {
-  return handleEndpoint(req, params, 'DELETE');
+export async function DELETE(req: NextRequest) {
+  return handleEndpoint(req, 'DELETE');
 }
 
-async function handleEndpoint(
-  req: NextRequest,
-  params: { id: string; path: string[] },
-  method: string
-) {
+async function handleEndpoint(req: NextRequest, method: string) {
+  const url = new URL(req.url);
+  const pathname = url.pathname;
+
+  // Extract hash and endpoint path from URL
+  // Format: /api/v1/{hash}/{endpoint-path}
+  const match = pathname.match(HASH_REGEX);
+  if (!match) {
+    return NextResponse.json(
+      { error: 'Invalid endpoint path format' },
+      { status: 400 }
+    );
+  }
+
+  const [, routeHash, endpointPath] = match;
+  const fullEndpointPath = `/${endpointPath}`;
+
+  // Look up endpoint by hash (indexed, fast lookup)
   const supabase = getSupabaseClient();
-  const path = `/${params.path.join('/')}`;
-
-  // Find endpoint configuration
   const { data: endpoint } = await supabase
     .from('workflow_endpoints')
-    .select('*')
-    .eq('workflow_id', params.id)
-    .eq('path', path)
+    .select('*, workflow:workflows(*, project:projects(*))')
+    .eq('route_hash', routeHash)
+    .eq('endpoint_path', fullEndpointPath)
     .eq('method', method)
     .eq('is_active', true)
     .single();
@@ -342,60 +546,66 @@ async function handleEndpoint(
 
   // Validate request schema if provided
   if (endpoint.request_schema) {
-    const body = await req.json();
-    const valid = validateSchema(body, endpoint.request_schema);
-    if (!valid) {
-      return NextResponse.json(
-        { error: 'Invalid request body' },
-        { status: 400 }
-      );
+    try {
+      const body = await req.json();
+      const valid = validateSchema(body, endpoint.request_schema);
+      if (!valid) {
+        return NextResponse.json(
+          { error: 'Invalid request body' },
+          { status: 400 }
+        );
+      }
+    } catch {
+      // No body or invalid JSON
     }
   }
 
   const client = await getTemporalClient();
+  const workflow = endpoint.workflow;
+  const project = workflow.project;
 
   // Handle different target types
   if (endpoint.target_type === 'start') {
     // Start new workflow execution
-    const body = await req.json();
-    const workflowId = `${endpoint.workflow_id}-${Date.now()}`;
-    const handle = await client.workflow.start(endpoint.workflow_id, {
-      taskQueue: endpoint.workflow.project.task_queue_name,
-      workflowId,
+    const body = await req.json().catch(() => ({}));
+    const executionId = `${workflow.kebab_name}-${Date.now()}`;
+    const handle = await client.workflow.start(workflow.kebab_name, {
+      taskQueue: project.task_queue_name,
+      workflowId: executionId,
       args: [body],
     });
 
     return NextResponse.json({
-      executionId: workflowId,
+      executionId,
       runId: handle.firstExecutionRunId,
       status: 'started',
     });
   } else if (endpoint.target_type === 'signal') {
     // Send signal to running workflow
-    const workflowId = req.headers.get('X-Workflow-Id');
-    if (!workflowId) {
+    const workflowExecutionId = req.headers.get('X-Workflow-Execution-Id');
+    if (!workflowExecutionId) {
       return NextResponse.json(
-        { error: 'X-Workflow-Id header required' },
+        { error: 'X-Workflow-Execution-Id header required for signals' },
         { status: 400 }
       );
     }
 
-    const body = await req.json();
-    const handle = client.workflow.getHandle(workflowId);
+    const body = await req.json().catch(() => ({}));
+    const handle = client.workflow.getHandle(workflowExecutionId);
     await handle.signal(endpoint.target_name, body);
 
     return NextResponse.json({ success: true });
   } else if (endpoint.target_type === 'query') {
     // Query workflow state
-    const workflowId = req.headers.get('X-Workflow-Id');
-    if (!workflowId) {
+    const workflowExecutionId = req.headers.get('X-Workflow-Execution-Id');
+    if (!workflowExecutionId) {
       return NextResponse.json(
-        { error: 'X-Workflow-Id header required' },
+        { error: 'X-Workflow-Execution-Id header required for queries' },
         { status: 400 }
       );
     }
 
-    const handle = client.workflow.getHandle(workflowId);
+    const handle = client.workflow.getHandle(workflowExecutionId);
     const result = await handle.query(endpoint.target_name);
 
     return NextResponse.json(result);
@@ -407,6 +617,14 @@ async function handleEndpoint(
   );
 }
 ```
+
+### Hash-Based Lookup Benefits
+
+1. **Fast**: Hash is indexed in database
+2. **Unique**: No conflicts across users/projects
+3. **Direct**: Kong routes directly to handler
+4. **Scalable**: Can add caching layer if needed
+5. **Future-Proof**: Hash can be replaced with custom domain mapping
 
 ## UI Component: API Endpoint Node
 
@@ -555,10 +773,35 @@ deploy: protectedProcedure
 ## User Experience
 
 1. **Add Endpoint Component**: User drags "API Endpoint" component onto canvas
-2. **Configure Endpoint**: User sets path, method, target (signal/query/start)
-3. **Publish Workflow**: On deploy, endpoints are registered with Kong
-4. **View URLs**: User sees generated API URLs in success message
+2. **Configure Endpoint**: User sets path (e.g., `/orders`), method, target (signal/query/start)
+3. **Publish Workflow**: On deploy, system:
+   - Generates unique hash for endpoint
+   - Creates Kong route: `/api/v1/{hash}/orders`
+   - Registers endpoint in database
+4. **View URLs**: User sees generated API URLs:
+   ```
+   ✅ Workflow published!
+   
+   API Endpoints:
+   POST https://api.yourdomain.com/api/v1/a3f2b1c4-d5e6f7g8/orders
+   ```
 5. **Use APIs**: User can call endpoints with provided URLs
+
+## Future: Custom Domain Support
+
+When SaaS custom domains are enabled:
+
+1. User configures custom domain: `api.userdomain.com`
+2. System creates DNS mapping: `api.userdomain.com` → Kong Gateway
+3. Kong route updated to accept custom domain
+4. User-facing URL becomes: `https://api.userdomain.com/orders` (hash removed)
+5. Internal routing still uses hash for lookup
+6. Database stores both: `route_hash` and `custom_domain`
+
+This allows:
+- Clean, branded URLs for users
+- No breaking changes to internal routing
+- Easy migration path
 
 ## Benefits
 

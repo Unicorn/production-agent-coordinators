@@ -15,6 +15,7 @@ import { executionRouter } from './routers/execution';
 import { projectsRouter } from './routers/projects';
 import { agentBuilderRouter } from './routers/agent-builder';
 import { agentTesterRouter } from './routers/agent-tester';
+import { workflowEndpointsRouter } from './routers/workflow-endpoints';
 
 export const appRouter = createTRPCRouter({
   users: usersRouter,
@@ -30,6 +31,7 @@ export const appRouter = createTRPCRouter({
   projects: projectsRouter,
   agentBuilder: agentBuilderRouter,
   agentTester: agentTesterRouter,
+  workflowEndpoints: workflowEndpointsRouter,
 });
 
 export type AppRouter = typeof appRouter;
