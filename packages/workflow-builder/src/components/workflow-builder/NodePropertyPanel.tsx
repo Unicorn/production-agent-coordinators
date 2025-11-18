@@ -8,7 +8,7 @@ import { CronExpressionBuilder } from '../cron/CronExpressionBuilder';
 interface NodePropertyPanelProps {
   node: {
     id: string;
-    type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'child-workflow' | 'api-endpoint';
+    type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'child-workflow' | 'api-endpoint' | 'condition' | 'phase' | 'retry' | 'state-variable';
     data: Record<string, any>;
   } | null;
   onClose: () => void;
@@ -66,6 +66,10 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
           {node.type === 'scheduled-workflow' && <ScheduledWorkflowProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'child-workflow' && <ChildWorkflowProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'api-endpoint' && <ApiEndpointProperties properties={properties} onChange={handlePropertyChange} availableSignals={availableSignals} availableQueries={availableQueries} />}
+          {node.type === 'condition' && <ConditionProperties properties={properties} onChange={handlePropertyChange} />}
+          {node.type === 'phase' && <PhaseProperties properties={properties} onChange={handlePropertyChange} />}
+          {node.type === 'retry' && <RetryProperties properties={properties} onChange={handlePropertyChange} />}
+          {node.type === 'state-variable' && <StateVariableProperties properties={properties} onChange={handlePropertyChange} />}
         </YStack>
       </ScrollView>
 
@@ -643,3 +647,460 @@ function ApiEndpointProperties({ properties, onChange, availableSignals = [], av
   );
 }
 
+
+// Condition Properties
+function ConditionProperties({ properties, onChange }: any) {
+  const config = properties.config || {};
+  
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">Condition Configuration</Text>
+
+      <YStack gap="$2">
+        <Label>Label</Label>
+        <Input
+          value={properties.label || ''}
+          onChangeText={(v) => onChange('label', v)}
+          placeholder="Condition Name"
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Condition Expression</Label>
+        <TextArea
+          value={config.expression || ''}
+          onChangeText={(v) => updateConfig('expression', v)}
+          placeholder="result.success === true"
+          rows={4}
+        />
+        <Text fontSize="$1" color="$gray11">
+          JavaScript expression that evaluates to true/false
+        </Text>
+      </YStack>
+    </YStack>
+  );
+}
+
+// Phase Properties
+function PhaseProperties({ properties, onChange }: any) {
+  const config = properties.config || {};
+  
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">Phase Configuration</Text>
+
+      <YStack gap="$2">
+        <Label>Phase Name</Label>
+        <Input
+          value={config.name || properties.label || ''}
+          onChangeText={(v) => {
+            updateConfig('name', v);
+            onChange('label', v);
+          }}
+          placeholder="INITIALIZE"
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Description</Label>
+        <TextArea
+          value={config.description || ''}
+          onChangeText={(v) => updateConfig('description', v)}
+          placeholder="Phase description"
+          rows={3}
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Execution Mode</Label>
+        <Select
+          value={config.sequential !== false ? 'sequential' : 'concurrent'}
+          onValueChange={(v) => updateConfig('sequential', v === 'sequential')}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="sequential" index={0}>
+                <Select.ItemText>Sequential</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="concurrent" index={1}>
+                <Select.ItemText>Concurrent</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {config.sequential === false && (
+        <YStack gap="$2">
+          <Label>Max Concurrency</Label>
+          <Input
+            value={config.maxConcurrency?.toString() || '4'}
+            onChangeText={(v) => updateConfig('maxConcurrency', parseInt(v) || 4)}
+            keyboardType="numeric"
+            placeholder="4"
+          />
+        </YStack>
+      )}
+    </YStack>
+  );
+}
+
+// Retry Properties
+function RetryProperties({ properties, onChange }: any) {
+  const config = properties.config || {};
+  
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  const updateBackoff = (key: string, value: any) => {
+    updateConfig('backoff', { ...(config.backoff || {}), [key]: value });
+  };
+
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">Retry Configuration</Text>
+
+      <YStack gap="$2">
+        <Label>Label</Label>
+        <Input
+          value={properties.label || ''}
+          onChangeText={(v) => onChange('label', v)}
+          placeholder="Retry Loop"
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Max Attempts</Label>
+        <Input
+          value={config.maxAttempts?.toString() || '3'}
+          onChangeText={(v) => updateConfig('maxAttempts', parseInt(v) || 3)}
+          keyboardType="numeric"
+          placeholder="3"
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Retry On</Label>
+        <Select
+          value={config.retryOn || 'failure'}
+          onValueChange={(v) => updateConfig('retryOn', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="failure" index={0}>
+                <Select.ItemText>Failure</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="error" index={1}>
+                <Select.ItemText>Error</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="condition" index={2}>
+                <Select.ItemText>Condition</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {config.retryOn === 'condition' && (
+        <YStack gap="$2">
+          <Label>Condition Expression</Label>
+          <TextArea
+            value={config.condition || ''}
+            onChangeText={(v) => updateConfig('condition', v)}
+            placeholder="result.status === 'retry'"
+            rows={3}
+          />
+        </YStack>
+      )}
+
+      <YStack gap="$2">
+        <Label>Backoff Type</Label>
+        <Select
+          value={config.backoff?.type || 'exponential'}
+          onValueChange={(v) => updateBackoff('type', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="none" index={0}>
+                <Select.ItemText>None</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="linear" index={1}>
+                <Select.ItemText>Linear</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="exponential" index={2}>
+                <Select.ItemText>Exponential</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {config.backoff?.type !== 'none' && (
+        <>
+          <YStack gap="$2">
+            <Label>Initial Interval</Label>
+            <Input
+              value={config.backoff?.initialInterval || '1s'}
+              onChangeText={(v) => updateBackoff('initialInterval', v)}
+              placeholder="1s"
+            />
+            <Text fontSize="$1" color="$gray11">
+              e.g., 1s, 1m, 5m
+            </Text>
+          </YStack>
+
+          {config.backoff?.type === 'exponential' && (
+            <YStack gap="$2">
+              <Label>Multiplier</Label>
+              <Input
+                value={config.backoff?.multiplier?.toString() || '2'}
+                onChangeText={(v) => updateBackoff('multiplier', parseFloat(v) || 2)}
+                keyboardType="numeric"
+                placeholder="2"
+              />
+            </YStack>
+          )}
+        </>
+      )}
+
+      <YStack gap="$2">
+        <Label>Scope</Label>
+        <Select
+          value={config.scope || 'block'}
+          onValueChange={(v) => updateConfig('scope', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="activity" index={0}>
+                <Select.ItemText>Activity</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="agent" index={1}>
+                <Select.ItemText>Agent</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="child-workflow" index={2}>
+                <Select.ItemText>Child Workflow</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="block" index={3}>
+                <Select.ItemText>Block</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+    </YStack>
+  );
+}
+
+// State Variable Properties
+function StateVariableProperties({ properties, onChange }: any) {
+  const config = properties.config || {};
+  
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">State Variable Configuration</Text>
+
+      <YStack gap="$2">
+        <Label>Variable Name</Label>
+        <Input
+          value={config.name || properties.label || ''}
+          onChangeText={(v) => {
+            updateConfig('name', v);
+            onChange('label', v);
+          }}
+          placeholder="variableName"
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Operation</Label>
+        <Select
+          value={config.operation || 'set'}
+          onValueChange={(v) => updateConfig('operation', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="set" index={0}>
+                <Select.ItemText>Set</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="append" index={1}>
+                <Select.ItemText>Append</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="increment" index={2}>
+                <Select.ItemText>Increment</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="decrement" index={3}>
+                <Select.ItemText>Decrement</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="get" index={4}>
+                <Select.ItemText>Get</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {(config.operation === 'set' || config.operation === 'append') && (
+        <YStack gap="$2">
+          <Label>Value</Label>
+          <TextArea
+            value={typeof config.value === 'string' ? config.value : JSON.stringify(config.value || '')}
+            onChangeText={(v) => {
+              try {
+                const parsed = JSON.parse(v);
+                updateConfig('value', parsed);
+              } catch {
+                updateConfig('value', v);
+              }
+            }}
+            placeholder="Value or JSON"
+            rows={3}
+          />
+        </YStack>
+      )}
+
+      <YStack gap="$2">
+        <Label>Scope</Label>
+        <Select
+          value={config.scope || 'workflow'}
+          onValueChange={(v) => updateConfig('scope', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="workflow" index={0}>
+                <Select.ItemText>Workflow</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="phase" index={1}>
+                <Select.ItemText>Phase</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="loop" index={2}>
+                <Select.ItemText>Loop</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {config.operation === 'set' && (
+        <YStack gap="$2">
+          <Label>Initial Value (optional)</Label>
+          <TextArea
+            value={typeof config.initialValue === 'string' ? config.initialValue : JSON.stringify(config.initialValue || '')}
+            onChangeText={(v) => {
+              try {
+                const parsed = JSON.parse(v);
+                updateConfig('initialValue', parsed);
+              } catch {
+                updateConfig('initialValue', v);
+              }
+            }}
+            placeholder="Initial value or JSON"
+            rows={2}
+          />
+        </YStack>
+      )}
+    </YStack>
+  );
+}

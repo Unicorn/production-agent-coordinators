@@ -8,10 +8,42 @@ Visual workflow builder for Temporal coordinators. Build and deploy workflows by
 
 - Node.js >= 18
 - Yarn
-- Supabase account (or local Supabase)
-- Temporal dev server
+- Docker Desktop (for infrastructure services)
+- Supabase CLI (for local Supabase)
 
-### Setup
+### Option 1: Docker Setup (Recommended)
+
+Start everything with one command:
+
+```bash
+cd packages/workflow-builder
+./scripts/start-all.sh
+```
+
+This starts:
+- ✅ Kong API Gateway
+- ✅ Temporal
+- ✅ Supabase (via CLI)
+- ✅ Creates/updates `.env.local`
+- ✅ Optionally starts Next.js
+
+Then visit: http://localhost:3010
+
+**Stop services:**
+```bash
+# Stop Next.js (if running)
+./scripts/stop-nextjs.sh
+
+# Stop infrastructure (Kong, Temporal)
+./scripts/stop-infrastructure.sh
+
+# Stop Supabase
+supabase stop
+```
+
+See [Docker Setup Guide](./docs/development/docker-setup.md) for details.
+
+### Option 2: Manual Setup
 
 1. **Install dependencies**:
 ```bash
@@ -19,21 +51,19 @@ cd packages/workflow-builder
 yarn install
 ```
 
-2. **Configure environment**:
+2. **Start infrastructure**:
 ```bash
-cp .env.local.example .env.local
-# Edit .env.local with your Supabase credentials
+# Start Kong and Temporal
+./scripts/start-infrastructure.sh
+
+# Start Supabase
+supabase start
 ```
 
-3. **Run database migrations**:
+3. **Configure environment**:
 ```bash
-# Option 1: Local Supabase
-npx supabase start
-npx supabase db push
-
-# Option 2: Remote Supabase
-npx supabase link --project-ref YOUR_PROJECT_ID
-npx supabase db push
+# .env.local is auto-created by start-all.sh
+# Or manually copy from .env.local.example
 ```
 
 4. **Start development server**:
@@ -41,12 +71,7 @@ npx supabase db push
 yarn dev
 ```
 
-5. **Start Temporal (separate terminal)**:
-```bash
-temporal server start-dev
-```
-
-6. **Visit**: http://localhost:3010
+5. **Visit**: http://localhost:3010
 
 ## Project Structure
 

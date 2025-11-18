@@ -214,7 +214,7 @@ export async function regeneratePrompt(sessionId: string): Promise<string> {
   
   session.messages.push(regenerateMessage);
   
-  const result = await sendMessageToAI(sessionId, regenerateMessage.content);
+  const result = await sendMessage(sessionId, regenerateMessage.content);
   
   // Extract prompt if generated
   if (result.session.generatedPrompt) {

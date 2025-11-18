@@ -82,18 +82,20 @@ services:
       retries: 5
     restart: unless-stopped
 
-  kong-admin-gui:
-    image: kong/kong-manager:3.4
-    container_name: kong-admin-gui
-    environment:
-      KONG_ADMIN_API_URL: http://kong:8001
-    ports:
-      - "8002:8002"
-    depends_on:
-      - kong
-    networks:
-      - kong-net
-    restart: unless-stopped
+  # Kong Admin GUI (optional - requires Kong Enterprise)
+  # Uncomment if you have Kong Enterprise license
+  # kong-admin-gui:
+  #   image: kong/kong-manager:3.4
+  #   container_name: kong-admin-gui
+  #   environment:
+  #     KONG_ADMIN_API_URL: http://kong:8001
+  #   ports:
+  #     - "8002:8002"
+  #   depends_on:
+  #     - kong
+  #   networks:
+  #     - kong-net
+  #   restart: unless-stopped
 
 volumes:
   kong-db-data:

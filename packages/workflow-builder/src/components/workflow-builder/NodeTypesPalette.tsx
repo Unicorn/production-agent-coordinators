@@ -1,12 +1,12 @@
 'use client';
 
 import { YStack, XStack, Text, Card, Button, ScrollView, Input } from 'tamagui';
-import { Activity, Bot, Send, Search, Inbox, Clock, Plus, Globe } from 'lucide-react';
+import { Activity, Bot, Send, Search, Inbox, Clock, Plus, Globe, GitBranch, Layers, RotateCcw, Database } from 'lucide-react';
 import { useState } from 'react';
 
 interface NodeType {
   id: string;
-  type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow';
+  type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'condition' | 'phase' | 'retry' | 'state-variable';
   name: string;
   description: string;
   icon: typeof Activity;
@@ -103,6 +103,44 @@ export function NodeTypesPalette({
       color: '$green9',
       metadata: {},
     },
+    
+    // Control Flow Nodes
+    {
+      id: 'condition',
+      type: 'condition' as const,
+      name: 'Condition',
+      description: 'Branch workflow based on condition (if/else)',
+      icon: GitBranch,
+      color: '$amber9',
+      metadata: {},
+    },
+    {
+      id: 'phase',
+      type: 'phase' as const,
+      name: 'Phase',
+      description: 'Organize workflow into phases (sequential or concurrent)',
+      icon: Layers,
+      color: '$indigo9',
+      metadata: {},
+    },
+    {
+      id: 'retry',
+      type: 'retry' as const,
+      name: 'Retry Loop',
+      description: 'Retry logic with exponential backoff',
+      icon: RotateCcw,
+      color: '$pink9',
+      metadata: {},
+    },
+    {
+      id: 'state-variable',
+      type: 'state-variable' as const,
+      name: 'State Variable',
+      description: 'Manage workflow state variables',
+      icon: Database,
+      color: '$blue9',
+      metadata: {},
+    },
   ];
 
   // Filter by search and category
@@ -132,6 +170,7 @@ export function NodeTypesPalette({
     { id: 'signal', label: 'Signals', icon: Send, color: '$orange9' },
     { id: 'query', label: 'Queries', icon: Search, color: '$teal9' },
     { id: 'scheduled-workflow', label: 'Scheduled', icon: Clock, color: '$pink9' },
+    { id: 'condition', label: 'Control Flow', icon: GitBranch, color: '$amber9' },
   ];
 
   return (

@@ -4,6 +4,8 @@
  */
 
 import type { TemporalWorkflow } from '@/types/advanced-patterns';
+import type { WorkflowDefinition } from '@/types/workflow';
+import { compileWorkflowFromNodes } from './node-compiler';
 
 export interface CompilerOptions {
   packageName?: string;
@@ -22,10 +24,53 @@ export interface CompiledWorkflow {
 
 /**
  * Compile a workflow definition into executable TypeScript code
+ * Supports both TemporalWorkflow (stages) and WorkflowDefinition (nodes/edges) formats
  */
 export function compileWorkflow(
-  workflow: TemporalWorkflow,
+  workflow: TemporalWorkflow | WorkflowDefinition,
   options: CompilerOptions = {}
+): CompiledWorkflow {
+  // Check if this is a node-based definition
+  if ('nodes' in workflow && 'edges' in workflow) {
+    return compileNodeBasedWorkflow(workflow as WorkflowDefinition, options);
+  }
+  
+  // Legacy stage-based workflow
+  return compileStageBasedWorkflow(workflow as TemporalWorkflow, options);
+}
+
+/**
+ * Compile node-based workflow definition
+ */
+function compileNodeBasedWorkflow(
+  definition: WorkflowDefinition,
+  options: CompilerOptions
+): CompiledWorkflow {
+  const {
+    packageName = 'workflow',
+    includeComments = true,
+    strictMode = true,
+  } = options;
+
+  const workflowCode = compileWorkflowFromNodes(definition, { includeComments });
+  const activitiesCode = generateActivitiesFromNodes(definition, includeComments);
+  const workerCode = generateWorkerCodeFromNodes(definition, packageName, includeComments);
+
+  return {
+    workflowCode,
+    activitiesCode,
+    workerCode,
+    packageJson: generatePackageJson(packageName, 'Workflow'),
+    tsConfig: generateTsConfig(strictMode),
+  };
+}
+
+/**
+ * Compile stage-based workflow (legacy)
+ */
+function compileStageBasedWorkflow(
+  workflow: TemporalWorkflow,
+  options: CompilerOptions
 ): CompiledWorkflow {
   const {
     packageName = workflow.kebab_name || (workflow.name?.toLowerCase().replace(/\s+/g, '-')) || 'workflow',
@@ -245,7 +290,74 @@ function generateQueryHandlerSetup(workflow: TemporalWorkflow, includeComments: 
 }
 
 /**
- * Generate workflow execution logic
+ * Generate activities from node-based definition
+ */
+function generateActivitiesFromNodes(definition: WorkflowDefinition, includeComments: boolean): string {
+  const nodes = definition.nodes || [];
+  const activityNodes = nodes.filter(n => n.type === 'activity' || n.type === 'agent');
+
+  if (activityNodes.length === 0) {
+    return `${includeComments ? '// No activities defined' : ''}
+export async function placeholderActivity(input: any): Promise<any> {
+  return { success: true };
+}`;
+  }
+
+  const activityFunctions = activityNodes.map(node => {
+    const activityName = node.data.componentName || toCamelCase(node.id);
+    const description = node.data.label || node.id;
+
+    return `${includeComments ? `/**
+ * ${description}
+ */` : ''}
+export async function ${activityName}(input: any): Promise<any> {
+  ${includeComments ? '// TODO: Implement activity logic' : ''}
+  console.log('Executing ${activityName}', input);
+  
+  ${node.type === 'agent' ? `// This is an AI agent activity
+  // Call your LLM provider here` : ''}
+  
+  return { success: true, data: input };
+}`;
+  });
+
+  return activityFunctions.join('\n\n');
+}
+
+/**
+ * Generate worker code from node-based definition
+ */
+function generateWorkerCodeFromNodes(
+  definition: WorkflowDefinition,
+  packageName: string,
+  includeComments: boolean
+): string {
+  return `${includeComments ? `/**
+ * Temporal Worker
+ * Auto-generated from workflow definition
+ */` : ''}
+import { Worker } from '@temporalio/worker';
+import * as activities from './activities';
+
+async function run() {
+  const worker = await Worker.create({
+    workflowsPath: require.resolve('./workflows'),
+    activities,
+    taskQueue: 'default',
+  });
+
+  await worker.run();
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+`;
+}
+
+/**
+ * Generate workflow execution logic (legacy stage-based)
  */
 function generateWorkflowLogic(workflow: TemporalWorkflow, includeComments: boolean): string {
   const stages = workflow.stages;

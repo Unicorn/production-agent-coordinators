@@ -328,9 +328,198 @@ Example: user-123-project-456-us-east
 
 ---
 
+### 6. End-to-End Encryption for SaaS (Zero-Knowledge Architecture)
+
+**Status**: Planned  
+**Priority**: High  
+**Complexity**: High
+
+#### Problem
+
+For the SaaS version of the application, administrators and system operators should not be able to read user data, even with direct database access. This ensures true data privacy and compliance with strict security requirements.
+
+#### Solution
+
+Implement end-to-end encryption (E2E) at rest for all user-entered data using a zero-knowledge architecture where encryption keys are derived from user credentials and never stored on the server.
+
+#### Data to Encrypt
+
+All user-entered and user-generated data must be encrypted:
+
+1. **Workflow Data**
+   - Workflow definitions and configurations
+   - Compiled workflow code
+   - Workflow metadata (names, descriptions)
+   - Workflow execution history and state
+
+2. **Custom Agents**
+   - Agent definitions and configurations
+   - Agent code and scripts
+   - Agent metadata
+
+3. **Custom Components**
+   - Component definitions
+   - Component code
+   - Component configurations
+
+4. **Logs and Execution Data**
+   - Execution logs
+   - Activity execution results
+   - Error messages and stack traces
+   - User-provided input data
+
+5. **Project Data**
+   - Project names and descriptions
+   - Project configurations
+   - Project metadata
+
+6. **User-Generated Content**
+   - Any text, JSON, or structured data entered by users
+   - API keys and secrets (already encrypted, but ensure E2E)
+   - Connection strings and credentials
+
+#### Implementation Architecture
+
+**Key Management**:
+- Encryption keys derived from user password + salt (PBKDF2/Argon2)
+- Keys never stored on server
+- Keys derived client-side during authentication
+- Session keys encrypted with user's master key
+- Support for key rotation and recovery
+
+**Encryption Strategy**:
+```typescript
+// Client-side encryption before sending to server
+const encryptedData = encrypt(userData, userEncryptionKey);
+
+// Server stores only encrypted blobs
+// Server cannot decrypt without user's key
+
+// Decryption happens client-side after retrieval
+const decryptedData = decrypt(encryptedData, userEncryptionKey);
+```
+
+**Database Schema Changes**:
+```sql
+-- Add encryption metadata to all user data tables
+ALTER TABLE workflows
+ADD COLUMN encrypted_data BYTEA,
+ADD COLUMN encryption_version INTEGER DEFAULT 1,
+ADD COLUMN encryption_algorithm VARCHAR(50) DEFAULT 'AES-256-GCM';
+
+ALTER TABLE compiled_code
+ADD COLUMN encrypted_code BYTEA,
+ADD COLUMN encryption_version INTEGER DEFAULT 1;
+
+ALTER TABLE workflow_executions
+ADD COLUMN encrypted_input BYTEA,
+ADD COLUMN encrypted_output BYTEA,
+ADD COLUMN encrypted_logs BYTEA;
+
+ALTER TABLE custom_agents
+ADD COLUMN encrypted_definition BYTEA,
+ADD COLUMN encryption_version INTEGER DEFAULT 1;
+
+ALTER TABLE custom_components
+ADD COLUMN encrypted_definition BYTEA,
+ADD COLUMN encryption_version INTEGER DEFAULT 1;
+
+-- Migration: Mark existing data for encryption
+ALTER TABLE workflows
+ADD COLUMN needs_encryption BOOLEAN DEFAULT true;
+```
+
+**API Changes**:
+- All write endpoints: Accept encrypted data, store as-is
+- All read endpoints: Return encrypted data, client decrypts
+- Add encryption version to all data payloads
+- Support for encryption key rotation endpoints
+- Migration endpoints for encrypting existing data
+
+**Client-Side Encryption Library**:
+```typescript
+// Encryption utilities
+class UserDataEncryption {
+  deriveKey(password: string, salt: string): CryptoKey;
+  encrypt(data: any, key: CryptoKey): EncryptedBlob;
+  decrypt(blob: EncryptedBlob, key: CryptoKey): any;
+  rotateKey(oldKey: CryptoKey, newKey: CryptoKey): void;
+}
+```
+
+#### Security Considerations
+
+**Key Derivation**:
+- Use strong key derivation (PBKDF2 with 100k+ iterations or Argon2)
+- Salt stored per-user, never reused
+- Support for hardware security modules (HSM) for enterprise
+
+**Encryption Standards**:
+- AES-256-GCM for symmetric encryption
+- RSA-4096 or ECC for key exchange (if needed)
+- Authenticated encryption for all data
+- Separate keys per data type (workflows, logs, etc.)
+
+**Key Recovery**:
+- Optional: Encrypted key backup with recovery questions
+- Optional: Trusted device key escrow
+- Support for account recovery without key loss
+
+**Performance**:
+- Encrypt/decrypt client-side to avoid server load
+- Batch encryption for large datasets
+- Lazy decryption (only decrypt when needed)
+- Cache decrypted data in secure client storage
+
+#### Migration Path
+
+1. **Phase 1** (Preparation):
+   - Add encryption columns to all tables
+   - Implement client-side encryption library
+   - Add encryption version tracking
+
+2. **Phase 2** (New Data):
+   - Enable encryption for all new data
+   - Client encrypts before sending to API
+   - Server stores encrypted blobs
+
+3. **Phase 3** (Existing Data):
+   - Background job to encrypt existing data
+   - Users prompted to re-authenticate to provide keys
+   - Gradual migration with rollback capability
+
+4. **Phase 4** (Full E2E):
+   - Remove unencrypted columns
+   - Enforce encryption for all operations
+   - Audit and compliance reporting
+
+#### Compliance Benefits
+
+- **GDPR**: True data protection, administrators cannot access user data
+- **HIPAA**: Encrypted health data, no server-side access
+- **SOC 2**: Zero-knowledge architecture meets strictest requirements
+- **Enterprise**: Meets requirements for sensitive data handling
+
+#### UI Changes
+
+- Encryption status indicator in project settings
+- Key management UI (rotate keys, export recovery key)
+- Migration progress for existing data
+- Security settings showing encryption status
+
+#### Limitations & Trade-offs
+
+- **Search**: Full-text search requires client-side indexing or encrypted search
+- **Analytics**: Aggregated metrics only (no raw data access)
+- **Backup**: Encrypted backups require user key for restore
+- **Support**: Cannot debug user data without user providing decryption key
+- **Performance**: Client-side encryption adds latency (mitigated with caching)
+
+---
+
 ## Medium Priority Future Work
 
-### 6. Workflow Versioning & Rollback
+### 7. Workflow Versioning & Rollback
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -358,7 +547,7 @@ Each compilation creates a new version, but no rollback mechanism.
 
 ---
 
-### 7. Workflow Testing & Simulation
+### 8. Workflow Testing & Simulation
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -387,7 +576,7 @@ Users want to test workflows before deploying to production.
 
 ---
 
-### 8. Advanced Monitoring & Alerting
+### 9. Advanced Monitoring & Alerting
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -421,7 +610,7 @@ Users want to test workflows before deploying to production.
 
 ---
 
-### 9. Team Collaboration
+### 10. Team Collaboration
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -451,7 +640,7 @@ One user per project.
 
 ---
 
-### 10. Workflow Templates & Marketplace
+### 11. Workflow Templates & Marketplace
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -482,7 +671,7 @@ Library of pre-built workflows users can clone and customize.
 
 ---
 
-### 11. Cost Optimization & Budgets
+### 12. Cost Optimization & Budgets
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -510,7 +699,7 @@ Users want to control costs as usage scales.
 
 ---
 
-### 12. Advanced Workflow Patterns
+### 13. Advanced Workflow Patterns
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -533,7 +722,7 @@ Users want to control costs as usage scales.
 
 ---
 
-### 13. Developer Experience Enhancements
+### 14. Developer Experience Enhancements
 
 **Status**: Planned  
 **Priority**: Medium  
@@ -574,7 +763,7 @@ wfb workers stop --project my-project
 
 ## Low Priority / Nice to Have
 
-### 14. Workflow Analytics
+### 15. Workflow Analytics
 
 **Status**: Planned  
 **Priority**: Low  
@@ -588,7 +777,7 @@ wfb workers stop --project my-project
 
 ---
 
-### 15. Integrations
+### 16. Integrations
 
 **Status**: Planned  
 **Priority**: Low  
@@ -601,7 +790,7 @@ wfb workers stop --project my-project
 
 ---
 
-### 16. Security Enhancements
+### 17. Security Enhancements
 
 **Status**: Planned  
 **Priority**: Low  
@@ -615,7 +804,7 @@ wfb workers stop --project my-project
 
 ---
 
-### 17. Advanced UI Features
+### 18. Advanced UI Features
 
 **Status**: Planned  
 **Priority**: Low  
@@ -629,7 +818,7 @@ wfb workers stop --project my-project
 
 ---
 
-### 18. Mobile App
+### 19. Mobile App
 
 **Status**: Planned  
 **Priority**: Low  
@@ -642,7 +831,7 @@ wfb workers stop --project my-project
 
 ---
 
-### 19. AI-Powered Features
+### 20. AI-Powered Features
 
 **Status**: Planned  
 **Priority**: Low  
@@ -715,15 +904,16 @@ These statistics will enable:
 
 When ready to implement, consider this order:
 
-1. **Activity Worker Splitting** (highest impact on performance)
-2. **Workflow Versioning & Rollback** (critical for production safety)
-3. **Cross-Project Communication** (enables advanced use cases)
-4. **Advanced Monitoring & Alerting** (production readiness)
-5. **Team Collaboration** (enables business scaling)
-6. **Worker Auto-Scaling** (cost optimization)
-7. **Workflow Templates & Marketplace** (user acquisition)
-8. **Multi-Region Deployment** (enterprise feature)
-9. **Multi-Queue Support** (organizational flexibility)
+1. **End-to-End Encryption for SaaS** (critical for data privacy and compliance)
+2. **Activity Worker Splitting** (highest impact on performance)
+3. **Workflow Versioning & Rollback** (critical for production safety)
+4. **Cross-Project Communication** (enables advanced use cases)
+5. **Advanced Monitoring & Alerting** (production readiness)
+6. **Team Collaboration** (enables business scaling)
+7. **Worker Auto-Scaling** (cost optimization)
+8. **Workflow Templates & Marketplace** (user acquisition)
+9. **Multi-Region Deployment** (enterprise feature)
+10. **Multi-Queue Support** (organizational flexibility)
 
 ---
 

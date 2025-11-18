@@ -84,13 +84,15 @@ describe('Agent Builder Conversation Service', () => {
   describe('sendMessage', () => {
     it('should add user message and get AI response', async () => {
       const session = createSession('user-123');
+      const initialMessageCount = session.messages.length; // Should be 2 (system + assistant)
       
       // Mock environment variable
       process.env.ANTHROPIC_API_KEY = 'test-key';
       
       const result = await sendMessageToAI(session.sessionId, 'I want to create a code review agent');
       
-      expect(result.session.messages.length).toBeGreaterThan(session.messages.length);
+      // Should have added 2 messages (user + assistant), so total should be initial + 2
+      expect(result.session.messages.length).toBe(initialMessageCount + 2);
       expect(result.session.messages[result.session.messages.length - 2].role).toBe('user');
       expect(result.session.messages[result.session.messages.length - 2].content).toContain('code review');
       expect(result.session.messages[result.session.messages.length - 1].role).toBe('assistant');
