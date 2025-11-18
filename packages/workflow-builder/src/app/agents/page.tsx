@@ -14,7 +14,18 @@ import { api } from '@/lib/trpc/client';
 
 function AgentsContent() {
   const router = useRouter();
-  const { data, isLoading } = api.agentPrompts.list.useQuery({});
+  
+  console.log('🔍 [AgentsContent] Initiating agentPrompts.list query');
+  
+  const { data, isLoading, error } = api.agentPrompts.list.useQuery({});
+  
+  console.log('📊 [AgentsContent] Query state:', {
+    isLoading,
+    hasError: !!error,
+    errorMessage: error?.message,
+    hasData: !!data,
+    promptCount: data?.prompts?.length,
+  });
 
   return (
     <YStack flex={1}>
@@ -24,12 +35,20 @@ function AgentsContent() {
         <YStack flex={1} padding="$6" gap="$4">
           <XStack justifyContent="space-between" alignItems="center">
             <H1>Agent Prompts</H1>
-            <Button
-              theme="blue"
-              onPress={() => router.push('/agents/new')}
-            >
-              New Agent Prompt
-            </Button>
+            <XStack gap="$3">
+              <Button
+                variant="outlined"
+                onPress={() => router.push('/agents/new')}
+              >
+                Create Manually
+              </Button>
+              <Button
+                theme="blue"
+                onPress={() => router.push('/agents/new/assisted')}
+              >
+                Build with AI
+              </Button>
+            </XStack>
           </XStack>
 
           {isLoading ? (

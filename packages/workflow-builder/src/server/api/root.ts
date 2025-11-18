@@ -12,6 +12,9 @@ import { workQueuesRouter } from './routers/work-queues';
 import { signalsRouter, queriesRouter } from './routers/signals-queries';
 import { compilerRouter } from './routers/compiler';
 import { executionRouter } from './routers/execution';
+import { projectsRouter } from './routers/projects';
+import { agentBuilderRouter } from './routers/agent-builder';
+import { agentTesterRouter } from './routers/agent-tester';
 
 export const appRouter = createTRPCRouter({
   users: usersRouter,
@@ -24,6 +27,9 @@ export const appRouter = createTRPCRouter({
   queries: queriesRouter,
   compiler: compilerRouter,
   execution: executionRouter,
+  projects: projectsRouter,
+  agentBuilder: agentBuilderRouter,
+  agentTester: agentTesterRouter,
 });
 
 export type AppRouter = typeof appRouter;

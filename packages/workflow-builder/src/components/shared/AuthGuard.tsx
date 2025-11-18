@@ -52,13 +52,24 @@ export function AuthGuardWithLoading({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     const checkAuth = async () => {
+      console.log('🔐 [AuthGuard] Checking authentication...');
       const {
         data: { user },
+        error,
       } = await supabase.auth.getUser();
 
+      if (error) {
+        console.error('❌ [AuthGuard] Error checking auth:', error);
+      }
+
       if (!user) {
+        console.log('⚠️  [AuthGuard] No user found, redirecting to sign-in');
         router.push('/auth/signin');
       } else {
+        console.log('✅ [AuthGuard] User authenticated:', {
+          id: user.id,
+          email: user.email,
+        });
         setIsAuthenticated(true);
       }
       setIsLoading(false);

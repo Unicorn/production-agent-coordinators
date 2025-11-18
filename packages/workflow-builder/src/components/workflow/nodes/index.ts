@@ -6,11 +6,13 @@ import { ActivityNode as ActivityNodeComponent } from './ActivityNode';
 import { AgentNode as AgentNodeComponent } from './AgentNode';
 import { SignalNode as SignalNodeComponent } from './SignalNode';
 import { TriggerNode as TriggerNodeComponent } from './TriggerNode';
+import { ChildWorkflowNode as ChildWorkflowNodeComponent } from './ChildWorkflowNode';
 
 export { ActivityNodeComponent as ActivityNode };
 export { AgentNodeComponent as AgentNode };
 export { SignalNodeComponent as SignalNode };
 export { TriggerNodeComponent as TriggerNode };
+export { ChildWorkflowNodeComponent as ChildWorkflowNode };
 
 // Node type registry for React Flow
 export const nodeTypes = {
@@ -18,5 +20,6 @@ export const nodeTypes = {
   agent: AgentNodeComponent,
   signal: SignalNodeComponent,
   trigger: TriggerNodeComponent,
+  'child-workflow': ChildWorkflowNodeComponent,
 };
 

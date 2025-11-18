@@ -6,7 +6,8 @@ Complete guide to using the Workflow Builder system.
 
 - **[Projects](projects.md)** - Creating and managing projects
 - **[Components](components.md)** - Understanding and creating components
-- **[Agent Prompts](agent-prompts.md)** - Creating AI agent prompts
+- **[Agent Prompts](agent-prompts.md)** - Creating AI agent prompts (manual and AI-assisted)
+- **[Agent Testing](agent-testing.md)** - Testing agent prompts interactively
 - **[Building Workflows](building-workflows.md)** - Visual workflow editor
 - **[Deploying Workflows](deploying-workflows.md)** - Compiling and deploying
 - **[Executing Workflows](executing-workflows.md)** - Running workflows

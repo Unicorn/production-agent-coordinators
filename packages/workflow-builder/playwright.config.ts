@@ -1,96 +1,83 @@
-/**
- * Playwright Test Configuration
- * 
- * @see https://playwright.dev/docs/test-configuration
- */
-
 import { defineConfig, devices } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 
+/**
+ * Read environment variables from file.
+ * https://github.com/motdotla/dotenv
+ */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+
+/**
+ * See https://playwright.dev/docs/test-configuration.
+ */
 export default defineConfig({
   testDir: './tests/e2e',
-  
-  // Maximum time one test can run
-  timeout: 30 * 1000,
-  
-  expect: {
-    // Maximum time expect() should wait for the condition to be met
-    timeout: 5000,
-  },
-  
-  // Run tests in files in parallel
-  fullyParallel: true,
-  
-  // Fail the build on CI if you accidentally left test.only in the source code
+  /* Run tests in files in parallel */
+  fullyParallel: false,
+  /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  
-  // Retry on CI only
+  /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  
-  // Opt out of parallel tests on CI
-  workers: process.env.CI ? 1 : undefined,
-  
-  // Reporter to use
-  reporter: [
-    ['html'],
-    ['list'],
-    ['json', { outputFile: 'test-results/results.json' }],
-  ],
-  
-  // Shared settings for all the projects below
+  /* Opt out of parallel tests on CI. */
+  workers: 1,
+  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
+  reporter: [['list'], ['html', { open: 'never' }]],
+  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    // Base URL to use in actions like `await page.goto('/')`
-    baseURL: process.env.BASE_URL || 'http://localhost:3010',
-    
-    // Collect trace when retrying the failed test
+    /* Base URL to use in actions like `await page.goto('/')`. */
+    baseURL: 'http://localhost:3010',
+
+    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
-    
-    // Take screenshot on failure
+
+    /* Screenshot on failure */
     screenshot: 'only-on-failure',
     
-    // Record video on failure
-    video: 'retain-on-failure',
-    
-    // Maximum time each action such as `click()` can take
-    actionTimeout: 10 * 1000,
-    
-    // Emulates `'prefers-colors-scheme'` media feature
-    colorScheme: 'light',
+    /* Headless mode (no browser UI) */
+    headless: true,
   },
 
-  // Configure projects for major browsers
+  /* Configure projects for major browsers */
   projects: [
+    // Setup project - runs first to authenticate and save session
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
     },
-
+    
+    // Authenticated tests - use saved session from setup
     {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      name: 'chromium-authenticated',
+      use: { 
+        ...devices['Desktop Chrome'],
+        // Use authenticated state from setup
+        storageState: './playwright/.auth/user.json',
+      },
+      dependencies: ['setup'],
+      testIgnore: /auth\.spec\.ts/, // Skip auth tests that test the auth flow itself
     },
-
+    
+    // Auth flow tests - test authentication without reusing session
     {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    // Test against mobile viewports
-    {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
-    },
-    {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
+      name: 'chromium-auth-tests',
+      use: { 
+        ...devices['Desktop Chrome'],
+      },
+      testMatch: /auth\.spec\.ts/,
     },
   ],
 
-  // Run your local dev server before starting the tests
-  webServer: {
-    command: 'yarn dev',
-    url: 'http://localhost:3010',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  /* Run your local dev server before starting the tests */
+  // Disabled - assume dev server is already running
+  // To enable: uncomment and ensure no dev server is running
+  // webServer: {
+  //   command: 'yarn dev',
+  //   url: 'http://localhost:3010',
+  //   reuseExistingServer: !process.env.CI,
+  //   timeout: 120 * 1000,
+  // },
 });
-

@@ -17,12 +17,12 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: resolve(__dirname, '../.env.local') });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error('❌ Missing environment variables');
   console.error('   NEXT_PUBLIC_SUPABASE_URL:', !!supabaseUrl);
-  console.error('   SUPABASE_SERVICE_KEY:', !!supabaseServiceKey);
+  console.error('   SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY:', !!supabaseServiceKey);
   process.exit(1);
 }
 

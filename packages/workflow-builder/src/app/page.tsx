@@ -11,10 +11,19 @@ import { Sidebar } from '@/components/shared/Sidebar';
 import { api } from '@/lib/trpc/client';
 
 function DashboardContent() {
-  const { data: user } = api.users.me.useQuery();
-  const { data: workflows } = api.workflows.list.useQuery({});
-  const { data: components } = api.components.list.useQuery({});
-  const { data: agents } = api.agentPrompts.list.useQuery({});
+  console.log('🔍 [Dashboard] Initiating queries for user, workflows, components, agents');
+  
+  const { data: user, isLoading: userLoading, error: userError } = api.users.me.useQuery();
+  const { data: workflows, isLoading: workflowsLoading, error: workflowsError } = api.workflows.list.useQuery({});
+  const { data: components, isLoading: componentsLoading, error: componentsError } = api.components.list.useQuery({});
+  const { data: agents, isLoading: agentsLoading, error: agentsError } = api.agentPrompts.list.useQuery({});
+  
+  console.log('📊 [Dashboard] Query states:', {
+    user: { loading: userLoading, error: userError?.message, hasData: !!user },
+    workflows: { loading: workflowsLoading, error: workflowsError?.message, count: workflows?.workflows?.length },
+    components: { loading: componentsLoading, error: componentsError?.message, count: components?.components?.length },
+    agents: { loading: agentsLoading, error: agentsError?.message, count: agents?.prompts?.length },
+  });
 
   const activeWorkflowsCount = workflows?.workflows.filter(
     w => w.status.name === 'active'

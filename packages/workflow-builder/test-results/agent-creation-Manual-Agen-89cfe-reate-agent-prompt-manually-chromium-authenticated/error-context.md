@@ -1,0 +1,79 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e6]: Workflow Builder
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]: Test User
+          - generic [ref=e10]: developer
+        - button "Sign Out" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: Sign Out
+    - generic [ref=e14]:
+      - generic [ref=e16]:
+        - button "Dashboard" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]: Dashboard
+        - button "Projects" [ref=e21] [cursor=pointer]:
+          - generic [ref=e22]: Projects
+        - button "Workflows" [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: Workflows
+        - button "Components" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Components
+        - button "Agents" [ref=e30] [cursor=pointer]:
+          - generic [ref=e31]: Agents
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - heading "Create Agent Prompt" [level=1] [ref=e34]
+          - button "Build with AI Assistant" [ref=e36] [cursor=pointer]:
+            - generic [ref=e37]: Build with AI Assistant
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - generic [ref=e42]: Name *
+              - textbox "Name *" [ref=e45]:
+                - /placeholder: fix-agent
+              - generic [ref=e46]: Kebab-case identifier
+            - generic [ref=e47]:
+              - generic [ref=e48]: Display Name *
+              - textbox "Display Name *" [ref=e51]:
+                - /placeholder: Fix Agent
+          - generic [ref=e52]:
+            - generic [ref=e53]: Description
+            - textbox "Description" [ref=e56]:
+              - /placeholder: What does this agent do?
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - generic [ref=e59]: Version
+              - textbox "Version" [ref=e62]:
+                - /placeholder: 1.0.0
+                - text: 1.0.0
+            - generic [ref=e63]:
+              - generic [ref=e64]: Visibility
+              - combobox [ref=e66] [cursor=pointer]:
+                - generic: Public
+                - img [ref=e67]
+          - generic [ref=e69]:
+            - generic [ref=e70]: Prompt Content *
+            - textbox "Prompt Content *" [ref=e73]:
+              - /placeholder: You are an AI agent that...
+            - generic [ref=e74]: The complete agent prompt in markdown format
+          - generic [ref=e75]:
+            - generic [ref=e76]: Capabilities
+            - textbox "Capabilities" [ref=e79]:
+              - /placeholder: fix-failing-tests, analyze-errors, suggest-improvements
+            - generic [ref=e80]: Comma-separated list of what this agent can do
+          - generic [ref=e81]:
+            - generic [ref=e82]: Tags
+            - textbox "Tags" [ref=e85]:
+              - /placeholder: fix, testing, quality
+            - generic [ref=e86]: Comma-separated list for categorization
+          - generic [ref=e87]:
+            - generic [ref=e88]:
+              - button "Create Agent Prompt" [disabled]:
+                - generic: Create Agent Prompt
+            - button "Cancel" [ref=e90] [cursor=pointer]:
+              - generic [ref=e91]: Cancel
+  - alert [ref=e92]
+```

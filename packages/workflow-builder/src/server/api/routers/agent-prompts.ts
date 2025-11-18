@@ -8,7 +8,7 @@ import { TRPCError } from '@trpc/server';
 
 export const agentPromptsRouter = createTRPCRouter({
   // List agent prompts
-  list: publicProcedure
+  list: protectedProcedure
     .input(z.object({
       capability: z.string().optional(),
       tags: z.array(z.string()).optional(),

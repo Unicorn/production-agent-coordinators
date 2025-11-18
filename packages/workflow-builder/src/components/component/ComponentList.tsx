@@ -25,10 +25,30 @@ export function ComponentList({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState(type || '');
 
-  const { data, isLoading, error } = api.components.list.useQuery({
+  console.log('🔍 [ComponentList] Initiating components.list query with params:', {
     type: selectedType || undefined,
     capability,
     includeDeprecated: false,
+  });
+
+  const queryResult = api.components.list.useQuery({
+    type: selectedType || undefined,
+    capability,
+    includeDeprecated: false,
+  });
+
+  const { data, isLoading, error } = queryResult;
+
+  console.log('📊 [ComponentList] Query state:', {
+    isLoading,
+    hasError: !!error,
+    errorMessage: error?.message,
+    hasData: !!data,
+    componentCount: data?.components?.length,
+    status: queryResult.status,
+    fetchStatus: queryResult.fetchStatus,
+    isFetching: queryResult.isFetching,
+    isPaused: queryResult.isPaused,
   });
 
   const { data: types } = api.components.getTypes.useQuery();

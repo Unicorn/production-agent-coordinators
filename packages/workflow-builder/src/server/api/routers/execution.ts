@@ -2,7 +2,96 @@ import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { compileWorkflow } from '@/lib/workflow-compiler/compiler';
+import { storeCompiledCode } from '@/lib/workflow-compiler/storage';
 import type { TemporalWorkflow } from '@/types/advanced-patterns';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+// Temporal integration via standalone worker service
+const TEMPORAL_ENABLED = true;
+const WORKER_SERVICE_URL = process.env.WORKER_SERVICE_URL || 'http://localhost:3011';
+
+// Call worker service via HTTP instead of importing @temporalio/worker
+async function startWorkerForProject(projectId: string) {
+  const response = await fetch(`${WORKER_SERVICE_URL}/workers/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to start worker');
+  }
+  
+  return response.json();
+}
+
+async function getTemporalClient() {
+  // Dynamic import only for client (no worker dependencies)
+  const { getTemporalClient: getClient } = await import('@/lib/temporal/connection');
+  return getClient();
+}
+
+async function recordWorkflowStats(projectId: string, workflowId: string, durationMs: number, success: boolean) {
+  // Dynamic import for statistics
+  const { recordWorkflowExecution } = await import('@/lib/temporal/statistics');
+  return recordWorkflowExecution(projectId, workflowId, durationMs, success);
+}
+
+/**
+ * Monitor a Temporal workflow execution and update database when complete
+ */
+async function monitorExecution(
+  handle: any, // WorkflowHandle type - using any to avoid import
+  executionId: string,
+  projectId: string,
+  workflowId: string,
+  startTime: Date,
+  supabase: SupabaseClient
+) {
+  try {
+    console.log(`👀 Monitoring workflow execution ${executionId}...`);
+    
+    // Wait for workflow to complete
+    const result = await handle.result();
+    const endTime = new Date();
+    const durationMs = endTime.getTime() - startTime.getTime();
+    
+    console.log(`✅ Workflow completed in ${durationMs}ms`);
+    
+    // Update execution record
+    await supabase
+      .from('workflow_executions')
+      .update({
+        status: 'completed',
+        completed_at: endTime.toISOString(),
+        output: result,
+      })
+      .eq('id', executionId);
+    
+    // Record statistics
+    await recordWorkflowStats(projectId, workflowId, durationMs, true);
+    
+    console.log(`📊 Execution recorded successfully`);
+  } catch (error: any) {
+    console.error(`❌ Workflow execution failed:`, error);
+    const endTime = new Date();
+    const durationMs = endTime.getTime() - startTime.getTime();
+    
+    // Update execution with error
+    await supabase
+      .from('workflow_executions')
+      .update({
+        status: 'failed',
+        completed_at: endTime.toISOString(),
+        error_message: error.message || 'Unknown error',
+      })
+      .eq('id', executionId);
+    
+    // Record failed execution statistics
+    await recordWorkflowStats(projectId, workflowId, durationMs, false);
+  }
+}
 
 export const executionRouter = createTRPCRouter({
   /**
@@ -52,7 +141,9 @@ export const executionRouter = createTRPCRouter({
       // Convert to TemporalWorkflow format
       const workflow: TemporalWorkflow = {
         id: workflowData.id,
-        name: workflowData.name,
+        name: workflowData.display_name || workflowData.kebab_name, // deprecated, kept for backward compatibility
+        kebab_name: workflowData.kebab_name,
+        display_name: workflowData.display_name,
         description: workflowData.description,
         stages: workflowData.workflow_nodes?.map((node: any) => ({
           id: node.node_id,
@@ -119,84 +210,117 @@ export const executionRouter = createTRPCRouter({
         });
       }
 
-      // In a real implementation, this would start the "Build Workflow" workflow
-      // (id: aaaaaaaa-bbbb-cccc-dddd-000000000001) which is itself a workflow!
-      // This creates a beautiful meta-loop where workflows build workflows.
-      
-      // TODO: Integrate with actual Temporal client:
-      // const workflowHandle = await temporalClient.workflow.start('BuildWorkflow', {
-      //   taskQueue: 'build-workflows',
-      //   workflowId: `build-${execution.id}`,
-      //   args: [{
-      //     targetWorkflowId: input.workflowId,
-      //     executionId: execution.id,
-      //     input: input.input,
-      //   }],
-      // });
-      
-      // For now, we'll simulate the "Build Workflow" workflow execution
       try {
+        // Get user record for storage
+        const userRecord = await ctx.getUserRecord();
+        
         // Step 1: Compile workflow definition
+        console.log(`🔨 Compiling workflow ${workflowData.name}...`);
         const compiled = compileWorkflow(workflow, {
           includeComments: true,
           strictMode: true,
         });
 
-        // Step 2: Validate generated code
-        // (In real implementation, this would use TypeScript compiler API)
+        // Step 2: Store compiled code in database
+        console.log(`💾 Storing compiled code...`);
+        const codeId = await storeCompiledCode(
+          input.workflowId,
+          workflowData.version,
+          compiled,
+          userRecord.id
+        );
         
-        // Step 3: Register activities
-        // (In real implementation, this would update the worker registry)
+        console.log(`✅ Compiled code stored with ID: ${codeId}`);
 
-        // Step 4: Initialize execution environment
-        // (In real implementation, this would start/connect to a worker)
+        // Step 3: Get project for this workflow
+        if (!workflowData.project_id) {
+          throw new Error('Workflow has no associated project');
+        }
+        
+        const { data: project } = await ctx.supabase
+          .from('projects')
+          .select('*')
+          .eq('id', workflowData.project_id)
+          .single();
+        
+        if (!project) {
+          throw new Error('Project not found');
+        }
+        
+        console.log(`📋 Project: ${project.name} (task queue: ${project.task_queue_name})`);
 
-        // Step 5: Execute workflow (with LLM agent coordination)
-        // (In real implementation, this would start the actual Temporal workflow)
+        if (!TEMPORAL_ENABLED) {
+          // Temporal is disabled - just mark as completed with compiled code
+          await ctx.supabase
+            .from('workflow_executions')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              output: { 
+                message: 'Workflow compiled successfully. Temporal integration temporarily disabled.',
+                compiledCodeId: codeId 
+              },
+            })
+            .eq('id', execution.id);
 
-        // Step 6: Update execution status
-        // Generate execution steps based on the workflow structure
-        const steps = [
-          { name: 'Compile workflow definition', duration: 500 },
-          { name: 'Validate generated code', duration: 300 },
-          { name: 'Register activities', duration: 400 },
-          { name: 'Initialize execution environment', duration: 600 },
-          { name: 'Execute workflow (Agent-coordinated)', duration: 800 },
-          ...workflow.stages.filter(s => s.type === 'activity' || s.type === 'agent').map((stage, i) => ({
-            name: `Execute ${stage.metadata?.name || stage.id}`,
-            duration: 1000 + Math.random() * 2000,
-          })),
-          { name: 'Update execution status', duration: 200 },
-        ];
+          return {
+            success: true,
+            executionId: execution.id,
+            message: `Workflow compiled successfully! Temporal integration is currently disabled. You can view the compiled code in the database.`,
+          };
+        }
 
-        // Update execution with success
+        // Step 4: Ensure worker is running for this project (via worker service)
+        console.log(`🔧 Ensuring worker is running for project...`);
+        await startWorkerForProject(project.id);
+        
+        // Step 5: Get Temporal client
+        console.log(`📦 Connecting to Temporal...`);
+        const client = await getTemporalClient();
+        
+        // Step 6: Start workflow execution on Temporal
+        console.log(`🚀 Starting workflow execution on Temporal...`);
+        
+        const workflowId = `${workflowData.kebab_name || workflowData.name}-${Date.now()}`;
+        const handle = await client.workflow.start(workflowData.kebab_name || workflowData.name, {
+          taskQueue: project.task_queue_name,
+          workflowId,
+          args: [input.input || {}],
+        });
+        
+        console.log(`✅ Workflow started: ${workflowId}`);
+        console.log(`   Run ID: ${handle.firstExecutionRunId}`);
+        
+        // Update execution with Temporal workflow ID
         await ctx.supabase
           .from('workflow_executions')
           .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            output: {
-              success: true,
-              builtBy: 'Build Workflow (aaaaaaaa-bbbb-cccc-dddd-000000000001)',
-              steps: steps.map(s => s.name),
-              compiled: {
-                workflowCodeLines: compiled.workflowCode.split('\n').length,
-                activitiesCodeLines: compiled.activitiesCode.split('\n').length,
-                workerCodeLines: compiled.workerCode.split('\n').length,
-              },
-              message: 'Workflow compiled, validated, and executed successfully by Build Workflow meta-workflow',
-            },
+            status: 'running',
+            temporal_workflow_id: workflowId,
+            temporal_run_id: handle.firstExecutionRunId,
           })
           .eq('id', execution.id);
-
+        
+        // Monitor execution in background (don't await)
+        monitorExecution(
+          handle,
+          execution.id,
+          project.id,
+          workflowData.id,
+          new Date(),
+          ctx.supabase
+        ).catch(err => console.error('Error monitoring execution:', err));
+        
         return {
           success: true,
           executionId: execution.id,
-          buildWorkflowId: 'aaaaaaaa-bbbb-cccc-dddd-000000000001',
-          steps,
-          message: 'Workflow built and executed by Build Workflow meta-workflow',
+          workflowId,
+          runId: handle.firstExecutionRunId,
+          message: 'Workflow execution started successfully!',
         };
       } catch (error: any) {
+        console.error(`❌ Build/execution failed:`, error);
+        
         // Update execution with failure
         await ctx.supabase
           .from('workflow_executions')
@@ -209,7 +333,8 @@ export const executionRouter = createTRPCRouter({
 
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: `Build Workflow failed: ${error.message}`,
+          message: `Build/execution failed: ${error.message}`,
+          cause: error,
         });
       }
     }),

@@ -6,6 +6,12 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function updateSession(request: NextRequest) {
+  // Only log API routes, not every page request
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
+  if (isApiRoute) {
+    console.log('🔄 [Middleware] API request:', request.nextUrl.pathname);
+  }
+  
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -21,6 +27,7 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
+          // Removed excessive logging
           request.cookies.set({
             name,
             value,
@@ -38,6 +45,7 @@ export async function updateSession(request: NextRequest) {
           });
         },
         remove(name: string, options: CookieOptions) {
+          // Removed excessive logging
           request.cookies.set({
             name,
             value: '',
@@ -59,7 +67,13 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Refresh session if needed
-  await supabase.auth.getUser();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  
+  if (error) {
+    console.error('❌ [Middleware] Auth error on', request.nextUrl.pathname, error.message);
+  } else if (isApiRoute && user) {
+    console.log('✅ [Middleware] Authenticated API request:', user.email);
+  }
 
   return response;
 }

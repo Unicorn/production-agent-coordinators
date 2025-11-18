@@ -1,0 +1,45 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e6]: Workflow Builder
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]: Test User
+          - generic [ref=e10]: developer
+        - button "Sign Out" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: Sign Out
+    - generic [ref=e14]:
+      - generic [ref=e16]:
+        - button "Dashboard" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]: Dashboard
+        - button "Projects" [ref=e21] [cursor=pointer]:
+          - generic [ref=e22]: Projects
+        - button "Workflows" [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: Workflows
+        - button "Components" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Components
+        - button "Agents" [ref=e30] [cursor=pointer]:
+          - generic [ref=e31]: Agents
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - button "Back to Manual Editor" [ref=e35] [cursor=pointer]:
+            - img [ref=e36]
+            - generic [ref=e38]: Back to Manual Editor
+          - heading "Build Agent with AI Assistant" [level=1] [ref=e39]
+        - generic [ref=e40]:
+          - generic [ref=e46]:
+            - generic [ref=e49]: "You are an AI assistant helping users create agent prompts. Your goal is to: 1. Ask 3-5 clarifying questions about what the agent should do 2. Determine when you have enough information to generate a prompt 3. Generate a complete agent prompt in markdown format 4. Support revision requests from the user Guidelines: - Be conversational and helpful - Ask one question at a time - After 3-5 questions, determine if you have enough information - When ready, generate a complete agent prompt in markdown - The prompt should include: * Clear role definition * Capabilities and responsibilities * Instructions for behavior * Output format expectations - Support revision requests by asking what needs to change When you're ready to generate the prompt, say: \"I have enough information. Here's the agent prompt I've created:\" followed by the markdown prompt. Current conversation state: No metadata yet"
+            - generic [ref=e52]: I'll help you create an agent prompt! Let's start by understanding what you want your agent to do. What should this agent accomplish?
+          - generic [ref=e53]:
+            - textbox "Type your message..." [ref=e56]: I want an agent that helps users debug React components
+            - button "Send" [ref=e58] [cursor=pointer]:
+              - img [ref=e59]
+              - generic [ref=e62]: Send
+          - button "Cancel" [ref=e65] [cursor=pointer]:
+            - img [ref=e66]
+            - generic [ref=e69]: Cancel
+  - alert [ref=e70]
+```

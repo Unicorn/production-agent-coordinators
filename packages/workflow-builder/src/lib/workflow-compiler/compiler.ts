@@ -28,16 +28,18 @@ export function compileWorkflow(
   options: CompilerOptions = {}
 ): CompiledWorkflow {
   const {
-    packageName = workflow.name.toLowerCase().replace(/\s+/g, '-'),
+    packageName = workflow.kebab_name || (workflow.name?.toLowerCase().replace(/\s+/g, '-')) || 'workflow',
     includeComments = true,
     strictMode = true,
   } = options;
+
+  const displayName = workflow.display_name || workflow.name || workflow.kebab_name || 'Workflow';
 
   return {
     workflowCode: generateWorkflowCode(workflow, includeComments),
     activitiesCode: generateActivitiesCode(workflow, includeComments),
     workerCode: generateWorkerCode(workflow, packageName, includeComments),
-    packageJson: generatePackageJson(packageName, workflow.name),
+    packageJson: generatePackageJson(packageName, displayName),
     tsConfig: generateTsConfig(strictMode),
   };
 }
@@ -127,10 +129,10 @@ function generateWorkflowFunction(workflow: TemporalWorkflow, includeComments: b
   const workflowLogic = generateWorkflowLogic(workflow, includeComments);
 
   return `${includeComments ? `/**
- * ${workflow.name}
+ * ${workflow.display_name || workflow.name}
  * ${workflow.description || 'Generated Temporal workflow'}
  */` : ''}
-export async function ${toCamelCase(workflow.name)}Workflow(input: any): Promise<any> {
+export async function ${toCamelCase(workflow.kebab_name || workflow.name)}Workflow(input: any): Promise<any> {
 ${activityProxies}
 
 ${generateStateVariables(workflow)}
@@ -318,10 +320,10 @@ export async function ${activityName}(input: any): Promise<any> {
  * Generate worker TypeScript code
  */
 function generateWorkerCode(workflow: TemporalWorkflow, packageName: string, includeComments: boolean): string {
-  const workflowName = toCamelCase(workflow.name) + 'Workflow';
+  const workflowName = toCamelCase(workflow.kebab_name || workflow.name) + 'Workflow';
 
   return `${includeComments ? `/**
- * Temporal Worker for ${workflow.name}
+ * Temporal Worker for ${workflow.display_name || workflow.name}
  * Auto-generated from workflow definition
  */` : ''}
 import { Worker } from '@temporalio/worker';

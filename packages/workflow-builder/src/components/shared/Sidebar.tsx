@@ -15,6 +15,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/' },
+  { label: 'Projects', path: '/projects' },
   { label: 'Workflows', path: '/workflows' },
   { label: 'Components', path: '/components' },
   { label: 'Agents', path: '/agents' },
@@ -34,7 +35,10 @@ export function Sidebar() {
     >
       <YStack gap="$2" paddingHorizontal="$2">
         {navItems.map((item) => {
-          const isActive = pathname === item.path;
+          // Check if current path matches or is a sub-route
+          const isActive = 
+            pathname === item.path || 
+            (item.path !== '/' && pathname.startsWith(item.path));
           
           return (
             <Button

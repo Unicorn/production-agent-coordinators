@@ -86,6 +86,7 @@ export const workflowsRouter = createTRPCRouter({
           task_queue:task_queues(id, name, description),
           created_by_user:users!workflows_created_by_fkey(id, display_name, email),
           visibility:component_visibility(id, name),
+          project:projects(id, name, description, task_queue_name),
           nodes:workflow_nodes(*),
           edges:workflow_edges(*)
         `)
@@ -119,11 +120,15 @@ export const workflowsRouter = createTRPCRouter({
   // Create workflow
   create: protectedProcedure
     .input(z.object({
-      name: z.string().min(1).max(255),
+      kebabName: z.string()
+        .min(1, 'Kebab name is required')
+        .max(255)
+        .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Kebab name must contain only lowercase letters, numbers, and hyphens'),
       displayName: z.string().min(1).max(255),
       description: z.string().optional(),
       visibility: z.enum(['public', 'private', 'organization']),
-      taskQueueId: z.string().uuid(),
+      projectId: z.string().uuid(),
+      taskQueueId: z.string().uuid().optional(), // If provided, skip lookup
       definition: z.any().optional(), // React Flow JSON
     }))
     .mutation(async ({ ctx, input }) => {
@@ -155,32 +160,74 @@ export const workflowsRouter = createTRPCRouter({
         });
       }
       
-      // Check for duplicate name
+      // Check for duplicate kebab_name (unique constraint on created_by + kebab_name)
       const { data: existing } = await ctx.supabase
         .from('workflows')
         .select('id')
-        .eq('name', input.name)
+        .eq('kebab_name', input.kebabName)
         .eq('created_by', ctx.user.id)
         .single();
       
       if (existing) {
         throw new TRPCError({ 
           code: 'BAD_REQUEST', 
-          message: 'Workflow with this name already exists' 
+          message: 'A workflow with this identifier already exists. Please choose a different identifier.' 
         });
+      }
+      
+      // Verify project ownership
+      const { data: project } = await ctx.supabase
+        .from('projects')
+        .select('id, task_queue_name')
+        .eq('id', input.projectId)
+        .eq('created_by', ctx.user.id)
+        .single();
+      
+      if (!project) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found',
+        });
+      }
+      
+      // Use provided taskQueueId or look it up from project
+      let taskQueueId: string;
+      
+      if (input.taskQueueId) {
+        // Task queue ID provided directly (e.g., from project creation)
+        taskQueueId = input.taskQueueId;
+        console.log('✅ [Workflow Create] Using provided task queue:', taskQueueId);
+      } else {
+        // Look up task queue from project
+        const { data: taskQueue } = await ctx.supabase
+          .from('task_queues')
+          .select('id')
+          .eq('name', project.task_queue_name)
+          .single();
+        
+        if (!taskQueue) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Project task queue not found',
+          });
+        }
+        
+        taskQueueId = taskQueue.id;
+        console.log('✅ [Workflow Create] Looked up task queue:', taskQueueId);
       }
       
       // Create workflow
       const { data: workflow, error } = await ctx.supabase
         .from('workflows')
         .insert({
-          name: input.name,
+          kebab_name: input.kebabName,
           display_name: input.displayName,
           description: input.description,
           created_by: ctx.user.id,
           visibility_id: visibility.id,
           status_id: status.id,
-          task_queue_id: input.taskQueueId,
+          task_queue_id: taskQueueId,
+          project_id: project.id,
           definition: input.definition || { nodes: [], edges: [] },
         })
         .select()
@@ -300,8 +347,8 @@ export const workflowsRouter = createTRPCRouter({
         .from('workflows')
         .update({
           status_id: activeStatus.id,
-          temporal_workflow_id: `${workflow.name}-${Date.now()}`,
-          temporal_workflow_type: workflow.name,
+          temporal_workflow_id: `${workflow.kebab_name}-${Date.now()}`,
+          temporal_workflow_type: workflow.kebab_name,
           deployed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })

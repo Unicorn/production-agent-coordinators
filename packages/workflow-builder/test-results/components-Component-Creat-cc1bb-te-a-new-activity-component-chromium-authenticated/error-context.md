@@ -1,0 +1,79 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e6]: Workflow Builder
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]: Test User
+          - generic [ref=e10]: developer
+        - button "Sign Out" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: Sign Out
+    - generic [ref=e14]:
+      - generic [ref=e16]:
+        - button "Dashboard" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]: Dashboard
+        - button "Projects" [ref=e21] [cursor=pointer]:
+          - generic [ref=e22]: Projects
+        - button "Workflows" [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: Workflows
+        - button "Components" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Components
+        - button "Agents" [ref=e30] [cursor=pointer]:
+          - generic [ref=e31]: Agents
+      - generic [ref=e32]:
+        - heading "Create Component" [level=1] [ref=e33]
+        - generic [ref=e35]:
+          - generic [ref=e36]:
+            - generic [ref=e37]: Name *
+            - textbox "Name *" [ref=e40]:
+              - /placeholder: runBuild
+            - generic [ref=e41]: Internal name (camelCase, no spaces)
+          - generic [ref=e42]:
+            - generic [ref=e43]: Display Name *
+            - textbox "Display Name *" [ref=e46]:
+              - /placeholder: Run Build
+          - generic [ref=e47]:
+            - generic [ref=e48]: Description
+            - textbox "Description" [ref=e51]:
+              - /placeholder: What does this component do?
+          - generic [ref=e52]:
+            - generic [ref=e53]: Component Type *
+            - combobox [ref=e55] [cursor=pointer]:
+              - generic: activity
+              - img [ref=e56]
+          - generic [ref=e58]:
+            - generic [ref=e59]: Version
+            - textbox "Version" [ref=e62]:
+              - /placeholder: 1.0.0
+              - text: 1.0.0
+            - generic [ref=e63]: Semantic version (e.g., 1.0.0)
+          - generic [ref=e64]:
+            - generic [ref=e65]: Visibility
+            - combobox [ref=e67] [cursor=pointer]:
+              - generic: Public
+              - img [ref=e68]
+          - generic [ref=e70]:
+            - generic [ref=e71]: Capabilities
+            - textbox "Capabilities" [ref=e74]:
+              - /placeholder: fix-failing-tests, analyze-errors
+            - generic [ref=e75]: Comma-separated list
+          - generic [ref=e76]:
+            - generic [ref=e77]: Tags
+            - textbox "Tags" [ref=e80]:
+              - /placeholder: build, testing, quality
+            - generic [ref=e81]: Comma-separated list
+          - generic [ref=e82]:
+            - generic [ref=e83]:
+              - switch "Custom Activity (Write Your Own Code)" [ref=e85]
+              - generic [ref=e89]: Custom Activity (Write Your Own Code)
+            - generic [ref=e90]: Enable to write your own TypeScript activity implementation
+          - generic [ref=e91]:
+            - button "Create Component" [ref=e93] [cursor=pointer]:
+              - generic [ref=e94]: Create Component
+            - button "Cancel" [ref=e96] [cursor=pointer]:
+              - generic [ref=e97]: Cancel
+  - alert [ref=e98]
+```

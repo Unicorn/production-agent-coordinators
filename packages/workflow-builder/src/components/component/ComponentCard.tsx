@@ -35,15 +35,13 @@ export function ComponentCard({
 
   const typeColor = typeColors[component.component_type.name] || '$gray10';
 
-  return (
+  const cardContent = (
     <Card
       padding="$3"
       pressStyle={{ scale: 0.98 }}
       hoverStyle={{ backgroundColor: '$gray3' }}
-      cursor="pointer"
+      cursor={draggable ? 'grab' : 'pointer'}
       onPress={onClick}
-      draggable={draggable}
-      onDragStart={onDragStart}
       animation="quick"
     >
       <YStack gap="$2">
@@ -100,5 +98,20 @@ export function ComponentCard({
       </YStack>
     </Card>
   );
+
+  // Wrap in native div for HTML5 drag-and-drop support
+  if (draggable && onDragStart) {
+    return (
+      <div
+        draggable
+        onDragStart={onDragStart}
+        style={{ cursor: 'grab' }}
+      >
+        {cardContent}
+      </div>
+    );
+  }
+
+  return cardContent;
 }
 

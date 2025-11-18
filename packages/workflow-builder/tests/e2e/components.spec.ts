@@ -2,26 +2,18 @@
  * Components Page E2E Tests
  * 
  * Tests component listing, creation, editing, and deletion
+ * 
+ * Note: These tests use authenticated storage state from auth.setup.ts
  */
 
 import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3010';
-const TEST_EMAIL = process.env.TEST_EMAIL || 'test@example.com';
-const TEST_PASSWORD = process.env.TEST_PASSWORD || 'TestPassword123!';
 
 test.describe('Components Page', () => {
   test.beforeEach(async ({ page }) => {
-    // Sign in before each test
-    await page.goto(`${BASE_URL}/auth/signin`);
-    await page.getByRole('textbox', { name: /email/i }).fill(TEST_EMAIL);
-    await page.getByRole('textbox', { name: /password/i }).fill(TEST_PASSWORD);
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await expect(page).toHaveURL(BASE_URL + '/');
-    
-    // Navigate to components page
-    await page.getByRole('button', { name: 'Components' }).click();
-    await expect(page).toHaveURL(`${BASE_URL}/components`);
+    // Navigate to components page - already authenticated
+    await page.goto(`${BASE_URL}/components`);
   });
 
   test('should display components page', async ({ page }) => {
@@ -90,13 +82,7 @@ test.describe('Components Page', () => {
 
 test.describe('Component Creation', () => {
   test.beforeEach(async ({ page }) => {
-    // Sign in and navigate to component creation
-    await page.goto(`${BASE_URL}/auth/signin`);
-    await page.getByRole('textbox', { name: /email/i }).fill(TEST_EMAIL);
-    await page.getByRole('textbox', { name: /password/i }).fill(TEST_PASSWORD);
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await expect(page).toHaveURL(BASE_URL + '/');
-    
+    // Navigate to component creation - already authenticated
     await page.goto(`${BASE_URL}/components/new`);
   });
 

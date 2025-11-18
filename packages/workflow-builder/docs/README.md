@@ -28,7 +28,9 @@ Welcome to the comprehensive documentation for the Workflow Builder system. This
 1. **[Installation](getting-started/installation.md)** - Get the system running
 2. **[System Design](architecture/system-design.md)** - Understand the architecture
 3. **[Building Workflows](user-guide/building-workflows.md)** - Create your first workflow
-4. **[tRPC API](api/trpc-routers.md)** - API endpoints reference
+4. **[Agent Prompts](user-guide/agent-prompts.md)** - Create and test agent prompts
+5. **[System Workflows Setup](system-workflows-setup.md)** - Set up system workflows
+6. **[tRPC API](api/trpc-routers.md)** - API endpoints reference
 
 ### Key Concepts
 
@@ -43,9 +45,12 @@ The Workflow Builder is a visual tool for composing Temporal workflows from reus
 
 - **Visual Workflow Editor** - Drag-and-drop interface for building workflows
 - **Component Library** - Reusable activities, agents, signals, and triggers
+- **Agent Creation Tools** - Manual and AI-assisted agent prompt creation
+- **Agent Testing** - Interactive testing of agent prompts with human-in-the-loop workflows
 - **Temporal Integration** - Direct execution of workflows via Temporal workers
 - **Project Management** - Organize workflows into projects with isolated task queues
 - **Code Compilation** - Automatic generation of executable workflow code
+- **System Workflows** - Built-in workflows for agent testing and system operations
 
 ## Technology Stack
 
@@ -83,6 +88,6 @@ When adding or updating documentation:
 
 ---
 
-**Last Updated**: 2025-11-17  
-**Version**: 0.1.0
+**Last Updated**: 2025-11-18  
+**Version**: 0.2.0
 

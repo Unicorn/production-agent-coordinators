@@ -13,6 +13,7 @@ The Workflow Builder is a visual tool for composing Temporal workflows from reus
 - **[Temporal Integration](temporal-integration.md)** - How workflows execute via Temporal
 - **[Security](security.md)** - Authentication, authorization, and security patterns
 - **[Advanced Patterns](advanced-patterns.md)** - Cron schedules, signals, queries, child workflows
+- **[Human-in-the-Loop Patterns](human-in-the-loop-patterns.md)** - Workflows with human interaction (agent tester)
 
 ## System Components
 

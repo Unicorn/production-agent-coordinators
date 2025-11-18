@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+Do not use commands like `2>&1` or `| head -100` at the end of your terminal calls. For some reason these are causing terminal calls to hang forever and slowing our work down significantly.

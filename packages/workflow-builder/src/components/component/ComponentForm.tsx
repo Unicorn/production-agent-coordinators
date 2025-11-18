@@ -4,11 +4,12 @@
 
 'use client';
 
-import { YStack, XStack, Text, Button, Input, TextArea, Label, Select, Adapt, Sheet } from 'tamagui';
+import { YStack, XStack, Text, Button, Input, TextArea, Label, Select, Adapt, Sheet, Switch } from 'tamagui';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/trpc/client';
 import { Check, ChevronDown } from 'lucide-react';
+import { TypeScriptEditor } from '@/components/code-editor/TypeScriptEditor';
 
 interface ComponentFormProps {
   componentId?: string;
@@ -28,6 +29,9 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
   const [visibility, setVisibility] = useState<string>('public');
   const [capabilities, setCapabilities] = useState('');
   const [tags, setTags] = useState('');
+  const [isCustomActivity, setIsCustomActivity] = useState(false);
+  const [activityCode, setActivityCode] = useState('');
+  const [isCodeValid, setIsCodeValid] = useState(false);
   const [error, setError] = useState('');
 
   const { data: types } = api.components.getTypes.useQuery();
@@ -55,6 +59,19 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
       return;
     }
 
+    // Validate custom activity code if enabled
+    if (isCustomActivity && componentType === 'activity') {
+      if (!activityCode.trim()) {
+        setError('Activity code is required for custom activities');
+        return;
+      }
+      
+      if (!isCodeValid) {
+        setError('Activity code must be valid TypeScript. Please fix errors and validate.');
+        return;
+      }
+    }
+
     createMutation.mutate({
       name: name.trim(),
       displayName: displayName.trim(),
@@ -68,6 +85,9 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
       tags: tags
         ? tags.split(',').map(t => t.trim()).filter(Boolean)
         : undefined,
+      // Custom activity code
+      implementationLanguage: isCustomActivity && activityCode.trim() ? 'typescript' : undefined,
+      implementationCode: isCustomActivity && activityCode.trim() ? activityCode : undefined,
     });
   };
 
@@ -274,6 +294,48 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
             Comma-separated list
           </Text>
         </YStack>
+
+        {/* Custom Activity Code (only for activity type) */}
+        {componentType === 'activity' && (
+          <>
+            <YStack gap="$2">
+              <XStack gap="$3" alignItems="center">
+                <Switch
+                  id="customActivity"
+                  checked={isCustomActivity}
+                  onCheckedChange={setIsCustomActivity}
+                  disabled={createMutation.isLoading}
+                >
+                  <Switch.Thumb animation="quick" />
+                </Switch>
+                <Label htmlFor="customActivity" fontSize="$3" fontWeight="600">
+                  Custom Activity (Write Your Own Code)
+                </Label>
+              </XStack>
+              <Text fontSize="$2" color="$gray11">
+                Enable to write your own TypeScript activity implementation
+              </Text>
+            </YStack>
+
+            {isCustomActivity && (
+              <YStack gap="$2">
+                <Label fontSize="$3" fontWeight="600">
+                  Activity Code *
+                </Label>
+                <Text fontSize="$2" color="$gray11" marginBottom="$2">
+                  Write TypeScript code for your custom activity. Must export an async function.
+                </Text>
+                <TypeScriptEditor
+                  value={activityCode}
+                  onChange={setActivityCode}
+                  height={400}
+                  readOnly={createMutation.isLoading}
+                  onValidationChange={setIsCodeValid}
+                />
+              </YStack>
+            )}
+          </>
+        )}
 
         {/* Actions */}
         <XStack gap="$3" marginTop="$4">

@@ -427,6 +427,190 @@ Delete prompt (with validation).
 
 **Returns**: Success confirmation
 
+### Agent Builder Router (`agentBuilder`)
+
+AI-assisted agent prompt creation.
+
+#### `agentBuilder.startSession`
+Start a new AI-assisted builder session.
+
+**Input**: None  
+**Returns**: 
+```typescript
+{
+  sessionId: string;
+  messages: Message[];
+}
+```
+
+#### `agentBuilder.sendMessage`
+Send a message in the conversation.
+
+**Input**:
+```typescript
+{
+  sessionId: string;
+  message: string;
+}
+```
+
+**Returns**:
+```typescript
+{
+  messages: Message[];
+  response: string;
+  generatedPrompt?: string;
+}
+```
+
+#### `agentBuilder.regeneratePrompt`
+Regenerate the prompt with current conversation context.
+
+**Input**:
+```typescript
+{
+  sessionId: string;
+}
+```
+
+**Returns**:
+```typescript
+{
+  prompt: string;
+  messages: Message[];
+}
+```
+
+#### `agentBuilder.savePrompt`
+Save the generated prompt to agent_prompts table.
+
+**Input**:
+```typescript
+{
+  sessionId: string;
+  name: string;
+  displayName: string;
+  description?: string;
+  version: string;
+  visibility: 'public' | 'private' | 'organization';
+  capabilities?: string[];
+  tags?: string[];
+}
+```
+
+**Returns**: Created agent prompt
+
+#### `agentBuilder.cancelSession`
+Cancel and clean up a session.
+
+**Input**:
+```typescript
+{
+  sessionId: string;
+}
+```
+
+**Returns**: Success confirmation
+
+#### `agentBuilder.getSession`
+Get current session state.
+
+**Input**:
+```typescript
+{
+  sessionId: string;
+}
+```
+
+**Returns**:
+```typescript
+{
+  sessionId: string;
+  messages: Message[];
+  generatedPrompt?: string;
+  metadata: object;
+}
+```
+
+### Agent Tester Router (`agentTester`)
+
+Agent prompt testing with Temporal workflows.
+
+#### `agentTester.startTest`
+Start an agent test workflow.
+
+**Input**:
+```typescript
+{
+  agentPromptId: string;
+  initialMessage?: string;
+}
+```
+
+**Returns**:
+```typescript
+{
+  sessionId: string;
+  workflowId: string;
+  runId: string;
+}
+```
+
+#### `agentTester.sendMessage`
+Send a message to the agent test workflow.
+
+**Input**:
+```typescript
+{
+  workflowId: string;
+  message: string;
+}
+```
+
+**Returns**: Success confirmation
+
+#### `agentTester.getConversation`
+Get current conversation state from workflow.
+
+**Input**:
+```typescript
+{
+  workflowId: string;
+}
+```
+
+**Returns**:
+```typescript
+{
+  messages: Message[];
+  isActive: boolean;
+}
+```
+
+#### `agentTester.endTest`
+End the test session and stop workflow.
+
+**Input**:
+```typescript
+{
+  workflowId: string;
+}
+```
+
+**Returns**: Success confirmation
+
+#### `agentTester.getActiveTest`
+Check if user has active test for an agent.
+
+**Input**:
+```typescript
+{
+  agentPromptId: string;
+}
+```
+
+**Returns**: Test session object or null
+
 ### Task Queues Router (`taskQueues`)
 
 Task queue management.

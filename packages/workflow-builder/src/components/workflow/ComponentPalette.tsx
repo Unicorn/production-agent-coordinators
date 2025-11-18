@@ -15,9 +15,10 @@ type Component = Database['public']['Tables']['components']['Row'] & {
 
 interface ComponentPaletteProps {
   components: Component[];
+  disabled?: boolean;
 }
 
-export function ComponentPalette({ components }: ComponentPaletteProps) {
+export function ComponentPalette({ components, disabled = false }: ComponentPaletteProps) {
   // Group by type
   const groupedComponents = components.reduce((acc, comp) => {
     const type = comp.component_type.name;
@@ -32,11 +33,13 @@ export function ComponentPalette({ components }: ComponentPaletteProps) {
       backgroundColor="$background" 
       borderRightWidth={1} 
       borderColor="$borderColor"
+      opacity={disabled ? 0.5 : 1}
+      pointerEvents={disabled ? 'none' : 'auto'}
     >
       <YStack padding="$4" borderBottomWidth={1} borderColor="$borderColor">
         <Text fontSize="$6" fontWeight="bold">Components</Text>
-        <Text fontSize="$2" color="$gray11" marginTop="$1">
-          Drag to canvas
+        <Text fontSize="$2" color={disabled ? "$red10" : "$gray11"} marginTop="$1">
+          {disabled ? 'Editing disabled (workflow is active)' : 'Drag to canvas'}
         </Text>
       </YStack>
 
@@ -51,7 +54,7 @@ export function ComponentPalette({ components }: ComponentPaletteProps) {
                 color="$gray11"
                 textTransform="capitalize"
               >
-                {type}s
+                {type === 'activity' ? 'Activities' : `${type}s`}
               </Text>
 
               {comps.map((component) => (

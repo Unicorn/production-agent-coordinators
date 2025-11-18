@@ -165,8 +165,8 @@ function WorkflowDetailContent() {
               </XStack>
 
               <XStack justifyContent="space-between">
-                <Text color="$gray11">Name</Text>
-                <Text>{workflow.name}</Text>
+                <Text color="$gray11">Identifier</Text>
+                <Text fontFamily="monospace">{workflow.kebab_name}</Text>
               </XStack>
 
               <XStack justifyContent="space-between">

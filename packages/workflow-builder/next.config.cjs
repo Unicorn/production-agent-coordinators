@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const { withTamagui } = require('@tamagui/next-plugin');
+const webpack = require('webpack');
 
 const nextConfig = {
   transpilePackages: [
@@ -32,6 +33,47 @@ const nextConfig = {
       ...config.resolve.extensions,
     ];
     
+    // Exclude .d.ts files and certain problematic packages from being processed
+    config.module.rules.push({
+      test: /\.d\.ts$/,
+      loader: 'ignore-loader',
+    });
+    
+    // Completely ignore esbuild and webpack modules
+    config.module.rules.push({
+      test: /node_modules\/(esbuild|webpack)\//,
+      use: 'null-loader',
+    });
+    
+    // Exclude Temporal and esbuild packages from webpack bundling
+    // These are Node.js-only packages that should not be bundled
+    if (isServer) {
+      const externals = [
+        '@temporalio/worker',
+        '@temporalio/client',
+        '@temporalio/common',
+        '@temporalio/proto',
+        'esbuild',
+        'webpack',
+      ];
+      
+      // Add to externals
+      if (typeof config.externals === 'function') {
+        const originalExternals = config.externals;
+        config.externals = async (context, request, callback) => {
+          if (externals.some(ext => request.startsWith(ext))) {
+            return callback(null, `commonjs ${request}`);
+          }
+          return originalExternals(context, request, callback);
+        };
+      } else {
+        config.externals = {
+          ...(config.externals || {}),
+          ...externals.reduce((acc, ext) => ({ ...acc, [ext]: `commonjs ${ext}` }), {}),
+        };
+      }
+    }
+    
     // Add fallbacks for Node.js modules not available in browser
     if (!isServer) {
       config.resolve.fallback = {
@@ -47,6 +89,14 @@ const nextConfig = {
       ...(config.ignoreWarnings || []),
       { message: /Unexpected text node/i },
     ];
+    
+    // Completely ignore Temporal worker module and its dependencies
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /@temporalio\/worker/,
+      })
+    );
     
     return config;
   },

@@ -48,7 +48,7 @@ Flexible data stored as JSONB:
 ### User Management
 
 #### `user_roles`
-User role definitions (admin, developer, viewer).
+User role definitions (admin, developer, viewer, system).
 
 **Columns**:
 - `id` (UUID, PK)
@@ -56,6 +56,10 @@ User role definitions (admin, developer, viewer).
 - `description` (TEXT)
 - `permissions` (JSONB) - Role permissions
 - `created_at` (TIMESTAMPTZ)
+
+**Seed Data**: admin, developer, viewer, system
+
+**Note**: The `system` role is used for the system user (`system@example.com`) that owns system workflows like the Agent Tester.
 
 #### `users`
 User accounts linked to Supabase Auth.
@@ -143,6 +147,38 @@ AI agent prompt templates.
 **Indexes**: `created_by`, `visibility_id`, `capabilities` (GIN)
 
 **Unique Constraint**: `(name, version, created_by)`
+
+#### `agent_test_sessions`
+Agent test workflow execution sessions.
+
+**Columns**:
+- `id` (UUID, PK)
+- `agent_prompt_id` (UUID, FK → agent_prompts)
+- `user_id` (UUID, FK → users)
+- `temporal_workflow_id` (VARCHAR(255))
+- `temporal_run_id` (VARCHAR(255))
+- `status` (VARCHAR(50)) - active, completed, cancelled, timeout
+- `conversation_history` (JSONB) - Array of messages
+- `message_count` (INTEGER)
+- `started_at`, `completed_at` (TIMESTAMPTZ)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+**Indexes**: `agent_prompt_id`, `user_id`, `temporal_workflow_id`, `status`, `(user_id, agent_prompt_id, status)` WHERE status = 'active'
+
+#### `agent_builder_sessions`
+AI-assisted builder session tracking (for analytics).
+
+**Columns**:
+- `id` (UUID, PK)
+- `user_id` (UUID, FK → users)
+- `conversation_messages` (JSONB) - Array of messages
+- `resulting_prompt_id` (UUID, FK → agent_prompts, nullable)
+- `status` (VARCHAR(50)) - active, completed, cancelled
+- `message_count` (INTEGER)
+- `started_at`, `completed_at` (TIMESTAMPTZ)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+**Indexes**: `user_id`, `status`, `resulting_prompt_id`
 
 ### Task Queues
 

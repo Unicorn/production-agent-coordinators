@@ -54,6 +54,15 @@ export function WorkflowCanvas({
     },
   });
 
+  const pauseMutation = api.workflows.pause.useMutation({
+    onSuccess: () => {
+      utils.workflows.get.invalidate({ id: workflowId });
+      utils.workflows.list.invalidate();
+      // Reload the page to re-enter edit mode
+      window.location.reload();
+    },
+  });
+
   // Load components for palette
   const { data: componentsData } = api.components.list.useQuery({
     includeDeprecated: false,
@@ -75,6 +84,10 @@ export function WorkflowCanvas({
     await handleSave();
     await deployMutation.mutateAsync({ id: workflowId });
   }, [workflowId, handleSave, deployMutation]);
+
+  const handleEnterEditMode = useCallback(async () => {
+    await pauseMutation.mutateAsync({ id: workflowId });
+  }, [workflowId, pauseMutation]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -124,8 +137,8 @@ export function WorkflowCanvas({
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
+    event.dataTransfer.dropEffect = readOnly ? 'none' : 'move';
+  }, [readOnly]);
 
   // Auto-save on changes (debounced)
   useEffect(() => {
@@ -143,33 +156,58 @@ export function WorkflowCanvas({
   return (
     <XStack flex={1} height="100vh">
       {/* Component Palette (Left Sidebar) */}
-      <ComponentPalette components={componentsData?.components || []} />
+      <ComponentPalette 
+        components={componentsData?.components || []} 
+        disabled={readOnly}
+      />
 
       {/* Main Canvas (Center) */}
-      <YStack flex={1}>
+      <YStack flex={1} position="relative">
         <WorkflowToolbar
           onSave={handleSave}
           onDeploy={handleDeploy}
+          onEnterEditMode={handleEnterEditMode}
           isSaving={saveMutation.isLoading}
           isDeploying={deployMutation.isLoading}
           readOnly={readOnly}
         />
 
-        <div style={{ flex: 1 }} onDrop={onDrop} onDragOver={onDragOver}>
+        <div style={{ flex: 1, position: 'relative' }} onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={readOnly ? undefined : onNodesChange}
+            onEdgesChange={readOnly ? undefined : onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             fitView
+            nodesDraggable={!readOnly}
+            nodesConnectable={!readOnly}
+            elementsSelectable={!readOnly}
           >
             <Background />
             <Controls />
             <MiniMap />
           </ReactFlow>
+          
+          {/* Read-only overlay */}
+          {readOnly && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                backdropFilter: 'blur(1px)',
+                pointerEvents: 'all',
+                cursor: 'not-allowed',
+                zIndex: 5,
+              }}
+            />
+          )}
         </div>
       </YStack>
 

@@ -1,0 +1,60 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e6]: Workflow Builder
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]: Test User
+          - generic [ref=e10]: developer
+        - button "Sign Out" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: Sign Out
+    - generic [ref=e14]:
+      - generic [ref=e16]:
+        - button "Dashboard" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]: Dashboard
+        - button "Projects" [ref=e21] [cursor=pointer]:
+          - generic [ref=e22]: Projects
+        - button "Workflows" [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: Workflows
+        - button "Components" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Components
+        - button "Agents" [ref=e30] [cursor=pointer]:
+          - generic [ref=e31]: Agents
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - heading "Components" [level=1] [ref=e34]
+          - button "New Component" [ref=e36] [cursor=pointer]:
+            - generic [ref=e37]: New Component
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - textbox "Search components..." [ref=e42]
+            - generic [ref=e43]:
+              - button "All" [ref=e45] [cursor=pointer]:
+                - generic [ref=e46]: All
+              - button "activity" [ref=e48] [cursor=pointer]:
+                - generic [ref=e49]: activity
+              - button "agent" [ref=e51] [cursor=pointer]:
+                - generic [ref=e52]: agent
+              - button "query" [ref=e54] [cursor=pointer]:
+                - generic [ref=e55]: query
+              - button "scheduled-workflow" [ref=e57] [cursor=pointer]:
+                - generic [ref=e58]: scheduled-workflow
+              - button "signal" [ref=e60] [cursor=pointer]:
+                - generic [ref=e61]: signal
+              - button "trigger" [ref=e63] [cursor=pointer]:
+                - generic [ref=e64]: trigger
+              - button "work-queue" [ref=e66] [cursor=pointer]:
+                - generic [ref=e67]: work-queue
+          - generic [ref=e68]: 1 component found
+          - generic [ref=e72] [cursor=pointer]:
+            - generic [ref=e73]:
+              - generic [ref=e74]: Fetch API Data
+              - generic [ref=e76]: activity
+            - generic [ref=e77]: Test component
+            - generic [ref=e80]: test
+            - generic [ref=e82]: v1.0.0
+  - alert [ref=e83]
+```

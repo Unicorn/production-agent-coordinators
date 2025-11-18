@@ -5,10 +5,11 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
+import { validateTypeScriptCode, validateActivityStructure, extractExportedFunctions } from '@/lib/typescript-validator';
 
 export const componentsRouter = createTRPCRouter({
   // List all accessible components
-  list: publicProcedure
+  list: protectedProcedure
     .input(z.object({
       type: z.string().optional(),
       capability: z.string().optional(),
@@ -125,6 +126,9 @@ export const componentsRouter = createTRPCRouter({
       // Implementation
       implementationPath: z.string().optional(),
       npmPackage: z.string().optional(),
+      // Custom activity code
+      implementationLanguage: z.string().optional(),
+      implementationCode: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { supabase, user } = ctx;
@@ -172,6 +176,36 @@ export const componentsRouter = createTRPCRouter({
           message: 'Component with this name and version already exists' 
         });
       }
+
+      // Validate custom activity code if provided
+      if (input.implementationCode) {
+        const validation = validateTypeScriptCode(input.implementationCode);
+        
+        if (!validation.valid) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `TypeScript validation failed: ${validation.errors.map(e => e.message).join(', ')}`,
+          });
+        }
+
+        // Validate activity structure
+        const structureValidation = validateActivityStructure(input.implementationCode);
+        if (!structureValidation.valid) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: structureValidation.error || 'Invalid activity structure',
+          });
+        }
+
+        // Extract exported functions for metadata
+        const exportedFunctions = extractExportedFunctions(input.implementationCode);
+        if (exportedFunctions.length === 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Activity code must export at least one function',
+          });
+        }
+      }
       
       // Create component
       const { data, error } = await supabase
@@ -194,6 +228,9 @@ export const componentsRouter = createTRPCRouter({
           model_name: input.modelName || null,
           implementation_path: input.implementationPath || null,
           npm_package: input.npmPackage || null,
+          implementation_language: input.implementationLanguage || null,
+          implementation_code: input.implementationCode || null,
+          is_active: true,
         })
         .select()
         .single();
@@ -335,6 +372,32 @@ export const componentsRouter = createTRPCRouter({
       }
       
       return data;
+    }),
+
+  // Validate TypeScript code
+  validateTypeScript: publicProcedure
+    .input(z.object({
+      code: z.string(),
+    }))
+    .mutation(({ input }) => {
+      const validation = validateTypeScriptCode(input.code, { strict: true });
+      const structureValidation = validateActivityStructure(input.code);
+      const exportedFunctions = extractExportedFunctions(input.code);
+
+      return {
+        valid: validation.valid && structureValidation.valid,
+        errors: [
+          ...validation.errors,
+          ...(structureValidation.valid ? [] : [{ 
+            line: 0, 
+            column: 0, 
+            message: structureValidation.error || 'Invalid structure',
+            code: 0 
+          }]),
+        ],
+        warnings: validation.warnings,
+        exportedFunctions,
+      };
     }),
 });
 

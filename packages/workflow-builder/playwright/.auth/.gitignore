@@ -1,0 +1,3 @@
+# Ignore authentication state files (they contain session cookies)
+user.json
+*.json

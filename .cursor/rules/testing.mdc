@@ -1,0 +1,160 @@
+# Testing Rules
+
+## Automated Testing Standards
+
+### E2E Testing with Playwright
+
+**Test Execution Mode**:
+- **ALWAYS run tests in headless mode** (no browser UI)
+- **NEVER use `--headed` flag** unless explicitly debugging
+- Tests should run automatically without user interaction
+- Tests should exit cleanly without requiring Ctrl+C
+
+**Playwright Configuration**:
+```typescript
+use: {
+  headless: true,  // ALWAYS true
+  screenshot: 'only-on-failure',
+  trace: 'on-first-retry',
+}
+```
+
+**Test Execution Commands**:
+```bash
+# Correct - runs headless
+yarn test:e2e
+npx playwright test
+
+# Incorrect - DO NOT USE
+yarn test:e2e --headed
+npx playwright test --headed
+npx playwright test --debug
+```
+
+### Terminal Command Best Practices
+
+**Avoid Hanging Commands**:
+- **NEVER pipe test output** through `head`, `tail`, or similar commands
+- **NEVER redirect with `2>&1 | head -100`** - causes indefinite hangs
+- Let commands complete naturally and read full output
+- Use Playwright's built-in reporters for output control
+
+**Incorrect**:
+```bash
+# These cause hangs
+playwright test 2>&1 | head -100
+playwright test | grep "ERROR"
+```
+
+**Correct**:
+```bash
+# Let tests run to completion
+playwright test
+playwright test --reporter=list
+```
+
+### Test Organization
+
+**Test Structure**:
+- One test file per major feature
+- Use `describe` blocks for logical grouping
+- Use `beforeEach`/`afterEach` for setup/teardown
+- Clean up ALL test data after each test
+
+**Test Independence**:
+- Tests must run independently
+- No shared state between tests
+- Each test should clean up its own data
+- Tests should work in any order
+
+### Database Test Data
+
+**Cleanup Strategy**:
+```typescript
+// Clean up test data before AND after each test
+test.beforeEach(async () => {
+  await cleanupUserData(TEST_USER.email);
+  // Create test data if needed
+});
+
+test.afterEach(async () => {
+  await cleanupUserData(TEST_USER.email);
+});
+```
+
+**Test Isolation**:
+- Use unique identifiers for test data
+- Delete all related entities (cascading deletes)
+- Verify cleanup in database after test runs
+- Use service role key for admin operations
+
+### Environment Variables
+
+**Test Environment**:
+- Load `.env.local` in Playwright config
+- Use `dotenv.config()` for environment setup
+- Pass environment to test process
+- Never hardcode credentials
+
+**Example**:
+```typescript
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+```
+
+### Test Debugging
+
+**When Tests Fail**:
+1. Check screenshots in `test-results/`
+2. View HTML report: `yarn test:e2e:report`
+3. Review trace files if enabled
+4. Check database state after test
+5. Verify environment variables loaded
+
+**Debug Mode** (use sparingly):
+```bash
+# Only for interactive debugging
+yarn test:e2e:debug
+```
+
+### Test Performance
+
+**Timeouts**:
+- Default: 30 seconds per test
+- Increase for slow operations (workflow compilation)
+- Use `test.setTimeout()` for specific tests
+- Use `await page.waitForLoadState('networkidle')` appropriately
+
+**Parallel Execution**:
+- Default: Sequential (workers: 1)
+- Tests that modify database should run sequentially
+- Can parallelize read-only tests
+
+### Continuous Integration
+
+**CI Configuration**:
+```typescript
+export default defineConfig({
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : 1,
+  use: {
+    headless: true, // ALWAYS headless in CI
+  },
+});
+```
+
+**CI Requirements**:
+- All tests must pass before merge
+- Tests run on every PR
+- No flaky tests allowed
+- Clean up test data automatically
+
+## References
+- **Development Workflow**: See `development-workflow.mdc`
+- **Architecture**: See `architecture.mdc`
+- **Playwright Docs**: https://playwright.dev/docs/intro

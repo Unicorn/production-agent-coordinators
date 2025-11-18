@@ -1,0 +1,55 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: Components
+        - generic [ref=e7]: Drag to canvas
+      - generic [ref=e12]:
+        - generic [ref=e13]: Activities
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e19]: Fetch API Data
+            - generic [ref=e21]: activity
+          - generic [ref=e22]: Test component
+          - generic [ref=e25]: test
+          - generic [ref=e27]: v1.0.0
+    - generic [ref=e28]:
+      - generic [ref=e30]:
+        - button "Save" [ref=e32] [cursor=pointer]:
+          - img [ref=e33]
+          - generic [ref=e37]: Save
+        - button "Deploy" [ref=e39] [cursor=pointer]:
+          - img [ref=e40]
+          - generic [ref=e42]: Deploy
+        - generic [ref=e43]: ✏️ Editing
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - generic:
+            - img
+            - generic:
+              - generic [ref=e53]:
+                - generic [ref=e54]: Trigger
+                - generic [ref=e55]: Start
+              - generic [ref=e60]:
+                - generic [ref=e61]: Agent
+                - generic [ref=e62]: Greet
+                - generic [ref=e63]: MockAgent
+              - generic [ref=e65]: Complete
+        - img [ref=e69]
+        - generic [ref=e71]:
+          - button "zoom in" [ref=e72] [cursor=pointer]:
+            - img [ref=e73]
+          - button "zoom out" [ref=e75] [cursor=pointer]:
+            - img [ref=e76]
+          - button "fit view" [ref=e78] [cursor=pointer]:
+            - img [ref=e79]
+          - button "toggle interactivity" [ref=e81] [cursor=pointer]:
+            - img [ref=e82]
+        - img [ref=e84]
+        - link "React Flow" [ref=e90] [cursor=pointer]:
+          - /url: https://reactflow.dev
+  - alert [ref=e91]
+```

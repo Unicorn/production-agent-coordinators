@@ -21,8 +21,7 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignUp = async () => {
     setError('');
     setLoading(true);
 
@@ -98,105 +97,107 @@ export default function SignUpPage() {
       padding="$4"
     >
       <Card width={400} maxWidth="100%" padding="$6" elevate>
-        <form onSubmit={handleSignUp}>
-          <YStack gap="$4">
-            <YStack gap="$2" alignItems="center">
-              <H1>Sign Up</H1>
-              <Text color="$gray11">Create your Workflow Builder account</Text>
-            </YStack>
-
-            {error && (
-              <Card padding="$3" backgroundColor="$red3" borderColor="$red7" borderWidth={1}>
-                <Text color="$red11" fontSize="$3">
-                  {error}
-                </Text>
-              </Card>
-            )}
-
-            <YStack gap="$2">
-              <Text fontSize="$3" fontWeight="600">
-                Display Name
-              </Text>
-              <Input
-                size="$4"
-                placeholder="John Doe"
-                value={displayName}
-                onChangeText={setDisplayName}
-                autoComplete="name"
-                disabled={loading}
-              />
-            </YStack>
-
-            <YStack gap="$2">
-              <Text fontSize="$3" fontWeight="600">
-                Email
-              </Text>
-              <Input
-                size="$4"
-                placeholder="you@example.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                disabled={loading}
-              />
-            </YStack>
-
-            <YStack gap="$2">
-              <Text fontSize="$3" fontWeight="600">
-                Password
-              </Text>
-              <Input
-                size="$4"
-                placeholder="••••••••"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="new-password"
-                disabled={loading}
-              />
-              <Text fontSize="$2" color="$gray11">
-                Minimum 8 characters
-              </Text>
-            </YStack>
-
-            <YStack gap="$2">
-              <Text fontSize="$3" fontWeight="600">
-                Confirm Password
-              </Text>
-              <Input
-                size="$4"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                autoComplete="new-password"
-                disabled={loading}
-              />
-            </YStack>
-
-            <Button
-              size="$4"
-              theme="blue"
-              onPress={handleSignUp}
-              disabled={loading || !email || !password || !confirmPassword}
-            >
-              {loading ? 'Creating account...' : 'Sign Up'}
-            </Button>
-
-            <XStack gap="$2" justifyContent="center">
-              <Text fontSize="$3" color="$gray11">
-                Already have an account?
-              </Text>
-              <Link href="/auth/signin">
-                <Text fontSize="$3" color="$blue10" fontWeight="600">
-                  Sign In
-                </Text>
-              </Link>
-            </XStack>
+        <YStack gap="$4">
+          <YStack gap="$2" alignItems="center">
+            <H1>Sign Up</H1>
+            <Text color="$gray11">Create your Workflow Builder account</Text>
           </YStack>
-        </form>
+
+          {error && (
+            <Card padding="$3" backgroundColor="$red3" borderColor="$red7" borderWidth={1}>
+              <Text color="$red11" fontSize="$3">
+                {error}
+              </Text>
+            </Card>
+          )}
+
+          <YStack gap="$2">
+            <Text fontSize="$3" fontWeight="600">
+              Display Name
+            </Text>
+            <Input
+              size="$4"
+              placeholder="John Doe"
+              value={displayName}
+              onChangeText={setDisplayName}
+              autoComplete="name"
+              disabled={loading}
+              onSubmitEditing={handleSignUp}
+            />
+          </YStack>
+
+          <YStack gap="$2">
+            <Text fontSize="$3" fontWeight="600">
+              Email
+            </Text>
+            <Input
+              size="$4"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              disabled={loading}
+              onSubmitEditing={handleSignUp}
+            />
+          </YStack>
+
+          <YStack gap="$2">
+            <Text fontSize="$3" fontWeight="600">
+              Password
+            </Text>
+            <Input
+              size="$4"
+              placeholder="••••••••"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="new-password"
+              disabled={loading}
+              onSubmitEditing={handleSignUp}
+            />
+            <Text fontSize="$2" color="$gray11">
+              Minimum 8 characters
+            </Text>
+          </YStack>
+
+          <YStack gap="$2">
+            <Text fontSize="$3" fontWeight="600">
+              Confirm Password
+            </Text>
+            <Input
+              size="$4"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              autoComplete="new-password"
+              disabled={loading}
+              onSubmitEditing={handleSignUp}
+            />
+          </YStack>
+
+          <Button
+            size="$4"
+            theme="blue"
+            onPress={handleSignUp}
+            disabled={loading || !email || !password || !confirmPassword}
+          >
+            {loading ? 'Creating account...' : 'Sign Up'}
+          </Button>
+
+          <XStack gap="$2" justifyContent="center" alignItems="center">
+            <Text fontSize="$3" color="$gray11">
+              Already have an account?{' '}
+            </Text>
+            <Link href="/auth/signin" style={{ textDecoration: 'none' }}>
+              <Text fontSize="$3" color="$blue10" fontWeight="600" cursor="pointer" hoverStyle={{ color: '$blue11' }}>
+                Sign In
+              </Text>
+            </Link>
+          </XStack>
+        </YStack>
       </Card>
     </YStack>
   );
