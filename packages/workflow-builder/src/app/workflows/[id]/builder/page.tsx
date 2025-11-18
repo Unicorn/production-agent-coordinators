@@ -1,19 +1,23 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { api as trpc } from '@/lib/trpc/client';
-import { YStack, XStack, Heading, Text, Spinner, Button } from 'tamagui';
-import { Save, Play, Settings, Code2 } from 'lucide-react';
+import { YStack, XStack, Heading, Text, Spinner, Button, Dialog, Tabs } from 'tamagui';
+import { Save, Play, Settings, Code2, Network, GitBranch, Inbox, Radio, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { TemporalWorkflowCanvas } from '@/components/workflow-builder/TemporalWorkflowCanvas';
+import { WorkflowCanvas } from '@/components/workflow/WorkflowCanvas';
 import { CodePreviewDialog } from '@/components/workflow-builder/CodePreviewDialog';
 import { WorkflowExecutionPanel } from '@/components/workflow-execution/WorkflowExecutionPanel';
+import { WorkerStatus } from '@/components/workflow/WorkerStatus';
+import { WorkQueueConnectionVisualizer } from '@/components/workflow-builder/WorkQueueConnectionVisualizer';
 
 export default function WorkflowBuilderPage() {
   const params = useParams();
+  const router = useRouter();
   const workflowId = params.id as string;
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showCodePreview, setShowCodePreview] = useState(false);
+  const [showConnectionVisualizer, setShowConnectionVisualizer] = useState(false);
   const [compiledCode, setCompiledCode] = useState<any>(null);
   const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
   const [executionData, setExecutionData] = useState<any>(null);
@@ -155,11 +159,66 @@ export default function WorkflowBuilderPage() {
         borderBottomColor="$borderColor"
         bg="$background"
       >
-        <YStack gap="$1">
-          <Heading size="$6">{workflowData.workflow.name}</Heading>
-          <Text fontSize="$3" color="$gray11">
-            {workflowData.workflow.description || 'No description'}
-          </Text>
+        <YStack gap="$2" flex={1}>
+          <Heading size="$6">{workflowData.workflow.display_name}</Heading>
+          <XStack gap="$3" ai="center">
+            <Text fontSize="$3" color="$gray11">
+              {workflowData.workflow.description || 'No description'}
+            </Text>
+            {workflowData.workflow.project_id && (
+              <WorkerStatus 
+                projectId={workflowData.workflow.project_id}
+                projectName={workflowData.workflow.project?.name || 'Project'}
+              />
+            )}
+          </XStack>
+
+          {/* Quick Nav Tabs */}
+          <XStack gap="$2" mt="$2">
+            <Button
+              size="$2"
+              chromeless
+              pressStyle={{ backgroundColor: '$gray4' }}
+            >
+              Builder
+            </Button>
+            <Button
+              size="$2"
+              icon={GitBranch}
+              chromeless
+              pressStyle={{ backgroundColor: '$gray4' }}
+              onPress={() => router.push(`/workflows/${workflowId}/child-workflows`)}
+            >
+              Child Workflows
+            </Button>
+            <Button
+              size="$2"
+              icon={Inbox}
+              chromeless
+              pressStyle={{ backgroundColor: '$gray4' }}
+              onPress={() => router.push(`/workflows/${workflowId}/work-queues`)}
+            >
+              Work Queues
+            </Button>
+            <Button
+              size="$2"
+              icon={Radio}
+              chromeless
+              pressStyle={{ backgroundColor: '$gray4' }}
+              onPress={() => router.push(`/workflows/${workflowId}/signals`)}
+            >
+              Signals
+            </Button>
+            <Button
+              size="$2"
+              icon={Search}
+              chromeless
+              pressStyle={{ backgroundColor: '$gray4' }}
+              onPress={() => router.push(`/workflows/${workflowId}/queries`)}
+            >
+              Queries
+            </Button>
+          </XStack>
         </YStack>
 
         <XStack gap="$2" ai="center">
@@ -204,6 +263,15 @@ export default function WorkflowBuilderPage() {
           >
             View Code
           </Button>
+
+          <Button
+            icon={Network}
+            size="$3"
+            onPress={() => setShowConnectionVisualizer(true)}
+            chromeless
+          >
+            Connections
+          </Button>
         </XStack>
       </XStack>
 
@@ -211,13 +279,10 @@ export default function WorkflowBuilderPage() {
       <XStack f={1} position="relative">
         {/* Workflow Canvas */}
         <YStack f={1}>
-          <TemporalWorkflowCanvas
-            workflow={workflowData.workflow}
-            availableComponents={componentsData?.components || []}
-            workQueues={workQueuesData?.workQueues || []}
-            signals={signalsData?.signals || []}
-            queries={queriesData?.queries || []}
-            onChange={() => setHasUnsavedChanges(true)}
+          <WorkflowCanvas
+            workflowId={workflowId}
+            initialDefinition={workflowData.workflow.definition}
+            readOnly={false}
           />
         </YStack>
 
@@ -242,6 +307,49 @@ export default function WorkflowBuilderPage() {
           tsConfig={compiledCode.tsConfig}
         />
       )}
+
+      {/* Connection Visualizer Dialog */}
+      <Dialog
+        open={showConnectionVisualizer}
+        onOpenChange={setShowConnectionVisualizer}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay
+            key="overlay"
+            animation="quick"
+            opacity={0.5}
+            enterStyle={{ opacity: 0 }}
+            exitStyle={{ opacity: 0 }}
+          />
+          <Dialog.Content
+            bordered
+            elevate
+            key="content"
+            animateOnly={['transform', 'opacity']}
+            animation={[
+              'quick',
+              {
+                opacity: {
+                  overshootClamping: true,
+                },
+              },
+            ]}
+            enterStyle={{ x: 0, y: -20, opacity: 0, scale: 0.9 }}
+            exitStyle={{ x: 0, y: 10, opacity: 0, scale: 0.95 }}
+            gap="$4"
+            p={0}
+          >
+            <WorkQueueConnectionVisualizer
+              nodes={[]} // TODO: Get actual nodes from workflow
+              workflowId={workflowId}
+              signals={signalsData?.signals}
+              queries={queriesData?.queries}
+              workQueues={workQueuesData?.workQueues}
+              onClose={() => setShowConnectionVisualizer(false)}
+            />
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog>
     </YStack>
   );
 }
