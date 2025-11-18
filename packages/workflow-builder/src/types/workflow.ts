@@ -4,7 +4,7 @@
 
 export interface WorkflowNode {
   id: string;
-  type: 'activity' | 'agent' | 'signal' | 'trigger' | 'condition' | 'end';
+  type: 'activity' | 'agent' | 'signal' | 'trigger' | 'condition' | 'end' | 'api-endpoint';
   position: { x: number; y: number };
   data: {
     label: string;

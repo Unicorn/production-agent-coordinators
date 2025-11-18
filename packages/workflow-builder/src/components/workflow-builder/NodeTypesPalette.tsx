@@ -1,7 +1,7 @@
 'use client';
 
 import { YStack, XStack, Text, Card, Button, ScrollView, Input } from 'tamagui';
-import { Activity, Bot, Send, Search, Inbox, Clock, Plus } from 'lucide-react';
+import { Activity, Bot, Send, Search, Inbox, Clock, Plus, Globe } from 'lucide-react';
 import { useState } from 'react';
 
 interface NodeType {
@@ -92,6 +92,17 @@ export function NodeTypesPalette({
       color: '$teal9',
       metadata: q,
     })),
+    
+    // API Endpoint (built-in node type)
+    {
+      id: 'api-endpoint',
+      type: 'api-endpoint' as const,
+      name: 'API Endpoint',
+      description: 'Expose workflow as HTTP API endpoint',
+      icon: Globe,
+      color: '$green9',
+      metadata: {},
+    },
   ];
 
   // Filter by search and category

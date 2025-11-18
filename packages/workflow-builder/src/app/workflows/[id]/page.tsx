@@ -27,9 +27,17 @@ function WorkflowDetailContent() {
   const workflow = workflowData?.workflow;
 
   const deployMutation = api.workflows.deploy.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       utils.workflows.get.invalidate({ id: workflowId });
       utils.workflows.list.invalidate();
+      
+      // Show endpoint URLs if any were registered
+      if (data?.endpoints && data.endpoints.length > 0) {
+        const endpointList = data.endpoints
+          .map((ep: any) => `${ep.method} ${ep.url}`)
+          .join('\n');
+        alert(`✅ Workflow deployed!\n\nAPI Endpoints:\n${endpointList}`);
+      }
     },
   });
 

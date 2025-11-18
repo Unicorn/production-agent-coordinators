@@ -13,6 +13,7 @@ export { AgentNodeComponent as AgentNode };
 export { SignalNodeComponent as SignalNode };
 export { TriggerNodeComponent as TriggerNode };
 export { ChildWorkflowNodeComponent as ChildWorkflowNode };
+export { ApiEndpointNode } from './ApiEndpointNode';
 
 // Node type registry for React Flow
 export const nodeTypes = {
@@ -21,5 +22,6 @@ export const nodeTypes = {
   signal: SignalNodeComponent,
   trigger: TriggerNodeComponent,
   'child-workflow': ChildWorkflowNodeComponent,
+  'api-endpoint': ApiEndpointNode,
 };
 

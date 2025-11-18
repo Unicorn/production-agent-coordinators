@@ -342,6 +342,52 @@ export const workflowsRouter = createTRPCRouter({
       // TODO: Generate TypeScript code (Phase 4)
       // TODO: Register with Temporal (Phase 4)
       
+      // Extract API endpoint nodes from workflow definition
+      const definition = workflow.definition as any;
+      const endpointNodes = (definition?.nodes || []).filter(
+        (node: any) => node.type === 'api-endpoint' && node.data?.config
+      );
+
+      // Register endpoints with Kong if any exist
+      let registeredEndpoints: any[] = [];
+      if (endpointNodes.length > 0) {
+        try {
+          const { registerWorkflowEndpoints } = await import('@/lib/kong/endpoint-registry');
+          
+          // Get project ID
+          const { data: workflowWithProject } = await ctx.supabase
+            .from('workflows')
+            .select('project_id')
+            .eq('id', input.id)
+            .single();
+
+          if (workflowWithProject?.project_id) {
+            const endpoints = endpointNodes.map((node: any) => ({
+              endpointPath: node.data.config.endpointPath || '/',
+              method: node.data.config.method || 'POST',
+              description: node.data.config.description,
+              targetType: node.data.config.targetType || 'start',
+              targetName: node.data.config.targetName || 'start',
+              authType: node.data.config.authType || 'api-key',
+              rateLimitPerMinute: node.data.config.rateLimitPerMinute || 60,
+              rateLimitPerHour: node.data.config.rateLimitPerHour || 1000,
+            }));
+
+            registeredEndpoints = await registerWorkflowEndpoints(
+              input.id,
+              ctx.user.id,
+              workflowWithProject.project_id,
+              endpoints
+            );
+
+            console.log(`✅ Registered ${registeredEndpoints.length} API endpoints`);
+          }
+        } catch (error) {
+          console.error('⚠️  Failed to register API endpoints:', error);
+          // Don't fail deployment if endpoint registration fails
+        }
+      }
+      
       // Update status
       const { data, error } = await ctx.supabase
         .from('workflows')
@@ -363,7 +409,10 @@ export const workflowsRouter = createTRPCRouter({
         });
       }
       
-      return data;
+      return {
+        ...data,
+        endpoints: registeredEndpoints,
+      };
     }),
 
   // Pause workflow

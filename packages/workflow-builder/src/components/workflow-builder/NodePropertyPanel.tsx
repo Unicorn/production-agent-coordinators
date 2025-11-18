@@ -8,14 +8,16 @@ import { CronExpressionBuilder } from '../cron/CronExpressionBuilder';
 interface NodePropertyPanelProps {
   node: {
     id: string;
-    type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'child-workflow';
+    type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'child-workflow' | 'api-endpoint';
     data: Record<string, any>;
   } | null;
   onClose: () => void;
   onSave: (nodeId: string, updates: Record<string, any>) => void;
+  availableSignals?: Array<{ id: string; signal_name: string }>;
+  availableQueries?: Array<{ id: string; query_name: string }>;
 }
 
-export function NodePropertyPanel({ node, onClose, onSave }: NodePropertyPanelProps) {
+export function NodePropertyPanel({ node, onClose, onSave, availableSignals = [], availableQueries = [] }: NodePropertyPanelProps) {
   const [properties, setProperties] = useState(node?.data || {});
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -63,6 +65,7 @@ export function NodePropertyPanel({ node, onClose, onSave }: NodePropertyPanelPr
           {node.type === 'work-queue' && <WorkQueueProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'scheduled-workflow' && <ScheduledWorkflowProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'child-workflow' && <ChildWorkflowProperties properties={properties} onChange={handlePropertyChange} />}
+          {node.type === 'api-endpoint' && <ApiEndpointProperties properties={properties} onChange={handlePropertyChange} availableSignals={availableSignals} availableQueries={availableQueries} />}
         </YStack>
       </ScrollView>
 
@@ -401,6 +404,239 @@ function ChildWorkflowProperties({ properties, onChange }: any) {
           value={properties.blockUntilQueue || ''}
           onChangeText={(v) => onChange('blockUntilQueue', v)}
           placeholder="e.g., prerequisites"
+        />
+      </YStack>
+    </YStack>
+  );
+}
+
+// API Endpoint Properties
+function ApiEndpointProperties({ properties, onChange, availableSignals = [], availableQueries = [] }: any) {
+  const config = properties.config || {};
+  const targetType = config.targetType || 'start';
+
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">API Endpoint Configuration</Text>
+
+      <YStack gap="$2">
+        <Label>HTTP Method</Label>
+        <Select value={config.method || 'POST'} onValueChange={(v) => updateConfig('method', v)}>
+          <Select.Trigger>
+            <Select.Value placeholder="Select method" />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="GET" index={0}>
+                <Select.ItemText>GET</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="POST" index={1}>
+                <Select.ItemText>POST</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="PUT" index={2}>
+                <Select.ItemText>PUT</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="DELETE" index={3}>
+                <Select.ItemText>DELETE</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="PATCH" index={4}>
+                <Select.ItemText>PATCH</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Endpoint Path</Label>
+        <Input
+          value={config.endpointPath || ''}
+          onChangeText={(v) => updateConfig('endpointPath', v)}
+          placeholder="/orders"
+        />
+        <Text fontSize="$1" color="$gray10">
+          Relative path (e.g., /orders, /api/v1/users)
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Description</Label>
+        <TextArea
+          value={config.description || ''}
+          onChangeText={(v) => updateConfig('description', v)}
+          placeholder="What this endpoint does"
+          minHeight={60}
+        />
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <Label>Target Type</Label>
+        <Select value={targetType} onValueChange={(v) => updateConfig('targetType', v)}>
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="start" index={0}>
+                <Select.ItemText>Start Workflow</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="signal" index={1}>
+                <Select.ItemText>Send Signal</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="query" index={2}>
+                <Select.ItemText>Query State</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {targetType === 'signal' && (
+        <YStack gap="$2">
+          <Label>Signal Name</Label>
+          <Select
+            value={config.targetName || ''}
+            onValueChange={(v) => updateConfig('targetName', v)}
+          >
+            <Select.Trigger>
+              <Select.Value placeholder="Select signal" />
+            </Select.Trigger>
+            <Adapt when="sm" platform="touch">
+              <Sheet modal dismissOnSnapToBottom>
+                <Sheet.Frame>
+                  <Sheet.ScrollView>
+                    <Adapt.Contents />
+                  </Sheet.ScrollView>
+                </Sheet.Frame>
+                <Sheet.Overlay />
+              </Sheet>
+            </Adapt>
+            <Select.Content zIndex={200000}>
+              <Select.ScrollUpButton />
+              <Select.Viewport>
+                {availableSignals.map((signal: any, index: number) => (
+                  <Select.Item key={signal.id} value={signal.signal_name} index={index}>
+                    <Select.ItemText>{signal.signal_name}</Select.ItemText>
+                  </Select.Item>
+                ))}
+              </Select.Viewport>
+              <Select.ScrollDownButton />
+            </Select.Content>
+          </Select>
+        </YStack>
+      )}
+
+      {targetType === 'query' && (
+        <YStack gap="$2">
+          <Label>Query Name</Label>
+          <Select
+            value={config.targetName || ''}
+            onValueChange={(v) => updateConfig('targetName', v)}
+          >
+            <Select.Trigger>
+              <Select.Value placeholder="Select query" />
+            </Select.Trigger>
+            <Adapt when="sm" platform="touch">
+              <Sheet modal dismissOnSnapToBottom>
+                <Sheet.Frame>
+                  <Sheet.ScrollView>
+                    <Adapt.Contents />
+                  </Sheet.ScrollView>
+                </Sheet.Frame>
+                <Sheet.Overlay />
+              </Sheet>
+            </Adapt>
+            <Select.Content zIndex={200000}>
+              <Select.ScrollUpButton />
+              <Select.Viewport>
+                {availableQueries.map((query: any, index: number) => (
+                  <Select.Item key={query.id} value={query.query_name} index={index}>
+                    <Select.ItemText>{query.query_name}</Select.ItemText>
+                  </Select.Item>
+                ))}
+              </Select.Viewport>
+              <Select.ScrollDownButton />
+            </Select.Content>
+          </Select>
+        </YStack>
+      )}
+
+      <Separator />
+
+      <YStack gap="$2">
+        <Label>Authentication</Label>
+        <Select
+          value={config.authType || 'api-key'}
+          onValueChange={(v) => updateConfig('authType', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="none" index={0}>
+                <Select.ItemText>None</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="api-key" index={1}>
+                <Select.ItemText>API Key</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="jwt" index={2}>
+                <Select.ItemText>JWT</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Rate Limit (per minute)</Label>
+        <Input
+          value={config.rateLimitPerMinute?.toString() || '60'}
+          onChangeText={(v) => updateConfig('rateLimitPerMinute', parseInt(v) || 60)}
+          keyboardType="numeric"
+          placeholder="60"
         />
       </YStack>
     </YStack>
