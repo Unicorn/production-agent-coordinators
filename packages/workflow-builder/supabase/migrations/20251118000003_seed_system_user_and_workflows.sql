@@ -113,11 +113,10 @@ BEGIN
   -- 7. Create Agent Tester Workflow
   SELECT id INTO agent_tester_workflow_id 
   FROM workflows 
-  WHERE name = 'agent-tester' AND created_by = system_user_id;
+  WHERE kebab_name = 'agent-tester' AND created_by = system_user_id;
   
   IF agent_tester_workflow_id IS NULL THEN
     INSERT INTO workflows (
-      name,
       kebab_name,
       display_name,
       description,

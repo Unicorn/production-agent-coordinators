@@ -22,6 +22,13 @@ export const workflowsRouter = createTRPCRouter({
         .eq('name', 'public')
         .single();
       
+      // Get system user ID to exclude system workflows (like agent tester)
+      const { data: systemUser } = await ctx.supabase
+        .from('users')
+        .select('id')
+        .eq('email', 'system@example.com')
+        .single();
+      
       let query = ctx.supabase
         .from('workflows')
         .select(`
@@ -31,13 +38,16 @@ export const workflowsRouter = createTRPCRouter({
           created_by_user:users!workflows_created_by_fkey(id, display_name)
         `, { count: 'exact' });
       
-      // User can only see their own workflows or public ones
-      if (publicVisibility) {
-        query = query.or(`created_by.eq.${ctx.user.id},visibility_id.eq.${publicVisibility.id}`);
-      } else {
-        // If no public visibility, only show user's own workflows
-        query = query.eq('created_by', ctx.user.id);
+      // Only show user's own workflows (not public, not system workflows)
+      query = query.eq('created_by', ctx.user.id);
+      
+      // Exclude system workflows (agent tester, etc.)
+      if (systemUser) {
+        query = query.neq('created_by', systemUser.id);
       }
+      
+      // Exclude archived workflows
+      query = query.eq('is_archived', false);
       
       if (input.status) {
         const { data: statusData } = await ctx.supabase
@@ -453,40 +463,80 @@ export const workflowsRouter = createTRPCRouter({
       return data;
     }),
 
-  // Delete workflow
-  delete: protectedProcedure
+  // Archive workflow (replaces delete)
+  archive: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       // Check ownership
       const { data: workflow } = await ctx.supabase
         .from('workflows')
-        .select('created_by')
+        .select('created_by, is_archived')
         .eq('id', input.id)
         .single();
       
       if (!workflow || workflow.created_by !== ctx.user.id) {
         throw new TRPCError({ 
           code: 'FORBIDDEN', 
-          message: 'Not authorized to delete this workflow' 
+          message: 'Not authorized to archive this workflow' 
         });
       }
       
-      // Check if workflow has executions
-      const { count } = await ctx.supabase
-        .from('workflow_executions')
-        .select('*', { count: 'exact', head: true })
-        .eq('workflow_id', input.id);
-      
-      if (count && count > 0) {
+      if (workflow.is_archived) {
         throw new TRPCError({ 
           code: 'BAD_REQUEST', 
-          message: `Workflow has ${count} execution(s). Archive it instead of deleting.` 
+          message: 'Workflow is already archived' 
         });
       }
       
       const { error } = await ctx.supabase
         .from('workflows')
-        .delete()
+        .update({ 
+          is_archived: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', input.id);
+      
+      if (error) {
+        throw new TRPCError({ 
+          code: 'INTERNAL_SERVER_ERROR', 
+          message: error.message 
+        });
+      }
+      
+      return { success: true };
+    }),
+
+  // Unarchive workflow
+  unarchive: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Check ownership
+      const { data: workflow } = await ctx.supabase
+        .from('workflows')
+        .select('created_by, is_archived')
+        .eq('id', input.id)
+        .single();
+      
+      if (!workflow || workflow.created_by !== ctx.user.id) {
+        throw new TRPCError({ 
+          code: 'FORBIDDEN', 
+          message: 'Not authorized to unarchive this workflow' 
+        });
+      }
+      
+      if (!workflow.is_archived) {
+        throw new TRPCError({ 
+          code: 'BAD_REQUEST', 
+          message: 'Workflow is not archived' 
+        });
+      }
+      
+      const { error } = await ctx.supabase
+        .from('workflows')
+        .update({ 
+          is_archived: false,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', input.id);
       
       if (error) {

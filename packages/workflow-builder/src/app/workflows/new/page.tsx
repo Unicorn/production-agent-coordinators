@@ -5,7 +5,7 @@
 'use client';
 
 import { YStack, XStack, H1, Button, Input, TextArea, Select, Adapt, Sheet, Card, Text } from 'tamagui';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthGuardWithLoading } from '@/components/shared/AuthGuard';
 import { Header } from '@/components/shared/Header';
@@ -35,6 +35,16 @@ function NewWorkflowContent() {
 
   const { data: projectsData, isLoading: loadingProjects } = api.projects.list.useQuery();
   const projects = projectsData?.projects || [];
+  
+  // Find default project
+  const defaultProject = projects.find(p => p.is_default);
+  
+  // Set default project on mount if available
+  useEffect(() => {
+    if (defaultProject && !selectedProjectId) {
+      setSelectedProjectId(defaultProject.id);
+    }
+  }, [defaultProject, selectedProjectId]);
   
   const createProjectMutation = api.projects.create.useMutation();
   

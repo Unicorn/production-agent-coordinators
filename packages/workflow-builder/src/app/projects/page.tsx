@@ -17,19 +17,24 @@ function ProjectsContent() {
 
   const { data, isLoading, error } = api.projects.list.useQuery();
 
-  const deleteMutation = api.projects.delete.useMutation({
+  const archiveMutation = api.projects.archive.useMutation({
     onSuccess: () => {
       utils.projects.list.invalidate();
     },
   });
 
-  const handleDelete = (projectId: string, projectName: string) => {
+  const handleArchive = (projectId: string, projectName: string, isDefault: boolean) => {
+    if (isDefault) {
+      alert('Cannot archive default project. You can rename it, but not archive it.');
+      return;
+    }
+    
     if (
       confirm(
-        `Are you sure you want to delete "${projectName}"?\n\nThis will also delete all workflows in this project.`
+        `Are you sure you want to archive "${projectName}"?\n\nThis will also archive all workflows in this project. You can unarchive them later.`
       )
     ) {
-      deleteMutation.mutate({ id: projectId });
+      archiveMutation.mutate({ id: projectId });
     }
   };
 
@@ -138,7 +143,7 @@ function ProjectsContent() {
                     project={project}
                     onClick={() => router.push(`/projects/${project.id}`)}
                     onEdit={() => router.push(`/projects/${project.id}`)}
-                    onDelete={() => handleDelete(project.id, project.name)}
+                    onArchive={() => handleArchive(project.id, project.name, project.is_default || false)}
                     showActions
                   />
                 ))}

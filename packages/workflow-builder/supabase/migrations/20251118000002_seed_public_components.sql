@@ -43,25 +43,21 @@ DECLARE
   active_status_id UUID;
 BEGIN
   -- ============================================================================
-  -- STEP 1: ROLES (Create system role if needed)
+  -- STEP 1: ROLES (Get existing roles - system role created in 20251118000000)
   -- ============================================================================
   
-  RAISE NOTICE 'Step 1: Setting up roles...';
+  RAISE NOTICE 'Step 1: Getting role IDs...';
   
-  INSERT INTO user_roles (name, description, permissions)
-  VALUES (
-    'system',
-    'System user for internal workflows',
-    '{"workflows": ["create", "read", "update", "delete"], "components": ["create", "read", "update", "delete"], "agents": ["create", "read", "update", "delete"]}'::JSONB
-  )
-  ON CONFLICT (name) DO NOTHING;
-  
-  -- Get role IDs
+  -- Get role IDs (system role should already exist from migration 20251118000000)
   SELECT id INTO system_role_id FROM user_roles WHERE name = 'system' LIMIT 1;
   SELECT id INTO admin_role_id FROM user_roles WHERE name = 'admin' LIMIT 1;
   SELECT id INTO developer_role_id FROM user_roles WHERE name = 'developer' LIMIT 1;
   
-  RAISE NOTICE '  ✓ Roles configured';
+  IF system_role_id IS NULL THEN
+    RAISE WARNING 'System role not found. Ensure migration 20251118000000 has run.';
+  END IF;
+  
+  RAISE NOTICE '  ✓ Roles retrieved';
   
   -- ============================================================================
   -- STEP 2: AUTH USERS (Create in auth.users FIRST!)
@@ -558,95 +554,14 @@ BEGIN
   RAISE NOTICE '  ✓ Trigger components seeded';
   
   -- ============================================================================
-  -- STEP 10: DEMO WORKFLOWS FOR ALL USERS
+  -- STEP 10: DEMO WORKFLOWS (REMOVED)
   -- ============================================================================
-  
-  RAISE NOTICE 'Step 10: Creating demo workflows for all users...';
-  
-  -- Demo Project (shared by all users)
-  INSERT INTO projects (
-    id,
-    name,
-    description,
-    created_by,
-    task_queue_name,
-    is_active
-  ) VALUES (
-    demo_project_id,
-    'Demo Workflows',
-    'Showcase workflows demonstrating agent coordination patterns',
-    admin_user_id,
-    'default-queue',
-    TRUE
-  )
-  ON CONFLICT (id) DO NOTHING;
-  
-  RAISE NOTICE '  ✓ Demo project created';
-  
-  -- Hello World Workflow (public, visible to all)
-  INSERT INTO workflows (
-    id,
-    kebab_name,
-    display_name,
-    description,
-    version,
-    status_id,
-    visibility_id,
-    created_by,
-    task_queue_id,
-    project_id,
-    definition,
-    temporal_workflow_type
-  ) VALUES (
-    hello_world_workflow_id,
-    'hello-world-demo',
-    'Hello World Demo',
-    'A simple greeting workflow demonstrating the basic agent coordinator system. The agent says hello and the workflow completes.',
-    '1.0.0',
-    active_status_id,
-    public_visibility_id,
-    admin_user_id,
-    default_task_queue_id,
-    demo_project_id,
-    '{"nodes":[{"id":"start-1","type":"trigger","position":{"x":100,"y":100},"data":{"label":"Start","config":{}}},{"id":"agent-1","type":"agent","position":{"x":300,"y":100},"data":{"label":"Greet","componentName":"MockAgent","config":{"workKind":"greet","payload":{"message":"Say hello"}}}},{"id":"end-1","type":"end","position":{"x":500,"y":100},"data":{"label":"Complete","config":{}}}],"edges":[{"id":"e1","source":"start-1","target":"agent-1"},{"id":"e2","source":"agent-1","target":"end-1"}]}'::jsonb,
-    'helloWorldWorkflow'
-  )
-  ON CONFLICT (id) DO NOTHING;
-  
-  RAISE NOTICE '  ✓ Hello World workflow created';
-  
-  -- Agent Conversation Workflow (public, visible to all)
-  INSERT INTO workflows (
-    id,
-    kebab_name,
-    display_name,
-    description,
-    version,
-    status_id,
-    visibility_id,
-    created_by,
-    task_queue_id,
-    project_id,
-    definition,
-    temporal_workflow_type
-  ) VALUES (
-    agent_conversation_workflow_id,
-    'agent-conversation-demo',
-    'Agent Conversation Demo',
-    'Two agents (Alice and Bob) having a conversation about their favorite programming languages.',
-    '1.0.0',
-    active_status_id,
-    public_visibility_id,
-    admin_user_id,
-    default_task_queue_id,
-    demo_project_id,
-    '{"nodes":[{"id":"start-1","type":"trigger","position":{"x":50,"y":200},"data":{"label":"Start Conversation","config":{}}},{"id":"alice-1","type":"agent","position":{"x":250,"y":100},"data":{"label":"Alice Initiates","componentName":"MockAgent","config":{"workKind":"agent_a_initiate","agentRole":"Alice","payload":{"speaker":"Alice","message":"Hi Bob! I''m curious - what''s your favorite programming language and why?"}}}},{"id":"bob-1","type":"agent","position":{"x":450,"y":100},"data":{"label":"Bob Responds","componentName":"MockAgent","config":{"workKind":"agent_b_respond","agentRole":"Bob","payload":{"speaker":"Bob","message":"Hey Alice! I love TypeScript because of its type safety and excellent tooling. What about you?"}}}},{"id":"alice-2","type":"agent","position":{"x":250,"y":300},"data":{"label":"Alice Replies","componentName":"MockAgent","config":{"workKind":"agent_a_reply","agentRole":"Alice","payload":{"speaker":"Alice","message":"Great choice! I''m a fan of Python for its simplicity and amazing data science ecosystem."}}}},{"id":"bob-2","type":"agent","position":{"x":450,"y":300},"data":{"label":"Bob Concludes","componentName":"MockAgent","config":{"workKind":"agent_b_conclude","agentRole":"Bob","payload":{"speaker":"Bob","message":"I have! Python is fantastic for data science and scripting. Nice chatting with you!"}}}},{"id":"end-1","type":"end","position":{"x":350,"y":450},"data":{"label":"Complete","config":{}}}],"edges":[{"id":"e1","source":"start-1","target":"alice-1"},{"id":"e2","source":"alice-1","target":"bob-1"},{"id":"e3","source":"bob-1","target":"alice-2"},{"id":"e4","source":"alice-2","target":"bob-2"},{"id":"e5","source":"bob-2","target":"end-1"}]}'::jsonb,
-    'agentConversationWorkflow'
-  )
-  ON CONFLICT (id) DO NOTHING;
-  
-  RAISE NOTICE '  ✓ Agent Conversation workflow created';
-  RAISE NOTICE '  ✓ Demo workflows are public and visible to all users';
+  -- 
+  -- NOTE: Demo workflows are now created per-user in migration 20251118000005
+  -- This ensures each user gets their own copy that they can archive.
+  -- Old public demo workflows are archived in that migration.
+  --
+  RAISE NOTICE 'Step 10: Skipping public demo workflows (created per-user in migration 20251118000005)';
   
   -- ============================================================================
   -- STEP 11: AGENT TESTER WORKFLOW (System Workflow)
@@ -742,9 +657,8 @@ BEGIN
   RAISE NOTICE '  ✓ Triggers: 3 (Manual, Schedule, Webhook)';
   RAISE NOTICE '  ✓ Agent Prompts: 3 (Code Analyzer, Test Writer, Doc Writer)';
   RAISE NOTICE '';
-  RAISE NOTICE 'DEMO WORKFLOWS (Public - visible to all users):';
-  RAISE NOTICE '  ✓ Hello World Demo: Simple greeting workflow';
-  RAISE NOTICE '  ✓ Agent Conversation Demo: Alice & Bob conversation';
+  RAISE NOTICE 'DEMO WORKFLOWS:';
+  RAISE NOTICE '  ℹ️  Demo workflows are created per-user in migration 20251118000005';
   RAISE NOTICE '';
   RAISE NOTICE 'READY TO USE:';
   RAISE NOTICE '  • All users can see 14 public components + 3 prompts';

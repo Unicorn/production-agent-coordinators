@@ -48,7 +48,7 @@ function WorkflowDetailContent() {
     },
   });
 
-  const deleteMutation = api.workflows.delete.useMutation({
+  const archiveMutation = api.workflows.archive.useMutation({
     onSuccess: () => {
       router.push('/workflows');
     },
@@ -148,16 +148,16 @@ function WorkflowDetailContent() {
 
             <Button
               size="$3"
-              theme="red"
+              theme="orange"
               icon={Trash}
               onPress={() => {
-                if (confirm('Are you sure you want to delete this workflow?')) {
-                  deleteMutation.mutate({ id: workflowId });
+                if (confirm('Are you sure you want to archive this workflow? You can unarchive it later.')) {
+                  archiveMutation.mutate({ id: workflowId });
                 }
               }}
-              disabled={deleteMutation.isLoading}
+              disabled={archiveMutation.isLoading}
             >
-              Delete
+              {archiveMutation.isLoading ? 'Archiving...' : 'Archive'}
             </Button>
           </XStack>
 

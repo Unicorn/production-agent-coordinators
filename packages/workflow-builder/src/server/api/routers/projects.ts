@@ -26,6 +26,7 @@ export const projectsRouter = createTRPCRouter({
         active_workers:workflow_workers(id, status, last_heartbeat)
       `)
       .eq('created_by', userRecord.id)
+      .eq('is_archived', false)
       .order('updated_at', { ascending: false });
     
     if (error) {
@@ -225,13 +226,42 @@ export const projectsRouter = createTRPCRouter({
     }),
   
   /**
-   * Delete project
-   * Note: This will cascade delete all workflows in the project
+   * Archive project (replaces delete)
+   * Archives all workflows in the project as well
    */
-  delete: protectedProcedure
+  archive: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const userRecord = await ctx.getUserRecord();
+      
+      // Check if project exists and user owns it
+      const { data: project } = await ctx.supabase
+        .from('projects')
+        .select('id, created_by, is_default, is_archived')
+        .eq('id', input.id)
+        .single();
+      
+      if (!project || project.created_by !== userRecord.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Not authorized to archive this project',
+        });
+      }
+      
+      // Prevent archiving default project
+      if (project.is_default) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot archive default project. You can rename it, but not archive it.',
+        });
+      }
+      
+      if (project.is_archived) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Project is already archived',
+        });
+      }
       
       // First check if any workers are running
       const { data: workers } = await ctx.supabase
@@ -243,25 +273,141 @@ export const projectsRouter = createTRPCRouter({
       if (workers && workers.length > 0) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
-          message: 'Cannot delete project with running workers. Stop all workers first.',
+          message: 'Cannot archive project with running workers. Stop all workers first.',
         });
       }
       
+      // Archive all workflows in the project
+      await ctx.supabase
+        .from('workflows')
+        .update({ 
+          is_archived: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('project_id', input.id)
+        .eq('is_archived', false);
+      
+      // Archive the project
       const { error } = await ctx.supabase
         .from('projects')
-        .delete()
-        .eq('id', input.id)
-        .eq('created_by', userRecord.id);
+        .update({ 
+          is_archived: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', input.id);
       
       if (error) {
-        console.error('Error deleting project:', error);
+        console.error('Error archiving project:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to delete project',
+          message: 'Failed to archive project',
         });
       }
       
       return { success: true };
+    }),
+
+  /**
+   * Unarchive project
+   */
+  unarchive: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const userRecord = await ctx.getUserRecord();
+      
+      // Check if project exists and user owns it
+      const { data: project } = await ctx.supabase
+        .from('projects')
+        .select('id, created_by, is_archived')
+        .eq('id', input.id)
+        .single();
+      
+      if (!project || project.created_by !== userRecord.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Not authorized to unarchive this project',
+        });
+      }
+      
+      if (!project.is_archived) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Project is not archived',
+        });
+      }
+      
+      // Unarchive the project
+      const { error } = await ctx.supabase
+        .from('projects')
+        .update({ 
+          is_archived: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', input.id);
+      
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to unarchive project',
+        });
+      }
+      
+      return { success: true };
+    }),
+
+  /**
+   * Update project (allows renaming default project)
+   */
+  update: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userRecord = await ctx.getUserRecord();
+      
+      // Check if project exists and user owns it
+      const { data: project } = await ctx.supabase
+        .from('projects')
+        .select('id, created_by, is_default')
+        .eq('id', input.id)
+        .single();
+      
+      if (!project || project.created_by !== userRecord.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Not authorized to update this project',
+        });
+      }
+      
+      const updates: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (input.name !== undefined) {
+        updates.name = input.name;
+      }
+      
+      if (input.description !== undefined) {
+        updates.description = input.description;
+      }
+      
+      const { data, error } = await ctx.supabase
+        .from('projects')
+        .update(updates)
+        .eq('id', input.id)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+      
+      return { project: data };
     }),
   
   /**

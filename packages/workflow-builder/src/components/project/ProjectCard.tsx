@@ -15,10 +15,11 @@ interface ProjectCardProps {
     active_workers?: Array<{ status: string; last_heartbeat: string }>;
     created_at: string;
     updated_at: string;
+    is_default?: boolean;
   };
   onClick?: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
+  onArchive?: () => void;
   showActions?: boolean;
 }
 
@@ -26,7 +27,7 @@ export function ProjectCard({
   project,
   onClick,
   onEdit,
-  onDelete,
+  onArchive,
   showActions = true,
 }: ProjectCardProps) {
   const workflowCount = project.workflow_count?.[0]?.count || 0;
@@ -59,9 +60,18 @@ export function ProjectCard({
         {/* Header */}
         <XStack justifyContent="space-between" alignItems="flex-start">
           <YStack flex={1} gap="$1">
-            <Text fontSize="$6" fontWeight="600">
-              {project.name}
-            </Text>
+            <XStack gap="$2" alignItems="center">
+              <Text fontSize="$6" fontWeight="600">
+                {project.name}
+              </Text>
+              {project.is_default && (
+                <Badge backgroundColor="$blue9" paddingHorizontal="$2" paddingVertical="$1">
+                  <Text fontSize="$1" color="white">
+                    Default
+                  </Text>
+                </Badge>
+              )}
+            </XStack>
             {project.description && (
               <Text fontSize="$3" color="$gray11" numberOfLines={2}>
                 {project.description}
@@ -130,18 +140,18 @@ export function ProjectCard({
                   Edit
                 </Button>
               )}
-              {onDelete && (
+              {onArchive && !project.is_default && (
                 <Button
                   size="$2"
                   icon={Trash}
-                  theme="red"
+                  theme="orange"
                   variant="outlined"
                   onPress={(e) => {
                     e.stopPropagation();
-                    onDelete();
+                    onArchive();
                   }}
                 >
-                  Delete
+                  Archive
                 </Button>
               )}
             </XStack>

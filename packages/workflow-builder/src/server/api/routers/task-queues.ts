@@ -166,14 +166,14 @@ export const taskQueuesRouter = createTRPCRouter({
       return data;
     }),
 
-  // Delete task queue
+  // Delete task queue (prevent deleting default queues)
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      // Check ownership and not system queue
+      // Check ownership and not system/default queue
       const { data: queue } = await ctx.supabase
         .from('task_queues')
-        .select('created_by, is_system_queue')
+        .select('created_by, is_system_queue, is_default')
         .eq('id', input.id)
         .single();
       
@@ -188,6 +188,13 @@ export const taskQueuesRouter = createTRPCRouter({
         throw new TRPCError({ 
           code: 'FORBIDDEN', 
           message: 'Cannot delete system queues' 
+        });
+      }
+      
+      if (queue.is_default) {
+        throw new TRPCError({ 
+          code: 'FORBIDDEN', 
+          message: 'Cannot delete default queue. This is your default queue and cannot be removed.' 
         });
       }
       
