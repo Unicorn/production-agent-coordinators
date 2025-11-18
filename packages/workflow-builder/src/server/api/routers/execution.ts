@@ -414,5 +414,241 @@ export const executionRouter = createTRPCRouter({
         pageSize: input.pageSize,
       };
     }),
+
+  /**
+   * Get detailed execution information including component-level details
+   */
+  getExecutionDetails: protectedProcedure
+    .input(z.object({ executionId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Check database (cache check)
+      const { data: execution, error: execError } = await ctx.supabase
+        .from('workflow_executions')
+        .select('*')
+        .eq('id', input.executionId)
+        .eq('created_by', ctx.user.id)
+        .single();
+
+      if (execError || !execution) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Execution not found',
+        });
+      }
+
+      // Check if needs syncing
+      const { checkSyncStatus, requestSync } = await import('@/lib/temporal/sync-service');
+      const { needsSync } = await checkSyncStatus(input.executionId);
+
+      // If not synced or stale, trigger immediate sync
+      if (needsSync && execution.temporal_workflow_id && execution.temporal_run_id) {
+        await requestSync(input.executionId, true);
+      }
+
+      // Fetch component executions
+      const { data: componentExecutions } = await ctx.supabase
+        .from('component_executions')
+        .select('*')
+        .eq('workflow_execution_id', input.executionId)
+        .order('started_at', { ascending: true });
+
+      return {
+        id: execution.id,
+        workflowId: execution.workflow_id,
+        status: execution.status,
+        startedAt: new Date(execution.started_at),
+        completedAt: execution.completed_at ? new Date(execution.completed_at) : null,
+        durationMs: execution.duration_ms,
+        input: execution.input,
+        output: execution.output,
+        error: execution.error_message,
+        temporalWorkflowId: execution.temporal_workflow_id,
+        temporalRunId: execution.temporal_run_id,
+        historySyncStatus: execution.history_sync_status,
+        historySyncedAt: execution.history_synced_at ? new Date(execution.history_synced_at) : null,
+        componentExecutions: componentExecutions || [],
+      };
+    }),
+
+  /**
+   * Get execution history for a workflow with filtering
+   */
+  getExecutionHistory: protectedProcedure
+    .input(z.object({
+      workflowId: z.string(),
+      page: z.number().default(1),
+      pageSize: z.number().default(20),
+      status: z.enum(['all', 'completed', 'failed', 'running']).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const from = (input.page - 1) * input.pageSize;
+      const to = from + input.pageSize - 1;
+
+      let query = ctx.supabase
+        .from('workflow_executions')
+        .select('*', { count: 'exact' })
+        .eq('workflow_id', input.workflowId)
+        .eq('created_by', ctx.user.id);
+
+      if (input.status && input.status !== 'all') {
+        query = query.eq('status', input.status);
+      }
+
+      const { data, error, count } = await query
+        .order('started_at', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return {
+        executions: data?.map(e => ({
+          id: e.id,
+          status: e.status,
+          startedAt: new Date(e.started_at),
+          completedAt: e.completed_at ? new Date(e.completed_at) : null,
+          durationMs: e.duration_ms,
+          result: e.output,
+          error: e.error_message,
+          historySyncStatus: e.history_sync_status,
+        })) || [],
+        total: count || 0,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    }),
+
+  /**
+   * Manually trigger sync from Temporal (cache-aside pattern)
+   */
+  syncExecutionFromTemporal: protectedProcedure
+    .input(z.object({
+      executionId: z.string(),
+      immediate: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify execution belongs to user
+      const { data: execution } = await ctx.supabase
+        .from('workflow_executions')
+        .select('id')
+        .eq('id', input.executionId)
+        .eq('created_by', ctx.user.id)
+        .single();
+
+      if (!execution) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Execution not found',
+        });
+      }
+
+      // Request sync
+      const { requestSync, waitForSync } = await import('@/lib/temporal/sync-service');
+      const result = await requestSync(input.executionId, input.immediate);
+
+      if (input.immediate && result.synced) {
+        // Wait for sync to complete
+        const waitResult = await waitForSync(input.executionId);
+        return {
+          success: waitResult.success,
+          synced: waitResult.synced,
+          componentExecutionsCount: result.componentExecutionsCount,
+          error: waitResult.error,
+        };
+      }
+
+      return result;
+    }),
+
+  /**
+   * Get aggregated statistics for a workflow
+   */
+  getWorkflowStatistics: protectedProcedure
+    .input(z.object({ workflowId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Verify workflow belongs to user
+      const { data: workflow } = await ctx.supabase
+        .from('workflows')
+        .select('id')
+        .eq('id', input.workflowId)
+        .eq('created_by', ctx.user.id)
+        .single();
+
+      if (!workflow) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Workflow not found',
+        });
+      }
+
+      // Get statistics
+      const { data: stats } = await ctx.supabase
+        .from('workflow_statistics')
+        .select('*')
+        .eq('workflow_id', input.workflowId)
+        .single();
+
+      return stats || {
+        total_runs: 0,
+        successful_runs: 0,
+        failed_runs: 0,
+        avg_duration_ms: null,
+        min_duration_ms: null,
+        max_duration_ms: null,
+        most_used_component_id: null,
+        most_used_component_count: 0,
+        total_errors: 0,
+        last_error_at: null,
+        last_run_at: null,
+      };
+    }),
+
+  /**
+   * Get aggregated statistics for a project
+   */
+  getProjectStatistics: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Verify project belongs to user
+      const { data: project } = await ctx.supabase
+        .from('projects')
+        .select('id')
+        .eq('id', input.projectId)
+        .eq('created_by', ctx.user.id)
+        .single();
+
+      if (!project) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found',
+        });
+      }
+
+      // Get statistics
+      const { data: stats } = await ctx.supabase
+        .from('project_statistics')
+        .select('*')
+        .eq('project_id', input.projectId)
+        .single();
+
+      return stats || {
+        most_used_workflow_id: null,
+        most_used_workflow_count: 0,
+        most_used_component_id: null,
+        most_used_component_count: 0,
+        most_used_task_queue_id: null,
+        most_used_task_queue_count: 0,
+        total_executions: 0,
+        longest_run_duration_ms: null,
+        longest_run_workflow_id: null,
+        total_failures: 0,
+        last_failure_at: null,
+        last_execution_at: null,
+      };
+    }),
 });
 

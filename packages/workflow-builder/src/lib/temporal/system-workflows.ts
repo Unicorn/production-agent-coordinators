@@ -229,6 +229,117 @@ export async function registerAgentTesterWorkflow(
 }
 
 /**
+ * Register sync coordinator workflow in database
+ */
+export async function registerSyncCoordinatorWorkflow(
+  systemUserId: string,
+  projectId: string
+): Promise<string | null> {
+  const supabase = getSupabaseClient();
+  
+  // Get project to find task queue
+  const { data: project } = await supabase
+    .from('projects')
+    .select('task_queue_name')
+    .eq('id', projectId)
+    .single();
+  
+  if (!project) {
+    console.error('❌ System project not found');
+    return null;
+  }
+  
+  // Get task queue ID
+  const { data: taskQueue } = await supabase
+    .from('task_queues')
+    .select('id')
+    .eq('name', project.task_queue_name)
+    .single();
+  
+  if (!taskQueue) {
+    console.error('❌ System task queue not found');
+    return null;
+  }
+  
+  // Check if workflow already exists
+  const { data: existing } = await supabase
+    .from('workflows')
+    .select('id')
+    .eq('kebab_name', 'sync-coordinator')
+    .eq('created_by', systemUserId)
+    .single();
+  
+  if (existing) {
+    return existing.id;
+  }
+  
+  // Get workflow status
+  const { data: activeStatus } = await supabase
+    .from('workflow_statuses')
+    .select('id')
+    .eq('name', 'active')
+    .single();
+  
+  if (!activeStatus) {
+    console.error('❌ Active workflow status not found');
+    return null;
+  }
+  
+  // Get visibility
+  const { data: visibility } = await supabase
+    .from('component_visibility')
+    .select('id')
+    .eq('name', 'public')
+    .single();
+  
+  if (!visibility) {
+    console.error('❌ Public visibility not found');
+    return null;
+  }
+  
+  // Create workflow definition
+  const definition = {
+    nodes: [
+      {
+        id: 'start',
+        type: 'trigger',
+        position: { x: 0, y: 0 },
+        data: { label: 'Start' },
+      },
+    ],
+    edges: [],
+  };
+  
+  // Create workflow
+  const { data: workflow, error } = await supabase
+    .from('workflows')
+    .insert({
+      name: 'sync-coordinator',
+      kebab_name: 'sync-coordinator',
+      display_name: 'Sync Coordinator',
+      description: 'System workflow that coordinates syncing execution history from Temporal to database. Manages queue of executions to sync and spawns child sync workflows.',
+      created_by: systemUserId,
+      status_id: activeStatus.id,
+      task_queue_id: taskQueue.id,
+      project_id: projectId,
+      visibility_id: visibility.id,
+      version: '1.0.0',
+      definition: definition as any,
+      temporal_workflow_type: 'syncCoordinatorWorkflow',
+    })
+    .select('id')
+    .single();
+  
+  if (error) {
+    console.error('❌ Failed to register sync coordinator workflow:', error);
+    return null;
+  }
+  
+  console.log('✅ Sync coordinator workflow registered:', workflow.id);
+  return workflow.id;
+}
+
+/**
  * Initialize all system workflows
  * Call this on app startup
  * Note: This is mainly for verification - the seed migration should have created everything
@@ -252,6 +363,9 @@ export async function initializeSystemWorkflows(): Promise<void> {
   
   // Register agent tester workflow (idempotent - won't create if exists)
   await registerAgentTesterWorkflow(systemUserId, projectId);
+  
+  // Register sync coordinator workflow (idempotent - won't create if exists)
+  await registerSyncCoordinatorWorkflow(systemUserId, projectId);
   
   console.log('✅ System workflows verified');
 }

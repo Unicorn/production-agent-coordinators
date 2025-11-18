@@ -236,6 +236,22 @@ ${indentStr}// Workflow started`;
     case 'agent':
       const activityName = node.data.componentName || toCamelCase(node.id);
       resultVars.set(node.id, resultVar);
+      
+      // Generate retry policy if configured
+      const retryPolicy = node.data.retryPolicy;
+      let retryPolicyCode = '';
+      
+      if (retryPolicy && retryPolicy.strategy !== 'none') {
+        retryPolicyCode = generateRetryPolicyCode(retryPolicy, indentStr);
+      }
+      
+      if (retryPolicyCode) {
+        return `${indentStr}${comment}
+${indentStr}const ${resultVar} = await ${activityName}(input, {
+${retryPolicyCode}
+${indentStr}});`;
+      }
+      
       return `${indentStr}${comment}
 ${indentStr}const ${resultVar} = await ${activityName}(input);`;
     
@@ -466,6 +482,100 @@ function findStartNode(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowNo
   
   // Fallback: return first trigger node
   return triggerNodes[0] || nodes[0] || null;
+}
+
+/**
+ * Generate retry policy code for Temporal activities
+ */
+function generateRetryPolicyCode(
+  retryPolicy: {
+    strategy: 'keep-trying' | 'fail-after-x' | 'exponential-backoff' | 'none';
+    maxAttempts?: number;
+    initialInterval?: string;
+    maxInterval?: string;
+    backoffCoefficient?: number;
+  },
+  indentStr: string
+): string {
+  const lines: string[] = [];
+  
+  lines.push(`${indentStr}  retry: {`);
+  
+  switch (retryPolicy.strategy) {
+    case 'keep-trying':
+      // Infinite retries with exponential backoff
+      lines.push(`${indentStr}    maximumAttempts: Infinity,`);
+      if (retryPolicy.initialInterval) {
+        lines.push(`${indentStr}    initialInterval: '${retryPolicy.initialInterval}',`);
+      } else {
+        lines.push(`${indentStr}    initialInterval: '1s',`);
+      }
+      if (retryPolicy.maxInterval) {
+        lines.push(`${indentStr}    maximumInterval: '${retryPolicy.maxInterval}',`);
+      } else {
+        lines.push(`${indentStr}    maximumInterval: '1h',`);
+      }
+      if (retryPolicy.backoffCoefficient) {
+        lines.push(`${indentStr}    backoffCoefficient: ${retryPolicy.backoffCoefficient},`);
+      } else {
+        lines.push(`${indentStr}    backoffCoefficient: 2.0,`);
+      }
+      break;
+      
+    case 'fail-after-x':
+      // Retry up to maxAttempts times
+      if (retryPolicy.maxAttempts) {
+        lines.push(`${indentStr}    maximumAttempts: ${retryPolicy.maxAttempts},`);
+      } else {
+        lines.push(`${indentStr}    maximumAttempts: 3,`);
+      }
+      if (retryPolicy.initialInterval) {
+        lines.push(`${indentStr}    initialInterval: '${retryPolicy.initialInterval}',`);
+      } else {
+        lines.push(`${indentStr}    initialInterval: '1s',`);
+      }
+      if (retryPolicy.maxInterval) {
+        lines.push(`${indentStr}    maximumInterval: '${retryPolicy.maxInterval}',`);
+      }
+      if (retryPolicy.backoffCoefficient) {
+        lines.push(`${indentStr}    backoffCoefficient: ${retryPolicy.backoffCoefficient},`);
+      }
+      break;
+      
+    case 'exponential-backoff':
+      // Exponential backoff with max attempts
+      if (retryPolicy.maxAttempts) {
+        lines.push(`${indentStr}    maximumAttempts: ${retryPolicy.maxAttempts},`);
+      } else {
+        lines.push(`${indentStr}    maximumAttempts: 5,`);
+      }
+      if (retryPolicy.initialInterval) {
+        lines.push(`${indentStr}    initialInterval: '${retryPolicy.initialInterval}',`);
+      } else {
+        lines.push(`${indentStr}    initialInterval: '1s',`);
+      }
+      if (retryPolicy.maxInterval) {
+        lines.push(`${indentStr}    maximumInterval: '${retryPolicy.maxInterval}',`);
+      } else {
+        lines.push(`${indentStr}    maximumInterval: '1h',`);
+      }
+      if (retryPolicy.backoffCoefficient) {
+        lines.push(`${indentStr}    backoffCoefficient: ${retryPolicy.backoffCoefficient},`);
+      } else {
+        lines.push(`${indentStr}    backoffCoefficient: 2.0,`);
+      }
+      break;
+      
+    case 'none':
+    default:
+      // No retries
+      lines.push(`${indentStr}    maximumAttempts: 1,`);
+      break;
+  }
+  
+  lines.push(`${indentStr}  }`);
+  
+  return lines.join('\n');
 }
 
 /**

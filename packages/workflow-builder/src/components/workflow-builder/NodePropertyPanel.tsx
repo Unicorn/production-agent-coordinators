@@ -4,6 +4,7 @@ import { YStack, XStack, Text, Input, TextArea, Label, Button, ScrollView, Card,
 import { X, Save, Check, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { CronExpressionBuilder } from '../cron/CronExpressionBuilder';
+import { api } from '@/lib/trpc/client';
 
 interface NodePropertyPanelProps {
   node: {
@@ -58,7 +59,7 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
       {/* Content */}
       <ScrollView f={1} showsVerticalScrollIndicator={false}>
         <YStack gap="$4">
-          {node.type === 'activity' && <ActivityProperties properties={properties} onChange={handlePropertyChange} />}
+          {node.type === 'activity' && <ActivityProperties properties={properties} onChange={handlePropertyChange} node={node} />}
           {node.type === 'agent' && <AgentProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'signal' && <SignalProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'query' && <QueryProperties properties={properties} onChange={handlePropertyChange} />}
@@ -92,7 +93,22 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
 }
 
 // Activity Properties
-function ActivityProperties({ properties, onChange }: any) {
+function ActivityProperties({ properties, onChange, node }: any) {
+  const componentName = properties.componentName || node?.data?.componentName;
+  
+  // Show specialized properties for database components
+  if (componentName === 'postgresql-query') {
+    return <PostgreSQLProperties properties={properties} onChange={onChange} />;
+  }
+  
+  if (componentName === 'redis-command') {
+    return <RedisProperties properties={properties} onChange={onChange} />;
+  }
+  
+  if (componentName === 'typescript-processor') {
+    return <TypeScriptProperties properties={properties} onChange={onChange} />;
+  }
+  
   return (
     <YStack gap="$3">
       <Text fontSize="$4" fontWeight="600">Activity Configuration</Text>
@@ -125,25 +141,105 @@ function ActivityProperties({ properties, onChange }: any) {
         />
       </YStack>
 
+      <Separator />
+      
       <YStack gap="$2">
         <Label>Retry Policy</Label>
-        <Card bg="$gray2" p="$3">
+        <Select
+          value={properties.retryPolicy?.strategy || 'none'}
+          onValueChange={(v) => onChange('retryPolicy', {
+            ...properties.retryPolicy,
+            strategy: v,
+          })}
+        >
+          <Select.Trigger iconAfter={ChevronDown}>
+            <Select.Value placeholder="Select retry strategy" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Viewport>
+              <Select.Item index={0} value="none">
+                <Select.ItemText>No retries</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={1} value="keep-trying">
+                <Select.ItemText>Keep trying until success</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={2} value="fail-after-x">
+                <Select.ItemText>Fail after X attempts</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={3} value="exponential-backoff">
+                <Select.ItemText>Exponential backoff</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {properties.retryPolicy?.strategy === 'fail-after-x' && (
+        <YStack gap="$2">
+          <Label>Max Attempts</Label>
+          <Input
+            value={properties.retryPolicy?.maxAttempts?.toString() || ''}
+            onChangeText={(v) => onChange('retryPolicy', {
+              ...properties.retryPolicy,
+              maxAttempts: v ? parseInt(v, 10) : undefined,
+            })}
+            placeholder="e.g., 3"
+            keyboardType="numeric"
+          />
+        </YStack>
+      )}
+
+      {properties.retryPolicy?.strategy === 'exponential-backoff' && (
+        <YStack gap="$3">
           <YStack gap="$2">
+            <Label>Max Attempts</Label>
             <Input
-              placeholder="Max Attempts"
-              value={properties.retryMaxAttempts || ''}
-              onChangeText={(v) => onChange('retryMaxAttempts', v)}
-              keyboardType="numeric"
-            />
-            <Input
-              placeholder="Initial Interval (ms)"
-              value={properties.retryInitialInterval || ''}
-              onChangeText={(v) => onChange('retryInitialInterval', v)}
+              value={properties.retryPolicy?.maxAttempts?.toString() || ''}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                maxAttempts: v ? parseInt(v, 10) : undefined,
+              })}
+              placeholder="e.g., 5"
               keyboardType="numeric"
             />
           </YStack>
-        </Card>
-      </YStack>
+          <YStack gap="$2">
+            <Label>Initial Interval</Label>
+            <Input
+              value={properties.retryPolicy?.initialInterval || ''}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                initialInterval: v,
+              })}
+              placeholder="e.g., 1s, 5m"
+            />
+            <Text fontSize="$1" color="$gray11">Format: 1s, 5m, 1h</Text>
+          </YStack>
+          <YStack gap="$2">
+            <Label>Max Interval</Label>
+            <Input
+              value={properties.retryPolicy?.maxInterval || ''}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                maxInterval: v,
+              })}
+              placeholder="e.g., 1h"
+            />
+          </YStack>
+          <YStack gap="$2">
+            <Label>Backoff Coefficient</Label>
+            <Input
+              value={properties.retryPolicy?.backoffCoefficient?.toString() || ''}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                backoffCoefficient: v ? parseFloat(v) : undefined,
+              })}
+              placeholder="e.g., 2.0"
+              keyboardType="decimal-pad"
+            />
+          </YStack>
+        </YStack>
+      )}
     </YStack>
   );
 }
@@ -1101,6 +1197,362 @@ function StateVariableProperties({ properties, onChange }: any) {
           />
         </YStack>
       )}
+    </YStack>
+  );
+}
+
+// PostgreSQL Properties
+function PostgreSQLProperties({ properties, onChange }: any) {
+  const projectId = properties.projectId;
+  const { data: connections } = api.connections.list.useQuery(
+    { projectId: projectId! },
+    { enabled: !!projectId }
+  );
+
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">PostgreSQL Query</Text>
+
+      <YStack gap="$2">
+        <Label>Connection</Label>
+        <Select
+          value={properties.connectionId || ''}
+          onValueChange={(v) => onChange('connectionId', v)}
+        >
+          <Select.Trigger>
+            <Select.Value placeholder="Select connection" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Viewport>
+              {connections?.connections.map((conn) => (
+                <Select.Item key={conn.id} value={conn.id}>
+                  <Select.ItemText>{conn.name}</Select.ItemText>
+                </Select.Item>
+              ))}
+            </Select.Viewport>
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Query</Label>
+        <TextArea
+          value={properties.query || ''}
+          onChangeText={(v) => onChange('query', v)}
+          placeholder="SELECT * FROM users WHERE id = $1"
+          fontFamily="$mono"
+          numberOfLines={6}
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Parameters (JSON array)</Label>
+        <TextArea
+          value={properties.parameters ? JSON.stringify(properties.parameters, null, 2) : ''}
+          onChangeText={(v) => {
+            try {
+              const parsed = JSON.parse(v);
+              onChange('parameters', parsed);
+            } catch {
+              // Invalid JSON, ignore
+            }
+          }}
+          placeholder='["value1", "value2"]'
+          fontFamily="$mono"
+          numberOfLines={3}
+        />
+      </YStack>
+
+      <Separator />
+      
+      <YStack gap="$2">
+        <Label>Retry Policy</Label>
+        <Select
+          value={properties.retryPolicy?.strategy || 'exponential-backoff'}
+          onValueChange={(v) => onChange('retryPolicy', {
+            ...properties.retryPolicy,
+            strategy: v,
+          })}
+        >
+          <Select.Trigger iconAfter={ChevronDown}>
+            <Select.Value placeholder="Select retry strategy" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Viewport>
+              <Select.Item index={0} value="keep-trying">
+                <Select.ItemText>Keep trying until success</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={1} value="fail-after-x">
+                <Select.ItemText>Fail after X attempts</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={2} value="exponential-backoff">
+                <Select.ItemText>Exponential backoff</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={3} value="none">
+                <Select.ItemText>No retries</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {properties.retryPolicy?.strategy === 'fail-after-x' && (
+        <YStack gap="$2">
+          <Label>Max Attempts</Label>
+          <Input
+            value={properties.retryPolicy?.maxAttempts?.toString() || ''}
+            onChangeText={(v) => onChange('retryPolicy', {
+              ...properties.retryPolicy,
+              maxAttempts: v ? parseInt(v, 10) : undefined,
+            })}
+            placeholder="e.g., 3"
+            keyboardType="numeric"
+          />
+        </YStack>
+      )}
+
+      {properties.retryPolicy?.strategy === 'exponential-backoff' && (
+        <YStack gap="$3">
+          <YStack gap="$2">
+            <Label>Max Attempts</Label>
+            <Input
+              value={properties.retryPolicy?.maxAttempts?.toString() || ''}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                maxAttempts: v ? parseInt(v, 10) : undefined,
+              })}
+              placeholder="e.g., 5"
+              keyboardType="numeric"
+            />
+          </YStack>
+          <YStack gap="$2">
+            <Label>Initial Interval</Label>
+            <Input
+              value={properties.retryPolicy?.initialInterval || '1s'}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                initialInterval: v,
+              })}
+              placeholder="e.g., 1s, 5m"
+            />
+          </YStack>
+        </YStack>
+      )}
+    </YStack>
+  );
+}
+
+// Redis Properties
+function RedisProperties({ properties, onChange }: any) {
+  const projectId = properties.projectId;
+  const { data: connections } = api.connections.list.useQuery(
+    { projectId: projectId! },
+    { enabled: !!projectId }
+  );
+
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">Redis Command</Text>
+
+      <YStack gap="$2">
+        <Label>Connection</Label>
+        <Select
+          value={properties.connectionId || ''}
+          onValueChange={(v) => onChange('connectionId', v)}
+        >
+          <Select.Trigger>
+            <Select.Value placeholder="Select connection" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Viewport>
+              {connections?.connections.map((conn) => (
+                <Select.Item key={conn.id} value={conn.id}>
+                  <Select.ItemText>{conn.name}</Select.ItemText>
+                </Select.Item>
+              ))}
+            </Select.Viewport>
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Command</Label>
+        <Select
+          value={properties.command || 'GET'}
+          onValueChange={(v) => onChange('command', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Viewport>
+              <Select.Item value="GET">GET</Select.Item>
+              <Select.Item value="SET">SET</Select.Item>
+              <Select.Item value="DEL">DEL</Select.Item>
+              <Select.Item value="EXISTS">EXISTS</Select.Item>
+              <Select.Item value="INCR">INCR</Select.Item>
+              <Select.Item value="DECR">DECR</Select.Item>
+            </Select.Viewport>
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Key</Label>
+        <Input
+          value={properties.key || ''}
+          onChangeText={(v) => onChange('key', v)}
+          placeholder="e.g., user:123"
+        />
+      </YStack>
+
+      {(properties.command === 'SET') && (
+        <YStack gap="$2">
+          <Label>Value</Label>
+          <TextArea
+            value={properties.value || ''}
+            onChangeText={(v) => onChange('value', v)}
+            placeholder="Value to set"
+            numberOfLines={3}
+          />
+        </YStack>
+      )}
+
+      <Separator />
+      
+      <YStack gap="$2">
+        <Label>Retry Policy</Label>
+        <Select
+          value={properties.retryPolicy?.strategy || 'exponential-backoff'}
+          onValueChange={(v) => onChange('retryPolicy', {
+            ...properties.retryPolicy,
+            strategy: v,
+          })}
+        >
+          <Select.Trigger iconAfter={ChevronDown}>
+            <Select.Value placeholder="Select retry strategy" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Viewport>
+              <Select.Item index={0} value="keep-trying">
+                <Select.ItemText>Keep trying until success</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={1} value="fail-after-x">
+                <Select.ItemText>Fail after X attempts</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={2} value="exponential-backoff">
+                <Select.ItemText>Exponential backoff</Select.ItemText>
+              </Select.Item>
+              <Select.Item index={3} value="none">
+                <Select.ItemText>No retries</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {properties.retryPolicy?.strategy === 'fail-after-x' && (
+        <YStack gap="$2">
+          <Label>Max Attempts</Label>
+          <Input
+            value={properties.retryPolicy?.maxAttempts?.toString() || ''}
+            onChangeText={(v) => onChange('retryPolicy', {
+              ...properties.retryPolicy,
+              maxAttempts: v ? parseInt(v, 10) : undefined,
+            })}
+            placeholder="e.g., 3"
+            keyboardType="numeric"
+          />
+        </YStack>
+      )}
+
+      {properties.retryPolicy?.strategy === 'exponential-backoff' && (
+        <YStack gap="$3">
+          <YStack gap="$2">
+            <Label>Max Attempts</Label>
+            <Input
+              value={properties.retryPolicy?.maxAttempts?.toString() || ''}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                maxAttempts: v ? parseInt(v, 10) : undefined,
+              })}
+              placeholder="e.g., 5"
+              keyboardType="numeric"
+            />
+          </YStack>
+          <YStack gap="$2">
+            <Label>Initial Interval</Label>
+            <Input
+              value={properties.retryPolicy?.initialInterval || '1s'}
+              onChangeText={(v) => onChange('retryPolicy', {
+                ...properties.retryPolicy,
+                initialInterval: v,
+              })}
+              placeholder="e.g., 1s, 5m"
+            />
+          </YStack>
+        </YStack>
+      )}
+    </YStack>
+  );
+}
+
+// TypeScript Properties
+function TypeScriptProperties({ properties, onChange }: any) {
+  return (
+    <YStack gap="$3">
+      <Text fontSize="$4" fontWeight="600">TypeScript Processor</Text>
+
+      <YStack gap="$2">
+        <Label>Code</Label>
+        <TextArea
+          value={properties.code || ''}
+          onChangeText={(v) => onChange('code', v)}
+          placeholder="// Process input data
+export async function process(input: any): Promise<any> {
+  // Your code here
+  return input;
+}"
+          fontFamily="$mono"
+          numberOfLines={12}
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Input Schema (JSON)</Label>
+        <TextArea
+          value={properties.inputSchema ? JSON.stringify(properties.inputSchema, null, 2) : ''}
+          onChangeText={(v) => {
+            try {
+              const parsed = JSON.parse(v);
+              onChange('inputSchema', parsed);
+            } catch {
+              // Invalid JSON, ignore
+            }
+          }}
+          placeholder='{"type": "object", "properties": {...}}'
+          fontFamily="$mono"
+          numberOfLines={4}
+        />
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Output Schema (JSON)</Label>
+        <TextArea
+          value={properties.outputSchema ? JSON.stringify(properties.outputSchema, null, 2) : ''}
+          onChangeText={(v) => {
+            try {
+              const parsed = JSON.parse(v);
+              onChange('outputSchema', parsed);
+            } catch {
+              // Invalid JSON, ignore
+            }
+          }}
+          placeholder='{"type": "object", "properties": {...}}'
+          fontFamily="$mono"
+          numberOfLines={4}
+        />
+      </YStack>
     </YStack>
   );
 }

@@ -4,7 +4,7 @@
 
 'use client';
 
-import { YStack, XStack, H1, Text, Button, Card, Separator, Spinner } from 'tamagui';
+import { YStack, XStack, H1, Text, Button, Card, Separator, Spinner, Tabs } from 'tamagui';
 import { Badge } from '@/components/shared/Badge';
 import { useRouter, useParams } from 'next/navigation';
 import { AuthGuardWithLoading } from '@/components/shared/AuthGuard';
@@ -12,13 +12,19 @@ import { Header } from '@/components/shared/Header';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { api } from '@/lib/trpc/client';
 import { formatDistanceToNow } from 'date-fns';
-import { Edit, Play, Pause, Trash } from 'lucide-react';
+import { Edit, Play, Pause, Trash, History, BarChart3 } from 'lucide-react';
+import { ExecutionHistoryList } from '@/components/execution/ExecutionHistoryList';
+import { ExecutionDetailView } from '@/components/execution/ExecutionDetailView';
+import { WorkflowStatisticsPanel } from '@/components/execution/WorkflowStatisticsPanel';
+import { useState } from 'react';
 
 function WorkflowDetailContent() {
   const router = useRouter();
   const params = useParams();
   const workflowId = params.id as string;
   const utils = api.useUtils();
+  const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const { data: workflowData, isLoading, error } = api.workflows.get.useQuery({ 
     id: workflowId 
@@ -161,70 +167,122 @@ function WorkflowDetailContent() {
             </Button>
           </XStack>
 
-          {/* Metadata */}
-          <Card padding="$4" elevate>
-            <YStack gap="$3">
-              <Text fontSize="$5" fontWeight="600">Workflow Details</Text>
-              <Separator />
-
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">ID</Text>
-                <Text fontFamily="monospace" fontSize="$2">{workflow.id}</Text>
-              </XStack>
-
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">Identifier</Text>
-                <Text fontFamily="monospace">{workflow.kebab_name}</Text>
-              </XStack>
-
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">Version</Text>
-                <Text>{workflow.version}</Text>
-              </XStack>
-
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">Task Queue</Text>
-                <Text>{workflow.task_queue?.name || 'Not set'}</Text>
-              </XStack>
-
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">Nodes</Text>
-                <Text>{nodeCount}</Text>
-              </XStack>
-
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">Connections</Text>
-                <Text>{edgeCount}</Text>
-              </XStack>
-
-              {workflow.deployed_at && (
-                <XStack justifyContent="space-between">
-                  <Text color="$gray11">Deployed</Text>
-                  <Text>
-                    {formatDistanceToNow(new Date(workflow.deployed_at), { addSuffix: true })}
-                  </Text>
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} flex={1}>
+            <Tabs.List>
+              <Tabs.Tab value="overview">
+                <Text>Overview</Text>
+              </Tabs.Tab>
+              <Tabs.Tab value="history">
+                <XStack gap="$2" ai="center">
+                  <History size={16} />
+                  <Text>Execution History</Text>
                 </XStack>
-              )}
+              </Tabs.Tab>
+              <Tabs.Tab value="statistics">
+                <XStack gap="$2" ai="center">
+                  <BarChart3 size={16} />
+                  <Text>Statistics</Text>
+                </XStack>
+              </Tabs.Tab>
+            </Tabs.List>
 
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">Created</Text>
-                <Text>
-                  {workflow.created_at 
-                    ? formatDistanceToNow(new Date(workflow.created_at), { addSuffix: true })
-                    : 'Unknown'}
-                </Text>
-              </XStack>
+            <Tabs.Content value="overview">
+              {/* Metadata */}
+              <Card padding="$4" elevate>
+                <YStack gap="$3">
+                  <Text fontSize="$5" fontWeight="600">Workflow Details</Text>
+                  <Separator />
 
-              <XStack justifyContent="space-between">
-                <Text color="$gray11">Updated</Text>
-                <Text>
-                  {workflow.updated_at 
-                    ? formatDistanceToNow(new Date(workflow.updated_at), { addSuffix: true })
-                    : 'Unknown'}
-                </Text>
-              </XStack>
-            </YStack>
-          </Card>
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">ID</Text>
+                    <Text fontFamily="monospace" fontSize="$2">{workflow.id}</Text>
+                  </XStack>
+
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">Identifier</Text>
+                    <Text fontFamily="monospace">{workflow.kebab_name}</Text>
+                  </XStack>
+
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">Version</Text>
+                    <Text>{workflow.version}</Text>
+                  </XStack>
+
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">Task Queue</Text>
+                    <Text>{workflow.task_queue?.name || 'Not set'}</Text>
+                  </XStack>
+
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">Nodes</Text>
+                    <Text>{nodeCount}</Text>
+                  </XStack>
+
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">Connections</Text>
+                    <Text>{edgeCount}</Text>
+                  </XStack>
+
+                  {workflow.deployed_at && (
+                    <XStack justifyContent="space-between">
+                      <Text color="$gray11">Deployed</Text>
+                      <Text>
+                        {formatDistanceToNow(new Date(workflow.deployed_at), { addSuffix: true })}
+                      </Text>
+                    </XStack>
+                  )}
+
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">Created</Text>
+                    <Text>
+                      {workflow.created_at 
+                        ? formatDistanceToNow(new Date(workflow.created_at), { addSuffix: true })
+                        : 'Unknown'}
+                    </Text>
+                  </XStack>
+
+                  <XStack justifyContent="space-between">
+                    <Text color="$gray11">Updated</Text>
+                    <Text>
+                      {workflow.updated_at 
+                        ? formatDistanceToNow(new Date(workflow.updated_at), { addSuffix: true })
+                        : 'Unknown'}
+                    </Text>
+                  </XStack>
+                </YStack>
+              </Card>
+            </Tabs.Content>
+
+            <Tabs.Content value="history">
+              <YStack gap="$3" flex={1}>
+                {selectedExecutionId ? (
+                  <>
+                    <Button
+                      size="$3"
+                      onPress={() => setSelectedExecutionId(null)}
+                      variant="outlined"
+                    >
+                      ← Back to History
+                    </Button>
+                    <ExecutionDetailView
+                      executionId={selectedExecutionId}
+                      workflowId={workflowId}
+                    />
+                  </>
+                ) : (
+                  <ExecutionHistoryList
+                    workflowId={workflowId}
+                    onSelectExecution={setSelectedExecutionId}
+                  />
+                )}
+              </YStack>
+            </Tabs.Content>
+
+            <Tabs.Content value="statistics">
+              <WorkflowStatisticsPanel workflowId={workflowId} />
+            </Tabs.Content>
+          </Tabs>
         </YStack>
       </XStack>
     </YStack>

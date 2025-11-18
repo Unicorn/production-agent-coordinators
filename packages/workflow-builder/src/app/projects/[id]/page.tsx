@@ -1,6 +1,6 @@
 'use client';
 
-import { YStack, XStack, H1, H2, Button, Input, TextArea, Card, Text, Spinner, Separator } from 'tamagui';
+import { YStack, XStack, H1, H2, Button, Input, TextArea, Card, Text, Spinner, Separator, Tabs } from 'tamagui';
 import { Badge } from '@/components/shared/Badge';
 import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -9,7 +9,9 @@ import { Header } from '@/components/shared/Header';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { api } from '@/lib/trpc/client';
 import { formatDistanceToNow } from 'date-fns';
-import { Edit, Trash, Save, X, ExternalLink, Play, Square } from 'lucide-react';
+import { Edit, Trash, Save, X, ExternalLink, Play, Square, BarChart3, Database } from 'lucide-react';
+import { ProjectStatisticsPanel } from '@/components/execution/ProjectStatisticsPanel';
+import { ConnectionManager } from '@/components/project/ConnectionManager';
 
 function ProjectDetailContent() {
   const router = useRouter();
@@ -266,67 +268,98 @@ function ProjectDetailContent() {
             </YStack>
           </Card>
 
-          {/* Workflows in Project */}
-          <Card padding="$4" elevate>
-            <YStack gap="$3">
-              <XStack justifyContent="space-between" alignItems="center">
-                <H2 fontSize="$5">Workflows ({workflowsInProject.length})</H2>
-                <Button
-                  size="$3"
-                  theme="blue"
-                  onPress={() => router.push(`/workflows/new?projectId=${projectId}`)}
-                >
-                  New Workflow
-                </Button>
-              </XStack>
-              <Separator />
+          {/* Tabs */}
+          <Tabs defaultValue="workflows" flex={1}>
+            <Tabs.List>
+              <Tabs.Tab value="workflows">
+                <Text>Workflows</Text>
+              </Tabs.Tab>
+              <Tabs.Tab value="statistics">
+                <XStack gap="$2" ai="center">
+                  <BarChart3 size={16} />
+                  <Text>Statistics</Text>
+                </XStack>
+              </Tabs.Tab>
+              <Tabs.Tab value="connections">
+                <XStack gap="$2" ai="center">
+                  <Database size={16} />
+                  <Text>Connections</Text>
+                </XStack>
+              </Tabs.Tab>
+            </Tabs.List>
 
-              {workflowsInProject.length === 0 ? (
-                <YStack padding="$4" alignItems="center" gap="$2">
-                  <Text color="$gray11">No workflows in this project yet</Text>
-                  <Button
-                    size="$3"
-                    onPress={() => router.push(`/workflows/new?projectId=${projectId}`)}
-                  >
-                    Create First Workflow
-                  </Button>
-                </YStack>
-              ) : (
-                <YStack gap="$2">
-                  {workflowsInProject.map((workflow: any) => (
-                    <XStack
-                      key={workflow.id}
-                      padding="$3"
-                      backgroundColor="$gray2"
-                      borderRadius="$4"
-                      justifyContent="space-between"
-                      alignItems="center"
-                      pressStyle={{ backgroundColor: '$gray3' }}
-                      cursor="pointer"
-                      onPress={() => router.push(`/workflows/${workflow.id}`)}
+            <Tabs.Content value="workflows">
+              {/* Workflows in Project */}
+              <Card padding="$4" elevate>
+                <YStack gap="$3">
+                  <XStack justifyContent="space-between" alignItems="center">
+                    <H2 fontSize="$5">Workflows ({workflowsInProject.length})</H2>
+                    <Button
+                      size="$3"
+                      theme="blue"
+                      onPress={() => router.push(`/workflows/new?projectId=${projectId}`)}
                     >
-                      <YStack gap="$1">
-                        <Text fontSize="$4" fontWeight="600">
-                          {workflow.display_name || workflow.name}
-                        </Text>
-                        <Text fontSize="$2" color="$gray11" fontFamily="$mono">
-                          {workflow.kebab_name || workflow.name}
-                        </Text>
-                      </YStack>
-                      <XStack gap="$2" alignItems="center">
-                        <Badge backgroundColor="$blue10" paddingHorizontal="$2" paddingVertical="$1">
-                          <Text fontSize="$1" color="white">
-                            {workflow.status_id}
-                          </Text>
-                        </Badge>
-                        <ExternalLink size={16} />
-                      </XStack>
-                    </XStack>
-                  ))}
+                      New Workflow
+                    </Button>
+                  </XStack>
+                  <Separator />
+
+                  {workflowsInProject.length === 0 ? (
+                    <YStack padding="$4" alignItems="center" gap="$2">
+                      <Text color="$gray11">No workflows in this project yet</Text>
+                      <Button
+                        size="$3"
+                        onPress={() => router.push(`/workflows/new?projectId=${projectId}`)}
+                      >
+                        Create First Workflow
+                      </Button>
+                    </YStack>
+                  ) : (
+                    <YStack gap="$2">
+                      {workflowsInProject.map((workflow: any) => (
+                        <XStack
+                          key={workflow.id}
+                          padding="$3"
+                          backgroundColor="$gray2"
+                          borderRadius="$4"
+                          justifyContent="space-between"
+                          alignItems="center"
+                          pressStyle={{ backgroundColor: '$gray3' }}
+                          cursor="pointer"
+                          onPress={() => router.push(`/workflows/${workflow.id}`)}
+                        >
+                          <YStack gap="$1">
+                            <Text fontSize="$4" fontWeight="600">
+                              {workflow.display_name || workflow.name}
+                            </Text>
+                            <Text fontSize="$2" color="$gray11" fontFamily="$mono">
+                              {workflow.kebab_name || workflow.name}
+                            </Text>
+                          </YStack>
+                          <XStack gap="$2" alignItems="center">
+                            <Badge backgroundColor="$blue10" paddingHorizontal="$2" paddingVertical="$1">
+                              <Text fontSize="$1" color="white">
+                                {workflow.status_id}
+                              </Text>
+                            </Badge>
+                            <ExternalLink size={16} />
+                          </XStack>
+                        </XStack>
+                      ))}
+                    </YStack>
+                  )}
                 </YStack>
-              )}
-            </YStack>
-          </Card>
+              </Card>
+            </Tabs.Content>
+
+            <Tabs.Content value="statistics">
+              <ProjectStatisticsPanel projectId={projectId} />
+            </Tabs.Content>
+
+            <Tabs.Content value="connections">
+              <ConnectionManager projectId={projectId} />
+            </Tabs.Content>
+          </Tabs>
         </YStack>
       </XStack>
     </YStack>

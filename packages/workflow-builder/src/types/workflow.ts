@@ -11,6 +11,13 @@ export interface WorkflowNode {
     componentId?: string;
     componentName?: string;
     config?: Record<string, any>;
+    retryPolicy?: {
+      strategy: 'keep-trying' | 'fail-after-x' | 'exponential-backoff' | 'none';
+      maxAttempts?: number; // For 'fail-after-x'
+      initialInterval?: string; // For exponential backoff (e.g., '1s', '5m')
+      maxInterval?: string;
+      backoffCoefficient?: number;
+    };
   };
 }
 
