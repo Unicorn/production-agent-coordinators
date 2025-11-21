@@ -11,7 +11,7 @@ async function main() {
     workflowsPath: join(__dirname, '../workflows'),
     activities,
     taskQueue: 'dev-workflow',
-    maxConcurrentActivityExecutions: 4,
+    maxConcurrentActivityTaskExecutions: 4,
     maxConcurrentWorkflowTaskExecutions: 10
   });
 
