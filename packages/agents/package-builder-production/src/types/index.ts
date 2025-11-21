@@ -59,6 +59,9 @@ export interface BuildConfig {
     requireTests: boolean;
     requireCleanWorkingDirectory: boolean;
   };
+  features?: {
+    enableTurnBasedGeneration?: boolean;
+  };
 }
 
 // Main workflow input

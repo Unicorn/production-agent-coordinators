@@ -1,5 +1,6 @@
 import { proxyActivities, startChild, defineSignal } from '@temporalio/workflow';
 import { PackageBuildWorkflow } from './package-build.workflow.js';
+import { PackageBuildTurnBasedWorkflow } from './package-build-turn-based.workflow.js';
 import type {
   PackageBuilderInput,
   PackageBuilderState,
@@ -159,8 +160,18 @@ async function buildPhase(state: PackageBuilderState, workspaceRoot: string, con
 
       console.log(`[Build] Starting child workflow for ${pkg.name}`);
 
+      // Select workflow based on feature flag
+      const enableTurnBased = config.features?.enableTurnBasedGeneration ?? false;
+      const childWorkflow = enableTurnBased
+        ? PackageBuildTurnBasedWorkflow
+        : PackageBuildWorkflow;
+
+      if (enableTurnBased) {
+        console.log(`[Build] Using turn-based workflow for ${pkg.name}`);
+      }
+
       // Spawn child workflow (non-blocking - just gets the handle)
-      const handle = await startChild(PackageBuildWorkflow, {
+      const handle = await startChild(childWorkflow, {
         workflowId: `build-${state.buildId}-${pkg.name}`,
         args: [{
           packageName: pkg.name,
@@ -169,7 +180,8 @@ async function buildPhase(state: PackageBuilderState, workspaceRoot: string, con
           category: pkg.category,
           dependencies: pkg.dependencies,
           workspaceRoot,
-          config
+          config,
+          enableTurnBasedGeneration: enableTurnBased
         }]
       });
 

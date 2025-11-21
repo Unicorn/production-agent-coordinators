@@ -91,6 +91,9 @@ async function main() {
           dryRun: false,
           requireTests: true,
           requireCleanWorkingDirectory: false // Allow uncommitted changes
+        },
+        features: {
+          enableTurnBasedGeneration: process.env.ENABLE_TURN_BASED_GENERATION === 'true'
         }
       }
     };
@@ -101,7 +104,8 @@ async function main() {
     console.log(`   Workspace: ${workspaceRoot}`);
     console.log(`   Plan Path: ${input.planPath}`);
     console.log(`   Max Concurrent: ${input.config.maxConcurrentBuilds} packages`);
-    console.log(`   Task Queue: engine\n`);
+    console.log(`   Task Queue: engine`);
+    console.log(`   Turn-Based Generation: ${input.config.features?.enableTurnBasedGeneration ? 'ENABLED' : 'DISABLED'}\n`);
 
     // Start workflow
     console.log('📋 Step 3: Starting PackageBuilderWorkflow');

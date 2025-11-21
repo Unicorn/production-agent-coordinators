@@ -92,6 +92,38 @@ Create `production/configs/build-env.json`:
 }
 ```
 
+### Feature Flags
+
+The package builder supports feature flags for gradual rollout of new functionality.
+
+#### Turn-Based Package Generation
+
+Enable turn-based package generation for more controlled, phase-by-phase package building with git commits between phases.
+
+**Environment Variable:**
+```bash
+export ENABLE_TURN_BASED_GENERATION=true
+```
+
+**Programmatic Configuration:**
+```typescript
+const config: BuildConfig = {
+  // ... other config
+  features: {
+    enableTurnBasedGeneration: true
+  }
+};
+```
+
+**Default Behavior:**
+When the feature flag is not set or set to `false`, the original workflow is used. This ensures backward compatibility with existing builds.
+
+**What it does:**
+- When enabled: Uses `PackageBuildTurnBasedWorkflow` for 15-phase generation with git commits
+- When disabled (default): Uses `PackageBuildWorkflow` for standard package building
+
+See the [turn-based generation plan](docs/plans/2025-01-21-turn-based-package-generation.md) for more details.
+
 ## Usage
 
 Register this agent instead of the stub when running production workflows:
