@@ -8,6 +8,7 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:phase1": "tsx test-phase1.ts",
     "dev": "tsx src/workers/dev-worker.ts",
     "worker:dev": "tsx src/workers/dev-worker.ts",
     "worker:test": "tsx src/workers/test-worker.ts",
@@ -17,6 +18,7 @@
   "author": "Bernier LLC",
   "license": "MIT",
   "dependencies": {
+    "@bernierllc/braingrid-cli-wrapper": "workspace:*",
     "@temporalio/activity": "^1.10.0",
     "@temporalio/client": "^1.10.0",
     "@temporalio/worker": "^1.10.0",
