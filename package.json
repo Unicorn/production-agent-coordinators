@@ -12,7 +12,11 @@
     "packages/storage",
     "packages/cli",
     "packages/temporal-coordinator",
-    "packages/package-queue-orchestrator"
+    "packages/package-queue-orchestrator",
+    "packages/braingrid-cli-wrapper",
+    "packages/dev-workflow",
+    "packages/workflow-builder",
+    "packages/workflow-worker-service"
   ],
   "scripts": {
     "build": "tsc -b",

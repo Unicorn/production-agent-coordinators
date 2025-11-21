@@ -1,0 +1,32 @@
+{
+  "name": "@bernierllc/dev-workflow",
+  "version": "0.1.0",
+  "description": "Temporal-based autonomous development workflows",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx src/workers/dev-worker.ts",
+    "worker:dev": "tsx src/workers/dev-worker.ts",
+    "worker:test": "tsx src/workers/test-worker.ts",
+    "worker:deploy": "tsx src/workers/deploy-worker.ts"
+  },
+  "keywords": ["temporal", "workflow", "automation", "dev"],
+  "author": "Bernier LLC",
+  "license": "MIT",
+  "dependencies": {
+    "@temporalio/activity": "^1.10.0",
+    "@temporalio/client": "^1.10.0",
+    "@temporalio/worker": "^1.10.0",
+    "@temporalio/workflow": "^1.10.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0",
+    "tsx": "^4.7.0"
+  }
+}
