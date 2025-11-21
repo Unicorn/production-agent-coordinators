@@ -64,8 +64,23 @@ export interface BuildConfig {
 // Main workflow input
 export interface PackageBuilderInput {
   buildId: string;
-  auditReportPath: string;
+  workspaceRoot: string;
   config: BuildConfig;
+
+  // Option 1: Audit report (backward compatible)
+  auditReportPath?: string;
+
+  // Option 2: Direct plan path (NEW - parse dependencies automatically)
+  planPath?: string;
+
+  // Option 3: Direct package list (NEW - explicit packages)
+  packages?: Array<{
+    packageName: string;
+    packagePath: string;
+    planPath: string;
+    category: PackageCategory;
+    dependencies: string[];
+  }>;
 }
 
 // Child workflow input
@@ -180,6 +195,171 @@ export interface PublishResult {
   success: boolean;
   duration: number;
   stdout: string;
+}
+
+// Agent execution types
+export type TaskType =
+  | 'PACKAGE_SCAFFOLDING'
+  | 'FEATURE_IMPLEMENTATION'
+  | 'BUG_FIX'
+  | 'REFACTORING'
+  | 'DOCUMENTATION'
+  | 'TESTING';
+
+export interface GitHubContext {
+  token: string;
+  repo: string;
+  branch: string;
+}
+
+export interface BuildPromptInput {
+  agentName: string;
+  taskType: TaskType;
+  instructions: string;
+  packagePath: string;
+  planPath: string;
+  workspaceRoot: string;
+  githubContext?: GitHubContext;
+  includeQualityStandards?: boolean;
+  includeFewShotExamples?: boolean;
+  includeValidationChecklist?: boolean;
+}
+
+export interface ExecuteAgentInput {
+  prompt: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface FileOperation {
+  path: string;
+  operation: 'create' | 'update' | 'delete';
+  content?: string;
+}
+
+export interface AgentResponse {
+  files: FileOperation[];
+  summary: string;
+  qualityChecklist?: {
+    strictModeEnabled: boolean;
+    noAnyTypes: boolean;
+    testCoverageAbove80: boolean;
+    allPublicFunctionsDocumented: boolean;
+    errorHandlingComplete: boolean;
+    [key: string]: boolean; // Allow extra checklist items
+  };
+  questions?: Array<{
+    question: string;
+    context: string;
+    suggestedAnswer: string;
+  }>;
+  suggestions?: Array<{
+    type: string;
+    description: string;
+    priority: 'low' | 'medium' | 'high';
+    autoExecute: boolean;
+  }>;
+  filesToFetch?: string[];
+  [key: string]: unknown; // Lenient parsing - preserve unknown fields
+}
+
+export interface ParseResponseInput {
+  responseText: string;
+  packagePath: string;
+}
+
+export interface ApplyFileChangesInput {
+  operations: FileOperation[];
+  packagePath: string;
+  workspaceRoot: string;
+}
+
+export interface ApplyFileChangesResult {
+  modifiedFiles: string[];
+  failedOperations: Array<{
+    path: string;
+    operation: string;
+    error: string;
+  }>;
+}
+
+// ========================================================================
+// Turn-Based Package Generation Types
+// ========================================================================
+
+export type GenerationPhase =
+  | 'PLANNING'
+  | 'FOUNDATION'
+  | 'TYPES'
+  | 'CORE_IMPLEMENTATION'
+  | 'ENTRY_POINT'
+  | 'UTILITIES'
+  | 'ERROR_HANDLING'
+  | 'TESTING'
+  | 'DOCUMENTATION'
+  | 'EXAMPLES'
+  | 'INTEGRATION_REVIEW'
+  | 'CRITICAL_FIXES'
+  | 'BUILD_VALIDATION'
+  | 'FINAL_POLISH'
+  | 'MERGE';
+
+export interface GenerationStep {
+  stepNumber: number;
+  phase: GenerationPhase;
+  description: string;
+  files: string[];
+  commit?: string;
+  timestamp: number;
+  claudeTokensUsed?: {
+    input: number;
+    output: number;
+  };
+}
+
+export interface GenerationContext {
+  sessionId: string;
+  branch: string;
+  packageName: string;
+  packageCategory: PackageCategory;
+  packagePath: string;
+  planPath: string;
+  workspaceRoot: string;
+
+  currentPhase: GenerationPhase;
+  currentStepNumber: number;
+  completedSteps: GenerationStep[];
+
+  requirements: {
+    testCoverageTarget: number; // 90% core, 85% service, 80% suite/ui
+    loggerIntegration: 'integrated' | 'planned' | 'not-applicable';
+    neverhubIntegration: 'integrated' | 'planned' | 'not-applicable';
+    docsSuiteIntegration: 'ready' | 'planned';
+    meceValidated: boolean;
+    planApproved: boolean;
+  };
+
+  lastSuccessfulCommit?: string;
+  failureRecovery?: {
+    failedStep: number;
+    error: string;
+    retryCount: number;
+  };
+}
+
+export interface TurnBasedPackageBuildInput extends PackageBuildInput {
+  // All fields from PackageBuildInput plus:
+  resumeFromContext?: GenerationContext; // For recovery
+  enableTurnBasedGeneration: boolean; // Feature flag
+}
+
+export interface PhaseExecutionResult {
+  success: boolean;
+  phase: GenerationPhase;
+  steps: GenerationStep[];
+  filesModified: string[];
+  error?: string;
 }
 
 // Coordinator types
