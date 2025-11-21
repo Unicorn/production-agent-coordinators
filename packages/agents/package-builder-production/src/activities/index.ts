@@ -14,6 +14,7 @@ export * from './agent-executor.activities.js';
 export * from './agentic-plan-parser.activities.js';
 export * from './dependency-tree-validator.activities.js';
 export * from './phase-executor.activities.js';
+export * from './generation-state.activities.js';
 
 // Optional: Export a list of all activity names for validation
 export const ALL_ACTIVITY_NAMES = [
@@ -59,6 +60,12 @@ export const ALL_ACTIVITY_NAMES = [
   // Phase executor activities
   'executePlanningPhase',
   'executeFoundationPhase',
+
+  // Generation state activities
+  'saveGenerationState',
+  'loadGenerationState',
+  'recordCompletedStep',
+  'markContextFailed',
 ] as const;
 
 export type ActivityName = typeof ALL_ACTIVITY_NAMES[number];
