@@ -10,6 +10,39 @@
  * - Each phase saves state after completion
  * - Git commits after each phase for recovery points
  * - Supports resume from saved context
+ *
+ * @example Basic usage
+ * ```typescript
+ * const input: TurnBasedPackageBuildInput = {
+ *   packageName: '@bernierllc/data-validator',
+ *   packagePath: 'packages/core/data-validator',
+ *   planPath: 'plans/packages/core/data-validator.md',
+ *   category: 'core',
+ *   dependencies: [],
+ *   workspaceRoot: process.cwd(),
+ *   config: buildConfig,
+ *   enableTurnBasedGeneration: true
+ * };
+ *
+ * const handle = await client.workflow.start(PackageBuildTurnBasedWorkflow, {
+ *   taskQueue: 'package-builder',
+ *   args: [input]
+ * });
+ * ```
+ *
+ * @example Resume from failure
+ * ```typescript
+ * const context = await loadGenerationState('gen-1732198765432', '/workspace');
+ * const resumeInput: TurnBasedPackageBuildInput = {
+ *   ...originalInput,
+ *   resumeFromContext: context
+ * };
+ *
+ * const handle = await client.workflow.start(PackageBuildTurnBasedWorkflow, {
+ *   taskQueue: 'package-builder',
+ *   args: [resumeInput]
+ * });
+ * ```
  */
 
 import { proxyActivities } from '@temporalio/workflow';
@@ -57,9 +90,35 @@ const { writePackageBuildReport } = proxyActivities<typeof reportActivities>({
  * Turn-Based Package Build Workflow
  *
  * Executes package generation in 15 phases with state persistence.
+ * Each phase makes focused Claude API calls within token budgets (2000-8000 tokens),
+ * ensuring compliance with rate limits and output constraints.
+ *
+ * Phases:
+ * 1. PLANNING - Create plan and architecture blueprint (5000 tokens)
+ * 2. FOUNDATION - Generate config files (3000 tokens)
+ * 3. TYPES - Generate type definitions (4000 tokens)
+ * 4. CORE_IMPLEMENTATION - Implement main functionality (8000 tokens)
+ * 5. ENTRY_POINT - Create barrel file (2000 tokens)
+ * 6. UTILITIES - Generate utility functions (4000 tokens)
+ * 7. ERROR_HANDLING - Create error classes (3000 tokens)
+ * 8. TESTING - Generate test suite (6000 tokens)
+ * 9. DOCUMENTATION - Write README and docs (3000 tokens)
+ * 10. EXAMPLES - Create usage examples (4000 tokens)
+ * 11. INTEGRATION_REVIEW - Review integrations (4000 tokens)
+ * 12. CRITICAL_FIXES - Fix issues from review (5000 tokens)
+ * 13. BUILD_VALIDATION - Validate build and tests (4000 tokens)
+ * 14. FINAL_POLISH - Final quality pass (3000 tokens)
+ * 15. MERGE - Prepare for merge (manual)
+ *
+ * Total execution time: 25-35 minutes
+ * Total token budget: ~58,000 tokens across all phases
  *
  * @param input - Turn-based package build input with optional resume context
  * @returns Package build result with success status and report
+ *
+ * @throws Error if phase execution fails after retries
+ * @throws Error if git operations fail
+ * @throws Error if state persistence fails
  */
 export async function PackageBuildTurnBasedWorkflow(
   input: TurnBasedPackageBuildInput

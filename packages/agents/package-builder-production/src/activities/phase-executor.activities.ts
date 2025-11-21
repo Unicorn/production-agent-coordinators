@@ -19,10 +19,31 @@ import type {
  * Execute PLANNING phase
  *
  * Creates package plan and validates with MECE criteria.
- * Generates architecture blueprint.
+ * Generates architecture blueprint document at docs/architecture.md.
+ *
+ * Token Budget: 5000 tokens
+ * Temperature: 0.3 (focused but slightly creative)
+ * Duration: ~2-3 minutes
+ *
+ * Outputs:
+ * - Package plan document
+ * - Architecture blueprint (docs/architecture.md)
+ * - MECE validation report
+ *
+ * Updates context.requirements:
+ * - meceValidated: true
+ * - planApproved: true
  *
  * @param context - Generation context
- * @returns Phase execution result
+ * @returns Phase execution result with success status
+ *
+ * @example
+ * ```typescript
+ * const result = await executePlanningPhase(context);
+ * if (result.success) {
+ *   console.log('Planning complete:', result.filesModified);
+ * }
+ * ```
  */
 export async function executePlanningPhase(
   context: GenerationContext
@@ -288,10 +309,39 @@ All types must:
 /**
  * Execute CORE_IMPLEMENTATION phase
  *
- * Generates main implementation files for package functionality
+ * Generates main implementation files for package functionality.
+ * This is the largest and most complex phase with the highest token budget.
+ *
+ * Token Budget: 8000 tokens (maximum to stay within rate limits)
+ * Temperature: 0.3 (focused implementation)
+ * Duration: ~3-4 minutes
+ *
+ * Outputs:
+ * - Main implementation files in src/
+ * - Business logic and algorithms
+ * - Integration with types from src/types/
+ * - Error handling using typed errors
+ * - Logger integration (if required)
+ * - Neverhub integration (if required)
+ *
+ * Quality Requirements:
+ * - All functions have JSDoc comments
+ * - No `any` types (strict TypeScript)
+ * - Input validation on public functions
+ * - Proper error handling
+ * - Use .js extensions in imports (ES modules)
  *
  * @param context - Generation context
- * @returns Phase execution result
+ * @returns Phase execution result with success status
+ *
+ * @example
+ * ```typescript
+ * const result = await executeCoreImplementationPhase(context);
+ * if (result.success) {
+ *   console.log('Implementation complete:', result.filesModified);
+ *   // Typically creates 3-8 implementation files
+ * }
+ * ```
  */
 export async function executeCoreImplementationPhase(
   context: GenerationContext
