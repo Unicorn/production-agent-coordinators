@@ -70,6 +70,12 @@ export interface AgentExecutionInput {
   context: {
     packagePath: string
     workspaceRoot: string
+    planPath?: string
+    githubContext?: {
+      token: string
+      repo: string
+      branch: string
+    }
   }
 }
 

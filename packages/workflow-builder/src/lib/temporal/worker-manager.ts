@@ -116,8 +116,17 @@ export class ProjectWorkerManager {
       });
       
       console.log(`🔗 Connected to Temporal at ${process.env.TEMPORAL_ADDRESS || 'localhost:7233'}`);
-      
-      // 8. Create worker
+
+      // 8. Create worker (concurrency limits configurable via environment variables)
+      const maxConcurrentActivities = parseInt(
+        process.env.MAX_CONCURRENT_ACTIVITY_EXECUTIONS || '10',
+        10
+      );
+      const maxConcurrentWorkflowTasks = parseInt(
+        process.env.MAX_CONCURRENT_WORKFLOW_EXECUTIONS || '10',
+        10
+      );
+
       const worker = await Worker.create({
         connection,
         namespace: process.env.TEMPORAL_NAMESPACE || 'default',
@@ -126,8 +135,8 @@ export class ProjectWorkerManager {
           codePath: bundlePath,
         },
         activities,
-        maxConcurrentActivityTaskExecutions: 10,
-        maxConcurrentWorkflowTaskExecutions: 10,
+        maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
+        maxConcurrentWorkflowTaskExecutions: maxConcurrentWorkflowTasks,
       });
       
       // 9. Generate worker ID
@@ -158,6 +167,8 @@ export class ProjectWorkerManager {
       console.log(`   Worker ID: ${workerId}`);
       console.log(`   Task Queue: ${project.task_queue_name}`);
       console.log(`   Workflows: ${workflows.length}`);
+      console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
+      console.log(`   Max Concurrent Workflow Tasks: ${maxConcurrentWorkflowTasks}`);
       
       return worker;
     } catch (error) {

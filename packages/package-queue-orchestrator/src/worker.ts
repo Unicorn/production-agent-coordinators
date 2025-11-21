@@ -134,6 +134,16 @@ export async function run(): Promise<void> {
   console.log('   Activities: Loaded from activities module');
   console.log('   Max Concurrent Builds:', maxConcurrent);
 
+  // Worker concurrency limits (configurable via environment variables)
+  const maxConcurrentActivities = parseInt(
+    process.env.MAX_CONCURRENT_ACTIVITY_EXECUTIONS || '10',
+    10
+  );
+  const maxConcurrentWorkflowTasks = parseInt(
+    process.env.MAX_CONCURRENT_WORKFLOW_EXECUTIONS || '10',
+    10
+  );
+
   // Create worker
   const worker = await Worker.create({
     connection,
@@ -142,11 +152,13 @@ export async function run(): Promise<void> {
     workflowsPath,
     activities,
     // Worker options
-    maxConcurrentActivityTaskExecutions: 10,
-    maxConcurrentWorkflowTaskExecutions: 10,
+    maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
+    maxConcurrentWorkflowTaskExecutions: maxConcurrentWorkflowTasks,
   });
 
   console.log('\n🚀 Worker is ready!');
+  console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
+  console.log(`   Max Concurrent Workflow Tasks: ${maxConcurrentWorkflowTasks}`);
   console.log('   Waiting for workflows...\n');
   console.log('   Press Ctrl+C to shutdown\n');
 

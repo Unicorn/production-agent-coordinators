@@ -70,14 +70,18 @@ function ProjectsContent() {
 
           {/* Search */}
           <XStack gap="$2" alignItems="center" maxWidth={600}>
-            <Input
-              flex={1}
-              size="$4"
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              iconAfter={<Search size={16} />}
-            />
+            <XStack flex={1} alignItems="center" gap="$2" borderWidth={1} borderColor="$gray5" borderRadius="$4" paddingHorizontal="$3" paddingVertical="$2">
+              <Input
+                flex={1}
+                size="$4"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                borderWidth={0}
+                padding={0}
+              />
+              <Search size={16} color="$gray10" />
+            </XStack>
           </XStack>
 
           {/* Loading State */}

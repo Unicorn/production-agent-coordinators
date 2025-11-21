@@ -65,9 +65,8 @@ function NewWorkflowContent() {
     setKebabName(toKebabCase(value));
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = async () => {
     console.log('🔵 [handleSubmit] Called with:', { displayName, kebabName, selectedProjectId, showNewProjectInput, newProjectName });
-    e?.preventDefault();
     setError('');
 
     // Validation
@@ -146,8 +145,7 @@ function NewWorkflowContent() {
           <H1>Create Workflow</H1>
 
           <Card padding="$4" elevate maxWidth={600}>
-            <form onSubmit={handleSubmit}>
-              <YStack gap="$4">
+            <YStack gap="$4">
                 {error && (
                   <YStack padding="$3" backgroundColor="$red3" borderRadius="$4">
                     <Text color="$red11">{error}</Text>
@@ -251,7 +249,6 @@ function NewWorkflowContent() {
                             setSelectedProjectId(value);
                           }
                         }}
-                        disabled={createMutation.isLoading}
                       >
                         <Select.Trigger width="100%" iconAfter={ChevronDown}>
                           <Select.Value placeholder="Select project" />
@@ -300,7 +297,6 @@ function NewWorkflowContent() {
                   <Select
                     value={visibility}
                     onValueChange={setVisibility}
-                    disabled={createMutation.isLoading}
                   >
                     <Select.Trigger width="100%" iconAfter={ChevronDown}>
                       <Select.Value />
@@ -362,7 +358,6 @@ function NewWorkflowContent() {
                   </Button>
                 </XStack>
               </YStack>
-            </form>
           </Card>
         </YStack>
       </XStack>

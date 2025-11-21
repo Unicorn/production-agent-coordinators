@@ -1,0 +1,177 @@
+
+# Package Development Agent
+
+You are **package-development-agent**, an AI agent specialized in building high-quality TypeScript packages.
+
+## Your Task
+
+**Task Type:** PACKAGE_SCAFFOLDING
+**Package Path:** packages/utility/logger
+
+Create logger package from plan
+
+
+────────────────────────────────────────────────────────────────────────────────
+
+
+## Package Plan
+
+# @test/logger
+
+**Package:** `@test/logger`
+**Type:** utility
+**Status:** Planning
+
+## Overview
+
+A simple, typed logger utility for Node.js applications with support for different log levels and transports.
+
+## Requirements
+
+### Core Features
+- Support log levels: debug, info, warn, error
+- Console transport (default)
+- Typed logger interface with TypeScript
+- Configurable log formatting
+- Timestamp support
+
+### Code Quality
+- Strict TypeScript mode
+- 100% test coverage
+- ES module exports
+- Proper error handling
+
+## Dependencies
+
+This package has no external dependencies.
+
+## Package Structure
+
+```
+@test/logger/
+├── src/
+│   ├── index.ts              # Public API
+│   ├── logger.ts             # Logger implementation
+│   └── types.ts              # TypeScript types
+├── tests/
+│   └── logger.test.ts        # Unit tests
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+## API Design
+
+```typescript
+export interface LoggerOptions {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  timestamp?: boolean;
+}
+
+export interface Logger {
+  debug(message: string, ...args: unknown[]): void;
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, error?: Error, ...args: unknown[]): void;
+}
+
+export function createLogger(options: LoggerOptions): Logger;
+```
+
+## Usage Example
+
+```typescript
+import { createLogger } from '@test/logger';
+
+const logger = createLogger({ level: 'info', timestamp: true });
+
+logger.info('Application started');
+logger.warn('This is a warning');
+logger.error('An error occurred', new Error('Something went wrong'));
+```
+
+## Implementation Notes
+
+1. Use console methods under the hood (console.log, console.warn, console.error)
+2. Filter messages based on configured log level
+3. Add timestamps when enabled
+4. Format error objects nicely
+
+## Testing Requirements
+
+- Test all log levels
+- Test level filtering (e.g., when level='info', debug messages should not appear)
+- Test timestamp formatting
+- Test error object formatting
+- Use Vitest for testing
+- Mock console methods to verify output
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+
+
+## Response Format
+
+You MUST respond with a valid JSON object in the following format:
+
+```json
+{
+  "files": [
+    {
+      "path": "relative/path/to/file.ts",
+      "operation": "create" | "update" | "delete",
+      "content": "complete file content here (not diffs!)"
+    }
+  ],
+  "summary": "Brief description of what was implemented",
+  "qualityChecklist": {
+    "strictModeEnabled": true,
+    "noAnyTypes": true,
+    "testCoverageAbove80": true,
+    "allPublicFunctionsDocumented": true,
+    "errorHandlingComplete": true
+  },
+  "questions": [
+    {
+      "question": "Clarifying question if needed",
+      "context": "Why you're asking",
+      "suggestedAnswer": "Your recommended answer"
+    }
+  ],
+  "suggestions": [
+    {
+      "type": "ADDITIONAL_FILE" | "REFACTORING" | "OPTIMIZATION" | "TESTING",
+      "description": "Suggestion for improvement",
+      "priority": "low" | "medium" | "high",
+      "autoExecute": false
+    }
+  ]
+}
+```
+
+**Important Response Guidelines:**
+
+1. **Complete File Content**: Always provide FULL file content, never diffs or partial code
+2. **Relative Paths**: All file paths must be relative to package root (packages/utility/logger)
+3. **ES Module Extensions**: All imports must include `.js` extension
+4. **No Markdown Wrapper**: Return raw JSON, not wrapped in ```json blocks
+5. **Quality Checklist**: Verify ALL items are true before responding
+6. **Questions**: Ask if requirements are unclear or decisions needed
+7. **Suggestions**: Propose improvements for follow-up work
+
+**Quality Verification:**
+
+Before responding, verify:
+- [ ] All TypeScript code compiles with strict mode
+- [ ] No `any` types used
+- [ ] All exports have JSDoc comments
+- [ ] Tests included for all functions
+- [ ] Error handling complete
+- [ ] All imports use `.js` extension
+- [ ] package.json has `"type": "module"`
+
+**Path Examples:**
+
+Good: `src/index.ts`, `tests/logger.test.ts`, `package.json`
+Bad: `packages/utility/logger/src/index.ts`, `/absolute/path/file.ts`

@@ -1,0 +1,175 @@
+{
+  "name": "api-data-orchestration-demo",
+  "displayName": "API Data Orchestration",
+  "description": "Demonstrates a simple API orchestration pattern: Fetch user data from an external API, enrich it with additional information, and update a CRM system. This example showcases basic linear workflow execution with 3 sequential activities.",
+  "version": "1.0.0",
+  "tags": ["demo", "milestone-1", "api", "orchestration"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": { "x": 100, "y": 200 },
+        "data": {
+          "label": "Manual Trigger",
+          "config": {
+            "triggerType": "manual",
+            "description": "Start the API orchestration workflow"
+          }
+        }
+      },
+      {
+        "id": "activity-1",
+        "type": "activity",
+        "position": { "x": 300, "y": 200 },
+        "data": {
+          "label": "Fetch User Data",
+          "componentName": "FetchUserDataActivity",
+          "config": {
+            "apiEndpoint": "https://api.example.com/users/{userId}",
+            "method": "GET",
+            "headers": {
+              "Accept": "application/json",
+              "Authorization": "Bearer ${env.API_TOKEN}"
+            },
+            "timeout": "30s",
+            "description": "Retrieves user profile data from the external user management API"
+          },
+          "retryPolicy": {
+            "strategy": "exponential-backoff",
+            "maxAttempts": 3,
+            "initialInterval": "1s",
+            "maxInterval": "10s",
+            "backoffCoefficient": 2
+          }
+        }
+      },
+      {
+        "id": "activity-2",
+        "type": "activity",
+        "position": { "x": 550, "y": 200 },
+        "data": {
+          "label": "Enrich User Data",
+          "componentName": "EnrichUserDataActivity",
+          "config": {
+            "enrichmentSource": "analytics",
+            "fields": ["lastLoginDate", "totalPurchases", "lifetimeValue", "preferredLanguage"],
+            "cacheResults": true,
+            "cacheTTL": "3600s",
+            "description": "Enriches user data with analytics information including purchase history and engagement metrics"
+          },
+          "retryPolicy": {
+            "strategy": "fail-after-x",
+            "maxAttempts": 2
+          }
+        }
+      },
+      {
+        "id": "activity-3",
+        "type": "activity",
+        "position": { "x": 800, "y": 200 },
+        "data": {
+          "label": "Update CRM",
+          "componentName": "UpdateCRMActivity",
+          "config": {
+            "crmSystem": "salesforce",
+            "operation": "upsert",
+            "matchField": "email",
+            "updateFields": ["name", "company", "lastLoginDate", "totalPurchases", "lifetimeValue"],
+            "notifyOnUpdate": true,
+            "description": "Updates or creates the user record in Salesforce CRM with enriched data"
+          },
+          "retryPolicy": {
+            "strategy": "exponential-backoff",
+            "maxAttempts": 5,
+            "initialInterval": "2s",
+            "maxInterval": "30s",
+            "backoffCoefficient": 2
+          }
+        }
+      },
+      {
+        "id": "end-1",
+        "type": "end",
+        "position": { "x": 1050, "y": 200 },
+        "data": {
+          "label": "Complete",
+          "config": {
+            "description": "Workflow completed successfully"
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "activity-1",
+        "label": "Start"
+      },
+      {
+        "id": "e2",
+        "source": "activity-1",
+        "target": "activity-2",
+        "label": "User data fetched"
+      },
+      {
+        "id": "e3",
+        "source": "activity-2",
+        "target": "activity-3",
+        "label": "Data enriched"
+      },
+      {
+        "id": "e4",
+        "source": "activity-3",
+        "target": "end-1",
+        "label": "CRM updated"
+      }
+    ],
+    "metadata": {
+      "timeout": "5m",
+      "description": "API orchestration workflow demonstrating external API calls, data enrichment, and CRM integration",
+      "expectedDuration": "10-30 seconds",
+      "features": [
+        "Sequential activity execution",
+        "Exponential backoff retry policies",
+        "External API integration",
+        "Data transformation and enrichment",
+        "CRM system updates"
+      ]
+    }
+  },
+  "executionSettings": {
+    "timeout": 300,
+    "retryPolicy": {
+      "maxAttempts": 1,
+      "strategy": "none"
+    }
+  },
+  "sampleInput": {
+    "userId": "user-12345",
+    "source": "web-app",
+    "triggerReason": "profile_update"
+  },
+  "expectedOutput": {
+    "status": "success",
+    "userData": {
+      "userId": "user-12345",
+      "email": "john.doe@example.com",
+      "name": "John Doe",
+      "company": "Acme Corp"
+    },
+    "enrichedData": {
+      "lastLoginDate": "2025-11-19T12:00:00Z",
+      "totalPurchases": 42,
+      "lifetimeValue": 12500.50,
+      "preferredLanguage": "en-US"
+    },
+    "crmUpdateResult": {
+      "recordId": "crm-67890",
+      "operation": "updated",
+      "timestamp": "2025-11-19T12:00:05Z"
+    }
+  },
+  "demoNotes": "This workflow demonstrates the most common use case: orchestrating multiple API calls in sequence to accomplish a business goal. It showcases timeout configurations, different retry strategies, and how data flows between activities."
+}

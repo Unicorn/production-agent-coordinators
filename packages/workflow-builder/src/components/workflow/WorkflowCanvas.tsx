@@ -5,13 +5,14 @@
 
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { YStack, XStack } from 'tamagui';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { YStack, XStack, useToastController } from 'tamagui';
 import { api } from '@/lib/trpc/client';
 import { ComponentPalette } from './ComponentPalette';
 import { PropertyPanel } from './PropertyPanel';
 import { WorkflowToolbar } from './WorkflowToolbar';
-import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from '@/types/workflow';
+import { CodeViewerModal } from './CodeViewerModal';
+import type { WorkflowDefinition, WorkflowNode } from '@/types/workflow';
 import ReactFlow, {
   Background,
   Controls,
@@ -31,19 +32,41 @@ interface WorkflowCanvasProps {
   readOnly?: boolean;
 }
 
-export function WorkflowCanvas({ 
-  workflowId, 
+export function WorkflowCanvas({
+  workflowId,
   initialDefinition,
   readOnly = false,
 }: WorkflowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialDefinition?.nodes || []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialDefinition?.edges || []);
   const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null);
+  const [showCodeModal, setShowCodeModal] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState<{
+    workflowCode?: string;
+    activitiesCode?: string;
+    workerCode?: string;
+  }>({});
+
+  const toast = useToastController();
+
+  // History management for undo/redo
+  const [past, setPast] = useState<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+  const [future, setFuture] = useState<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+  const isApplyingHistoryRef = useRef(false);
+  const lastHistoryRef = useRef<string>(JSON.stringify({ nodes: initialDefinition?.nodes || [], edges: initialDefinition?.edges || [] }));
+
+  // Use refs to track the last saved state and avoid re-renders
+  const lastSavedNodesRef = useRef<string>(JSON.stringify(initialDefinition?.nodes || []));
+  const lastSavedEdgesRef = useRef<string>(JSON.stringify(initialDefinition?.edges || []));
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const utils = api.useUtils();
   const saveMutation = api.workflows.update.useMutation({
     onSuccess: () => {
       utils.workflows.get.invalidate({ id: workflowId });
+      // Update last saved state on successful save
+      lastSavedNodesRef.current = JSON.stringify(nodes);
+      lastSavedEdgesRef.current = JSON.stringify(edges);
     },
   });
   
@@ -63,22 +86,77 @@ export function WorkflowCanvas({
     },
   });
 
+  const compileMutation = api.compiler.compile.useMutation({
+    onSuccess: (result) => {
+      if (result.success && result.compiled) {
+        setGeneratedCode({
+          workflowCode: result.compiled.workflowCode,
+          activitiesCode: result.compiled.activitiesCode,
+          workerCode: result.compiled.workerCode,
+        });
+        setShowCodeModal(true);
+        toast.show('Workflow compiled successfully!', {
+          message: 'View the generated TypeScript code',
+          type: 'success',
+        });
+      }
+    },
+    onError: (error) => {
+      toast.show('Compilation failed', {
+        message: error.message,
+        type: 'error',
+      });
+    },
+  });
+
   // Load components for palette
   const { data: componentsData } = api.components.list.useQuery({
     includeDeprecated: false,
   });
 
+  // Export workflow in compiler-compatible format
+  const exportWorkflow = useCallback(() => {
+    return {
+      id: workflowId,
+      nodes: nodes.map((node) => ({
+        id: node.id,
+        type: node.type,
+        data: node.data,
+        position: node.position,
+      })),
+      edges: edges,
+      variables: [], // Will be populated in M2
+      settings: {
+        aiRemediation: false, // Will be enabled in M3
+        maxConcurrent: 1, // Will be configurable in M4
+      },
+    };
+  }, [workflowId, nodes, edges]);
+
   const handleSave = useCallback(async () => {
     const definition: WorkflowDefinition = {
-      nodes: nodes as any,
-      edges: edges as any,
+      nodes: nodes as WorkflowNode[],
+      edges: edges as WorkflowNode[],
     };
 
     await saveMutation.mutateAsync({
       id: workflowId,
       definition,
     });
+
+    // Update last saved state after manual save
+    lastSavedNodesRef.current = JSON.stringify(nodes);
+    lastSavedEdgesRef.current = JSON.stringify(edges);
   }, [workflowId, nodes, edges, saveMutation]);
+
+  const handleCompile = useCallback(async () => {
+    await handleSave();
+    await compileMutation.mutateAsync({
+      workflowId,
+      includeComments: true,
+      strictMode: true,
+    });
+  }, [workflowId, handleSave, compileMutation]);
 
   const handleDeploy = useCallback(async () => {
     await handleSave();
@@ -89,12 +167,66 @@ export function WorkflowCanvas({
     await pauseMutation.mutateAsync({ id: workflowId });
   }, [workflowId, pauseMutation]);
 
+  // Save current state to history before making changes
+  const saveToHistory = useCallback(() => {
+    if (readOnly || isApplyingHistoryRef.current) return;
+
+    const currentState = { nodes, edges };
+    const currentStateStr = JSON.stringify(currentState);
+
+    // Only save if state actually changed
+    if (currentStateStr !== lastHistoryRef.current) {
+      setPast((prev) => [...prev, JSON.parse(lastHistoryRef.current)]);
+      setFuture([]); // Clear future when new action is performed
+      lastHistoryRef.current = currentStateStr;
+    }
+  }, [nodes, edges, readOnly]);
+
+  // Undo function
+  const handleUndo = useCallback(() => {
+    if (past.length === 0 || readOnly) return;
+
+    isApplyingHistoryRef.current = true;
+    const previous = past[past.length - 1];
+    const newPast = past.slice(0, past.length - 1);
+
+    setPast(newPast);
+    setFuture((prev) => [{ nodes, edges }, ...prev]);
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    lastHistoryRef.current = JSON.stringify(previous);
+
+    setTimeout(() => {
+      isApplyingHistoryRef.current = false;
+    }, 0);
+  }, [past, nodes, edges, readOnly, setNodes, setEdges]);
+
+  // Redo function
+  const handleRedo = useCallback(() => {
+    if (future.length === 0 || readOnly) return;
+
+    isApplyingHistoryRef.current = true;
+    const next = future[0];
+    const newFuture = future.slice(1);
+
+    setPast((prev) => [...prev, { nodes, edges }]);
+    setFuture(newFuture);
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    lastHistoryRef.current = JSON.stringify(next);
+
+    setTimeout(() => {
+      isApplyingHistoryRef.current = false;
+    }, 0);
+  }, [future, nodes, edges, readOnly, setNodes, setEdges]);
+
   const onConnect = useCallback(
     (connection: Connection) => {
       if (readOnly) return;
+      saveToHistory();
       setEdges((eds) => addEdge(connection, eds));
     },
-    [setEdges, readOnly]
+    [setEdges, readOnly, saveToHistory]
   );
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
@@ -104,12 +236,12 @@ export function WorkflowCanvas({
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       if (readOnly) return;
-      
+
       event.preventDefault();
 
       const reactFlowBounds = event.currentTarget.getBoundingClientRect();
       const componentData = event.dataTransfer.getData('application/json');
-      
+
       if (!componentData) return;
 
       const component = JSON.parse(componentData);
@@ -130,9 +262,10 @@ export function WorkflowCanvas({
         },
       };
 
+      saveToHistory();
       setNodes((nds) => [...nds, newNode as any]);
     },
-    [setNodes, readOnly]
+    [setNodes, readOnly, saveToHistory]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -140,18 +273,103 @@ export function WorkflowCanvas({
     event.dataTransfer.dropEffect = readOnly ? 'none' : 'move';
   }, [readOnly]);
 
-  // Auto-save on changes (debounced)
+  // Auto-save on changes (debounced) - only saves after changes stop for 1.5 seconds
   useEffect(() => {
     if (readOnly) return;
-    
-    const timer = setTimeout(() => {
-      if (nodes.length > 0 || edges.length > 0) {
-        handleSave();
-      }
-    }, 2000);
 
-    return () => clearTimeout(timer);
-  }, [nodes, edges, handleSave, readOnly]);
+    // Clear any existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // Check if there are actual changes from the last saved state
+    const currentNodesStr = JSON.stringify(nodes);
+    const currentEdgesStr = JSON.stringify(edges);
+    const hasChanges =
+      currentNodesStr !== lastSavedNodesRef.current ||
+      currentEdgesStr !== lastSavedEdgesRef.current;
+
+    // Only set a timer if there are changes
+    if (hasChanges && (nodes.length > 0 || edges.length > 0)) {
+      autoSaveTimerRef.current = setTimeout(() => {
+        const definition: WorkflowDefinition = {
+          nodes: nodes as WorkflowNode[],
+          edges: edges as WorkflowNode[],
+        };
+
+        saveMutation.mutate({
+          id: workflowId,
+          definition,
+        });
+      }, 1500); // 1.5 second delay after changes stop
+    }
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [nodes, edges, workflowId, readOnly]);
+
+  // Keyboard shortcuts for delete, undo, redo
+  useEffect(() => {
+    if (readOnly) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Delete key
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const selectedNodes = nodes.filter((node) => (node as any).selected);
+        const selectedEdges = edges.filter((edge) => (edge as any).selected);
+
+        if (selectedNodes.length > 0 || selectedEdges.length > 0) {
+          saveToHistory();
+          setNodes((nds) => nds.filter((node) => !(node as any).selected));
+          setEdges((eds) => eds.filter((edge) => !(edge as any).selected));
+          setSelectedNode(null);
+        }
+      }
+
+      // Undo: Cmd+Z or Ctrl+Z
+      if ((event.metaKey || event.ctrlKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        handleUndo();
+      }
+
+      // Redo: Cmd+Shift+Z or Ctrl+Shift+Z or Ctrl+Y
+      if (
+        ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === 'z') ||
+        (event.ctrlKey && event.key === 'y')
+      ) {
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [nodes, edges, readOnly, saveToHistory, setNodes, setEdges, handleUndo, handleRedo]);
+
+  // Track changes to nodes/edges for history
+  useEffect(() => {
+    if (readOnly || isApplyingHistoryRef.current) return;
+
+    const currentState = JSON.stringify({ nodes, edges });
+    if (currentState !== lastHistoryRef.current) {
+      // Save to history after a short delay to batch rapid changes
+      const timeoutId = setTimeout(() => {
+        saveToHistory();
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [nodes, edges, readOnly, saveToHistory]);
+
+  // Reset history when workflow changes
+  useEffect(() => {
+    setPast([]);
+    setFuture([]);
+    lastHistoryRef.current = JSON.stringify({ nodes, edges });
+  }, [workflowId]);
 
   return (
     <XStack flex={1} height="100vh">
@@ -165,9 +383,15 @@ export function WorkflowCanvas({
       <YStack flex={1} position="relative">
         <WorkflowToolbar
           onSave={handleSave}
+          onCompile={handleCompile}
           onDeploy={handleDeploy}
           onEnterEditMode={handleEnterEditMode}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={past.length > 0}
+          canRedo={future.length > 0}
           isSaving={saveMutation.isLoading}
+          isCompiling={compileMutation.isLoading}
           isDeploying={deployMutation.isLoading}
           readOnly={readOnly}
         />
@@ -182,6 +406,7 @@ export function WorkflowCanvas({
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             fitView
+            fitViewOptions={{ maxZoom: 0.75 }}
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
             elementsSelectable={!readOnly}
@@ -227,6 +452,13 @@ export function WorkflowCanvas({
           onClose={() => setSelectedNode(null)}
         />
       )}
+
+      {/* Code Viewer Modal */}
+      <CodeViewerModal
+        code={generatedCode}
+        open={showCodeModal}
+        onClose={() => setShowCodeModal(false)}
+      />
     </XStack>
   );
 }

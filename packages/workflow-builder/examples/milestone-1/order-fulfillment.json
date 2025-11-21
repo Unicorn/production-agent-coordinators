@@ -1,0 +1,308 @@
+{
+  "name": "order-fulfillment-demo",
+  "displayName": "E-Commerce Order Fulfillment",
+  "description": "Demonstrates a typical e-commerce order processing workflow: Validate payment, reserve inventory, generate shipping label, and send confirmation email. This example showcases transactional operations with rollback capabilities and demonstrates a complete business process with 4 activities.",
+  "version": "1.0.0",
+  "tags": ["demo", "milestone-1", "e-commerce", "order-processing"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": { "x": 100, "y": 200 },
+        "data": {
+          "label": "Order Placed",
+          "config": {
+            "triggerType": "api-endpoint",
+            "endpoint": "/api/orders",
+            "method": "POST",
+            "description": "Triggered when a customer places an order via the API"
+          }
+        }
+      },
+      {
+        "id": "activity-1",
+        "type": "activity",
+        "position": { "x": 300, "y": 200 },
+        "data": {
+          "label": "Process Payment",
+          "componentName": "ProcessPaymentActivity",
+          "config": {
+            "paymentProvider": "stripe",
+            "apiKey": "${env.STRIPE_API_KEY}",
+            "operation": "charge",
+            "captureImmediately": true,
+            "amount": "${workflow.orderTotal}",
+            "currency": "${workflow.currency}",
+            "customerId": "${workflow.customerId}",
+            "paymentMethod": "${workflow.paymentMethodId}",
+            "metadata": {
+              "orderId": "${workflow.orderId}",
+              "customerEmail": "${workflow.customerEmail}"
+            },
+            "idempotencyKey": "${workflow.orderId}-payment",
+            "description": "Charges customer's payment method via Stripe with idempotency protection"
+          },
+          "retryPolicy": {
+            "strategy": "exponential-backoff",
+            "maxAttempts": 3,
+            "initialInterval": "2s",
+            "maxInterval": "10s",
+            "backoffCoefficient": 2
+          }
+        }
+      },
+      {
+        "id": "activity-2",
+        "type": "activity",
+        "position": { "x": 550, "y": 200 },
+        "data": {
+          "label": "Reserve Inventory",
+          "componentName": "ReserveInventoryActivity",
+          "config": {
+            "inventorySystem": "internal",
+            "warehouse": "${workflow.warehouseId}",
+            "items": "${workflow.orderItems}",
+            "reservationTTL": "24h",
+            "allocation": "fifo",
+            "allowBackorder": false,
+            "checkAvailability": true,
+            "updateRealtime": true,
+            "rollbackOnFailure": true,
+            "description": "Reserves inventory items with automatic rollback if fulfillment fails"
+          },
+          "retryPolicy": {
+            "strategy": "fail-after-x",
+            "maxAttempts": 2
+          }
+        }
+      },
+      {
+        "id": "activity-3",
+        "type": "activity",
+        "position": { "x": 800, "y": 200 },
+        "data": {
+          "label": "Generate Shipping Label",
+          "componentName": "CreateShippingLabelActivity",
+          "config": {
+            "carrier": "${workflow.shippingCarrier}",
+            "service": "${workflow.shippingService}",
+            "apiCredentials": {
+              "fedex": "${env.FEDEX_API_KEY}",
+              "ups": "${env.UPS_API_KEY}",
+              "usps": "${env.USPS_API_KEY}"
+            },
+            "shipFrom": {
+              "name": "${workflow.warehouseName}",
+              "address": "${workflow.warehouseAddress}",
+              "phone": "${workflow.warehousePhone}"
+            },
+            "shipTo": {
+              "name": "${workflow.customerName}",
+              "address": "${workflow.shippingAddress}",
+              "phone": "${workflow.customerPhone}",
+              "email": "${workflow.customerEmail}"
+            },
+            "package": {
+              "weight": "${workflow.packageWeight}",
+              "dimensions": "${workflow.packageDimensions}",
+              "insurance": "${workflow.insuranceAmount}",
+              "signature": "${workflow.requireSignature}"
+            },
+            "labelFormat": "PDF",
+            "outputPath": "s3://shipping-labels/${workflow.orderId}/",
+            "description": "Generates shipping label using customer's selected carrier and service level"
+          },
+          "retryPolicy": {
+            "strategy": "exponential-backoff",
+            "maxAttempts": 4,
+            "initialInterval": "3s",
+            "maxInterval": "20s",
+            "backoffCoefficient": 2
+          }
+        }
+      },
+      {
+        "id": "activity-4",
+        "type": "activity",
+        "position": { "x": 1050, "y": 200 },
+        "data": {
+          "label": "Send Confirmation",
+          "componentName": "SendOrderConfirmationActivity",
+          "config": {
+            "emailProvider": "sendgrid",
+            "apiKey": "${env.SENDGRID_API_KEY}",
+            "template": "order-confirmation",
+            "to": "${workflow.customerEmail}",
+            "from": {
+              "email": "orders@example.com",
+              "name": "Example Store"
+            },
+            "templateData": {
+              "customerName": "${workflow.customerName}",
+              "orderId": "${workflow.orderId}",
+              "orderDate": "${workflow.orderDate}",
+              "orderTotal": "${workflow.orderTotal}",
+              "currency": "${workflow.currency}",
+              "items": "${workflow.orderItems}",
+              "shippingAddress": "${workflow.shippingAddress}",
+              "trackingNumber": "${activity-3.trackingNumber}",
+              "carrier": "${workflow.shippingCarrier}",
+              "estimatedDelivery": "${activity-3.estimatedDelivery}",
+              "paymentLast4": "${activity-1.cardLast4}"
+            },
+            "attachments": [
+              {
+                "filename": "invoice.pdf",
+                "path": "${activity-3.invoicePath}"
+              },
+              {
+                "filename": "shipping-label.pdf",
+                "path": "${activity-3.labelPath}"
+              }
+            ],
+            "trackOpens": true,
+            "trackClicks": true,
+            "categories": ["order-confirmation", "transactional"],
+            "description": "Sends order confirmation email with invoice and shipping details"
+          },
+          "retryPolicy": {
+            "strategy": "fail-after-x",
+            "maxAttempts": 5
+          }
+        }
+      },
+      {
+        "id": "end-1",
+        "type": "end",
+        "position": { "x": 1300, "y": 200 },
+        "data": {
+          "label": "Order Complete",
+          "config": {
+            "description": "Order fulfillment workflow completed successfully"
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "activity-1",
+        "label": "Process order"
+      },
+      {
+        "id": "e2",
+        "source": "activity-1",
+        "target": "activity-2",
+        "label": "Payment successful"
+      },
+      {
+        "id": "e3",
+        "source": "activity-2",
+        "target": "activity-3",
+        "label": "Inventory reserved"
+      },
+      {
+        "id": "e4",
+        "source": "activity-3",
+        "target": "activity-4",
+        "label": "Label created"
+      },
+      {
+        "id": "e5",
+        "source": "activity-4",
+        "target": "end-1",
+        "label": "Confirmation sent"
+      }
+    ],
+    "metadata": {
+      "timeout": "3m",
+      "description": "Complete e-commerce order fulfillment workflow from payment to confirmation",
+      "expectedDuration": "5-20 seconds",
+      "features": [
+        "Payment processing with Stripe",
+        "Inventory management with reservations",
+        "Multi-carrier shipping integration",
+        "Transactional email with attachments",
+        "Idempotency protection",
+        "Rollback capabilities"
+      ]
+    }
+  },
+  "executionSettings": {
+    "timeout": 180,
+    "retryPolicy": {
+      "maxAttempts": 1,
+      "strategy": "none"
+    }
+  },
+  "sampleInput": {
+    "orderId": "ORD-2025-5432",
+    "customerId": "cus_ABC123XYZ",
+    "customerEmail": "sarah.customer@example.com",
+    "customerName": "Sarah Customer",
+    "customerPhone": "+1-555-0123",
+    "orderDate": "2025-11-19T10:30:00Z",
+    "orderTotal": 129.99,
+    "currency": "USD",
+    "paymentMethodId": "pm_card_visa",
+    "orderItems": [
+      {
+        "sku": "WIDGET-001",
+        "name": "Premium Widget",
+        "quantity": 2,
+        "price": 49.99
+      },
+      {
+        "sku": "GADGET-042",
+        "name": "Super Gadget",
+        "quantity": 1,
+        "price": 30.01
+      }
+    ],
+    "shippingAddress": {
+      "street": "123 Main St",
+      "city": "Springfield",
+      "state": "IL",
+      "postalCode": "62701",
+      "country": "US"
+    },
+    "shippingCarrier": "fedex",
+    "shippingService": "FEDEX_2_DAY",
+    "warehouseId": "WH-EAST-01",
+    "warehouseName": "East Coast Distribution Center",
+    "packageWeight": "2.5 lbs",
+    "packageDimensions": "12x10x6 inches",
+    "requireSignature": true,
+    "insuranceAmount": 150.00
+  },
+  "expectedOutput": {
+    "status": "success",
+    "orderId": "ORD-2025-5432",
+    "payment": {
+      "chargeId": "ch_3ABCDEF123456",
+      "status": "succeeded",
+      "amount": 129.99,
+      "cardLast4": "4242"
+    },
+    "inventory": {
+      "reserved": true,
+      "reservationId": "RES-2025-9876",
+      "warehouse": "WH-EAST-01"
+    },
+    "shipping": {
+      "trackingNumber": "1Z9999999999999999",
+      "carrier": "fedex",
+      "service": "FEDEX_2_DAY",
+      "estimatedDelivery": "2025-11-21",
+      "labelUrl": "s3://shipping-labels/ORD-2025-5432/label.pdf"
+    },
+    "confirmation": {
+      "emailSent": true,
+      "emailId": "sg_message_123456789",
+      "sentAt": "2025-11-19T10:30:15Z"
+    }
+  },
+  "demoNotes": "This workflow demonstrates a critical e-commerce pattern with transactional integrity. Each step is designed to be idempotent and reversible, ensuring data consistency even in failure scenarios. The workflow showcases integration with common third-party services (Stripe, FedEx, SendGrid) and demonstrates how to handle sensitive operations like payment processing with proper retry policies and error handling."
+}

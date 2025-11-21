@@ -5,25 +5,40 @@
 'use client';
 
 import { XStack, YStack, Button, Text, Separator } from 'tamagui';
-import { Save, Play, Edit, AlertCircle } from 'lucide-react';
+import { Save, Play, Edit, AlertCircle, Undo, Redo, ArrowLeft, Code } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface WorkflowToolbarProps {
   onSave: () => void;
+  onCompile?: () => void;
   onDeploy: () => void;
   onEnterEditMode?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   isSaving?: boolean;
+  isCompiling?: boolean;
   isDeploying?: boolean;
   readOnly?: boolean;
 }
 
 export function WorkflowToolbar({
   onSave,
+  onCompile,
   onDeploy,
   onEnterEditMode,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   isSaving = false,
+  isCompiling = false,
   isDeploying = false,
   readOnly = false,
 }: WorkflowToolbarProps) {
+  const router = useRouter();
+
   return (
     <YStack>
       {/* Main Toolbar */}
@@ -36,28 +51,79 @@ export function WorkflowToolbar({
         alignItems="center"
         gap="$3"
       >
+        {/* Back Button */}
+        <Button
+          size="$3"
+          icon={ArrowLeft}
+          onPress={() => router.push('/workflows')}
+          chromeless
+        />
+
+        <Separator vertical />
+
         {!readOnly && (
           <>
             <Button
               size="$3"
               icon={Save}
               onPress={onSave}
-              disabled={isSaving || isDeploying}
+              disabled={isSaving || isCompiling || isDeploying}
+              data-testid="save-workflow-button"
             >
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
 
             <Separator vertical />
 
+            {onCompile && (
+              <>
+                <Button
+                  size="$3"
+                  theme="purple"
+                  icon={Code}
+                  onPress={onCompile}
+                  disabled={isSaving || isCompiling || isDeploying}
+                  data-testid="compile-workflow-button"
+                >
+                  {isCompiling ? 'Compiling...' : 'Compile'}
+                </Button>
+
+                <Separator vertical />
+              </>
+            )}
+
             <Button
               size="$3"
               theme="blue"
               icon={Play}
               onPress={onDeploy}
-              disabled={isSaving || isDeploying}
+              disabled={isSaving || isCompiling || isDeploying}
+              data-testid="deploy-workflow-button"
             >
               {isDeploying ? 'Deploying...' : 'Deploy'}
             </Button>
+
+            <Separator vertical />
+
+            <Button
+              size="$3"
+              icon={Undo}
+              onPress={onUndo}
+              disabled={!canUndo || isSaving || isCompiling || isDeploying}
+              opacity={canUndo ? 1 : 0.5}
+              data-testid="undo-button"
+              aria-label="Undo"
+            />
+
+            <Button
+              size="$3"
+              icon={Redo}
+              onPress={onRedo}
+              disabled={!canRedo || isSaving || isCompiling || isDeploying}
+              opacity={canRedo ? 1 : 0.5}
+              data-testid="redo-button"
+              aria-label="Redo"
+            />
           </>
         )}
 

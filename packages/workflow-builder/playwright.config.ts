@@ -41,6 +41,11 @@ export default defineConfig({
     headless: true,
   },
 
+  /* Timeout for assertions */
+  expect: {
+    timeout: 5000,
+  },
+
   /* Configure projects for major browsers */
   projects: [
     // Setup project - runs first to authenticate and save session
@@ -52,6 +57,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         headless: false, // Run setup in headed mode to avoid auth issues
       },
+      timeout: 60000, // Increase timeout for setup (60 seconds)
     },
     
     // Authenticated tests - use saved session from setup

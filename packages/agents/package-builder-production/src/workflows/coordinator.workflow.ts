@@ -58,7 +58,8 @@ export async function CoordinatorWorkflow(
         task: analysis.task,
         context: {
           packagePath: problem.context.packagePath,
-          workspaceRoot
+          workspaceRoot,
+          planPath: problem.context.planPath
         }
       }]
     })

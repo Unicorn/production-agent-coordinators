@@ -39,7 +39,7 @@ function ProjectDetailContent() {
     },
   });
 
-  const deleteMutation = api.projects.delete.useMutation({
+  const deleteMutation = api.projects.archive.useMutation({
     onSuccess: () => {
       router.push('/projects');
     },

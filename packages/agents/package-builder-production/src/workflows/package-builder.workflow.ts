@@ -1,13 +1,21 @@
-import { proxyActivities, startChild } from '@temporalio/workflow';
+import { proxyActivities, startChild, defineSignal } from '@temporalio/workflow';
 import { PackageBuildWorkflow } from './package-build.workflow.js';
 import type {
   PackageBuilderInput,
   PackageBuilderState,
   BuildPhase,
-  BuildConfig
+  BuildConfig,
+  PackageNode
 } from '../types/index';
 import type * as reportActivities from '../activities/report.activities';
 import type * as buildActivities from '../activities/build.activities';
+import type * as agenticParserActivities from '../activities/agentic-plan-parser.activities';
+import type * as dependencyTreeValidatorActivities from '../activities/dependency-tree-validator.activities';
+
+// Define signals for child workflow completion
+export const packageBuildCompleteSignal = defineSignal<[{ packageName: string; success: boolean; result: any }]>(
+  'packageBuildComplete'
+);
 
 const { loadAllPackageReports, writeBuildReport } = proxyActivities<typeof reportActivities>({
   startToCloseTimeout: '5 minutes'
@@ -15,6 +23,14 @@ const { loadAllPackageReports, writeBuildReport } = proxyActivities<typeof repor
 
 const { buildDependencyGraph } = proxyActivities<typeof buildActivities>({
   startToCloseTimeout: '5 minutes'
+});
+
+const { parsePlanFileWithAgent } = proxyActivities<typeof agenticParserActivities>({
+  startToCloseTimeout: '10 minutes' // Longer timeout for AI processing
+});
+
+const { validateDependencyTreePublishStatus } = proxyActivities<typeof dependencyTreeValidatorActivities>({
+  startToCloseTimeout: '10 minutes' // Longer timeout for npm checks
 });
 
 export async function PackageBuilderWorkflow(input: PackageBuilderInput): Promise<void> {
@@ -27,13 +43,13 @@ export async function PackageBuilderWorkflow(input: PackageBuilderInput): Promis
   await planPhase(state);
 
   // BUILD phase
-  await buildPhase(state, input.config);
+  await buildPhase(state, input.workspaceRoot, input.config);
 
   // VERIFY phase
-  await verifyPhase(state);
+  await verifyPhase(state, input.workspaceRoot);
 
   // COMPLETE phase
-  await completePhase(state, input.config.workspaceRoot);
+  await completePhase(state, input.workspaceRoot);
 
   console.log(`Package builder complete for ${input.buildId}`);
 }
@@ -41,8 +57,38 @@ export async function PackageBuilderWorkflow(input: PackageBuilderInput): Promis
 async function initializePhase(input: PackageBuilderInput): Promise<PackageBuilderState> {
   console.log('Phase: INITIALIZE');
 
-  // Parse audit report and build dependency graph
-  const packages = await buildDependencyGraph(input.auditReportPath);
+  let packages: PackageNode[];
+
+  // Handle three input modes
+  if (input.auditReportPath) {
+    // Option 1: Audit report (backward compatible)
+    console.log(`[Init] Loading packages from audit report: ${input.auditReportPath}`);
+    packages = await buildDependencyGraph(input.auditReportPath);
+  } else if (input.planPath) {
+    // Option 2: Direct plan path - parse dependencies from plan using AI agent
+    console.log(`[Init] Parsing plan file with AI agent: ${input.planPath}`);
+    packages = await parsePlanFileWithAgent({
+      workspaceRoot: input.workspaceRoot,
+      planPath: input.planPath
+    });
+  } else if (input.packages) {
+    // Option 3: Direct package list
+    console.log(`[Init] Using provided package list: ${input.packages.length} packages`);
+    packages = input.packages.map(pkg => ({
+      name: pkg.packageName,
+      category: pkg.category,
+      dependencies: pkg.dependencies,
+      layer: categoryToLayer(pkg.category),
+      buildStatus: 'pending' as const
+    }));
+
+    // Sort by layer
+    packages.sort((a, b) => a.layer - b.layer);
+  } else {
+    throw new Error('PackageBuilderInput must provide one of: auditReportPath, planPath, or packages');
+  }
+
+  console.log(`[Init] Found ${packages.length} packages to build`);
 
   const state: PackageBuilderState = {
     phase: 'PLAN' as BuildPhase,
@@ -56,6 +102,34 @@ async function initializePhase(input: PackageBuilderInput): Promise<PackageBuild
   return state;
 }
 
+function categoryToLayer(category: string): number {
+  const layerMap: Record<string, number> = {
+    'validator': 0,
+    'core': 1,
+    'utility': 2,
+    'service': 3,
+    'ui': 4,
+    'suite': 5
+  };
+  return layerMap[category] || 3;
+}
+
+/**
+ * Map package category to actual directory name
+ * The "utility" category doesn't have a corresponding directory - use "core" instead
+ */
+function categoryToDirectory(category: string): string {
+  // Map utility to core since no utility directory exists
+  if (category === 'utility') {
+    return 'core';
+  }
+  // Validators directory uses "validators" plural
+  if (category === 'validator') {
+    return 'validators';
+  }
+  return category;
+}
+
 async function planPhase(state: PackageBuilderState): Promise<void> {
   console.log('Phase: PLAN');
 
@@ -64,11 +138,11 @@ async function planPhase(state: PackageBuilderState): Promise<void> {
   state.phase = 'BUILD' as BuildPhase;
 }
 
-async function buildPhase(state: PackageBuilderState, config: BuildConfig): Promise<void> {
+async function buildPhase(state: PackageBuilderState, workspaceRoot: string, config: BuildConfig): Promise<void> {
   console.log('Phase: BUILD');
 
   const maxConcurrent = config.maxConcurrentBuilds || 4;
-  const activeBuilds = new Map<string, any>();
+  const activeBuilds = new Map<string, { handle: any; packageName: string }>();
 
   while (hasUnbuiltPackages(state)) {
     // Find packages ready to build (all dependencies completed)
@@ -77,58 +151,68 @@ async function buildPhase(state: PackageBuilderState, config: BuildConfig): Prom
       pkg.dependencies.every(dep => state.completedPackages.includes(dep))
     );
 
-    // Fill available slots
-    const availableSlots = maxConcurrent - activeBuilds.size;
-    const batch = readyPackages.slice(0, availableSlots);
+    // Spawn child workflows one at a time to avoid timeout
+    for (const pkg of readyPackages) {
+      if (activeBuilds.size >= maxConcurrent) {
+        break; // Wait for slots to free up
+      }
 
-    // Spawn child workflows for batch
-    for (const pkg of batch) {
-      const child = await startChild(PackageBuildWorkflow, {
+      console.log(`[Build] Starting child workflow for ${pkg.name}`);
+
+      // Spawn child workflow (non-blocking - just gets the handle)
+      const handle = await startChild(PackageBuildWorkflow, {
         workflowId: `build-${state.buildId}-${pkg.name}`,
         args: [{
           packageName: pkg.name,
-          packagePath: `packages/${pkg.category}/${pkg.name.split('/')[1]}`,
-          planPath: `plans/packages/${pkg.category}/${pkg.name.split('/')[1]}.md`,
+          packagePath: `packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}`,
+          planPath: `plans/packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}.md`,
           category: pkg.category,
           dependencies: pkg.dependencies,
-          workspaceRoot: config.workspaceRoot,
+          workspaceRoot,
           config
         }]
       });
 
-      activeBuilds.set(pkg.name, child);
+      activeBuilds.set(pkg.name, { handle, packageName: pkg.name });
       pkg.buildStatus = 'building';
     }
 
-    // Wait for any child to complete
+    // Wait for at least one child to complete (if any are running)
     if (activeBuilds.size > 0) {
-      const entries = Array.from(activeBuilds.entries());
-      const results = await Promise.race(
-        entries.map(async ([name, handle]) => {
-          const result = await handle.result();
-          return { name, result };
-        })
-      );
+      // Create promises for all active builds
+      const promises = Array.from(activeBuilds.values()).map(async ({ handle, packageName }) => {
+        const result = await handle.result();
+        return { packageName, result };
+      });
 
-      // Update state
-      activeBuilds.delete(results.name);
-      const pkg = state.packages.find(p => p.name === results.name);
+      // Wait for first to complete
+      const completed = await Promise.race(promises);
+
+      // Process completion
+      activeBuilds.delete(completed.packageName);
+      const pkg = state.packages.find(p => p.name === completed.packageName);
 
       if (pkg) {
-        if (results.result.success) {
+        if (completed.result.success) {
           pkg.buildStatus = 'completed';
-          state.completedPackages.push(results.name);
+          state.completedPackages.push(completed.packageName);
+          console.log(`[Build] ✅ ${completed.packageName} completed successfully`);
         } else {
           pkg.buildStatus = 'failed';
           state.failedPackages.push({
-            packageName: results.name,
-            phase: results.result.failedPhase || 'build',
-            error: results.result.error || 'Unknown error',
-            fixAttempts: results.result.fixAttempts || 0,
+            packageName: completed.packageName,
+            phase: completed.result.failedPhase || 'build',
+            error: completed.result.error || 'Unknown error',
+            fixAttempts: completed.result.fixAttempts || 0,
             canRetryManually: true
           });
+          console.log(`[Build] ❌ ${completed.packageName} failed: ${completed.result.error}`);
         }
       }
+    } else {
+      // No active builds but have unbuilt packages - wait a bit for dependencies
+      // This shouldn't happen if dependency logic is correct
+      break;
     }
   }
 
@@ -141,8 +225,37 @@ function hasUnbuiltPackages(state: PackageBuilderState): boolean {
   );
 }
 
-async function verifyPhase(state: PackageBuilderState): Promise<void> {
+async function verifyPhase(state: PackageBuilderState, workspaceRoot: string): Promise<void> {
   console.log('Phase: VERIFY');
+
+  // Validate dependency tree publish status before publishing
+  const packagesForValidation = state.packages.map(pkg => ({
+    packageName: pkg.name,
+    packagePath: `packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}`,
+    planPath: `plans/packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}.md`,
+    category: pkg.category
+  }));
+
+  const validation = await validateDependencyTreePublishStatus({
+    packages: packagesForValidation,
+    workspaceRoot
+  });
+
+  // Store validation results in state for use in COMPLETE phase
+  (state as any).publishValidation = validation;
+
+  // Check for errors
+  if (!validation.allPackagesValid) {
+    console.log('\n[Verify] ⚠️  Validation warnings detected:');
+    validation.validationErrors.forEach(err => console.log(`[Verify]    - ${err}`));
+
+    if (validation.packagesNeedingVersionBump.length > 0) {
+      console.log(`[Verify] ⚠️  ${validation.packagesNeedingVersionBump.length} package(s) need version bumps`);
+      console.log('[Verify] These packages will be skipped during publishing');
+    }
+  } else {
+    console.log('[Verify] ✅ All packages validated successfully');
+  }
 
   // TODO: Run integration tests
 

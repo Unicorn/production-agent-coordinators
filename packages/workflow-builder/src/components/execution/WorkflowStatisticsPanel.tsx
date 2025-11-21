@@ -30,7 +30,22 @@ export function WorkflowStatisticsPanel({ workflowId }: WorkflowStatisticsPanelP
     );
   }
 
-  const stats = data.statistics;
+  // Map database fields to camelCase
+  const stats = {
+    totalRuns: data.total_runs || 0,
+    averageDurationMs: data.avg_duration_ms,
+    successRate: data.total_runs
+      ? (data.successful_runs || 0) / data.total_runs
+      : null,
+    errorCount: data.failed_runs || 0,
+    mostUsedComponent: data.most_used_component_id
+      ? {
+          componentName: data.most_used_component_id,
+          usageCount: data.most_used_component_count || 0,
+        }
+      : null,
+    recentExecutions: [], // TODO: Add recent executions query
+  };
 
   return (
     <ScrollView f={1}>

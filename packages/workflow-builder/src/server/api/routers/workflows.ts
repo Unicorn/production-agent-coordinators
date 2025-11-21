@@ -387,7 +387,8 @@ export const workflowsRouter = createTRPCRouter({
               input.id,
               ctx.user.id,
               workflowWithProject.project_id,
-              endpoints
+              endpoints,
+              ctx.supabase
             );
 
             console.log(`✅ Registered ${registeredEndpoints.length} API endpoints`);

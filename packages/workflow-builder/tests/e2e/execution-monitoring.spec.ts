@@ -5,14 +5,23 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { setupConsoleErrorCapture } from './helpers/console-errors';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3010';
 
 test.describe('Execution History', () => {
   test.beforeEach(async ({ page }) => {
+    // Capture console errors (won't fail tests, but will log them)
+    const errorCollector = setupConsoleErrorCapture(page, false);
+    
     // Navigate to a workflow detail page
     await page.goto(`${BASE_URL}/workflows`);
     await page.waitForLoadState('networkidle');
+    
+    // Log any console errors after navigation
+    if (errorCollector.hasErrors()) {
+      console.warn('Console errors detected:', errorCollector.getSummary());
+    }
     
     // Click on first workflow
     await page.getByText('Hello World Demo').first().click();

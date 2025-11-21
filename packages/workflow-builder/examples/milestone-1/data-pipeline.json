@@ -1,0 +1,347 @@
+{
+  "name": "etl-data-pipeline-demo",
+  "displayName": "ETL Data Pipeline",
+  "description": "Demonstrates a robust data processing pipeline: Extract data from multiple sources, transform it into a unified format, validate data quality, load into a data warehouse, and send completion notifications. This example showcases retry policies, error handling, and data transformation patterns with 5 activities.",
+  "version": "1.0.0",
+  "tags": ["demo", "milestone-1", "etl", "data-pipeline", "retry"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": { "x": 100, "y": 300 },
+        "data": {
+          "label": "Scheduled Trigger",
+          "config": {
+            "triggerType": "scheduled",
+            "schedule": "0 2 * * *",
+            "timezone": "UTC",
+            "description": "Daily data pipeline execution at 2 AM UTC"
+          }
+        }
+      },
+      {
+        "id": "activity-1",
+        "type": "activity",
+        "position": { "x": 300, "y": 300 },
+        "data": {
+          "label": "Extract from Sources",
+          "componentName": "ExtractDataActivity",
+          "config": {
+            "sources": [
+              {
+                "name": "postgres-db",
+                "type": "postgresql",
+                "connectionString": "${env.POSTGRES_URL}",
+                "query": "SELECT * FROM orders WHERE updated_at > $1",
+                "parameters": ["${workflow.lastRunTime}"]
+              },
+              {
+                "name": "rest-api",
+                "type": "rest",
+                "endpoint": "https://api.example.com/v1/customers",
+                "method": "GET",
+                "pagination": true
+              },
+              {
+                "name": "csv-file",
+                "type": "s3",
+                "bucket": "data-imports",
+                "prefix": "daily-exports/",
+                "pattern": "*.csv"
+              }
+            ],
+            "parallelExtraction": true,
+            "timeout": "10m",
+            "description": "Extracts data from PostgreSQL database, REST API, and S3 CSV files in parallel"
+          },
+          "retryPolicy": {
+            "strategy": "exponential-backoff",
+            "maxAttempts": 5,
+            "initialInterval": "5s",
+            "maxInterval": "60s",
+            "backoffCoefficient": 2
+          }
+        }
+      },
+      {
+        "id": "activity-2",
+        "type": "activity",
+        "position": { "x": 550, "y": 300 },
+        "data": {
+          "label": "Transform Data",
+          "componentName": "TransformDataActivity",
+          "config": {
+            "transformations": [
+              {
+                "type": "normalize",
+                "fields": ["email", "phone"],
+                "description": "Normalize email to lowercase and phone to E.164 format"
+              },
+              {
+                "type": "deduplicate",
+                "keyFields": ["customerId", "orderId"],
+                "strategy": "keep-latest",
+                "description": "Remove duplicate records keeping the most recent"
+              },
+              {
+                "type": "enrich",
+                "lookup": "customer_metadata",
+                "joinKey": "customerId",
+                "description": "Enrich with customer metadata from lookup table"
+              },
+              {
+                "type": "calculate",
+                "expressions": [
+                  {
+                    "field": "totalValue",
+                    "formula": "quantity * unitPrice * (1 - discountRate)"
+                  },
+                  {
+                    "field": "category",
+                    "formula": "CASE WHEN totalValue > 1000 THEN 'high-value' ELSE 'standard' END"
+                  }
+                ]
+              }
+            ],
+            "outputFormat": "parquet",
+            "compressionCodec": "snappy",
+            "description": "Normalizes, deduplicates, enriches, and calculates derived fields for all records"
+          },
+          "retryPolicy": {
+            "strategy": "keep-trying",
+            "initialInterval": "3s",
+            "maxInterval": "30s",
+            "backoffCoefficient": 1.5
+          }
+        }
+      },
+      {
+        "id": "activity-3",
+        "type": "activity",
+        "position": { "x": 800, "y": 300 },
+        "data": {
+          "label": "Validate Data Quality",
+          "componentName": "ValidateDataActivity",
+          "config": {
+            "validationRules": [
+              {
+                "field": "email",
+                "rule": "is_email",
+                "severity": "error",
+                "description": "Email must be valid format"
+              },
+              {
+                "field": "totalValue",
+                "rule": "is_positive",
+                "severity": "error",
+                "description": "Total value must be positive"
+              },
+              {
+                "field": "customerId",
+                "rule": "not_null",
+                "severity": "error",
+                "description": "Customer ID is required"
+              },
+              {
+                "field": "phone",
+                "rule": "matches_pattern",
+                "pattern": "^\\+[1-9]\\d{1,14}$",
+                "severity": "warning",
+                "description": "Phone should be E.164 format"
+              }
+            ],
+            "errorThreshold": 0.05,
+            "warningThreshold": 0.10,
+            "failOnError": true,
+            "reportPath": "s3://data-quality-reports/${workflow.executionId}/validation.json",
+            "description": "Validates data quality with configurable rules and thresholds"
+          },
+          "retryPolicy": {
+            "strategy": "fail-after-x",
+            "maxAttempts": 2
+          }
+        }
+      },
+      {
+        "id": "activity-4",
+        "type": "activity",
+        "position": { "x": 1050, "y": 300 },
+        "data": {
+          "label": "Load to Warehouse",
+          "componentName": "LoadDataActivity",
+          "config": {
+            "destination": {
+              "type": "snowflake",
+              "account": "${env.SNOWFLAKE_ACCOUNT}",
+              "warehouse": "COMPUTE_WH",
+              "database": "ANALYTICS",
+              "schema": "STAGING",
+              "table": "orders_staging"
+            },
+            "loadStrategy": "replace",
+            "createTableIfNotExists": true,
+            "partitionBy": ["date", "region"],
+            "clusterBy": ["customerId"],
+            "postLoadActions": [
+              {
+                "type": "sql",
+                "statement": "CALL update_customer_aggregates('${workflow.executionDate}')"
+              },
+              {
+                "type": "grant",
+                "roles": ["ANALYST_ROLE"],
+                "privileges": ["SELECT"]
+              }
+            ],
+            "description": "Loads validated data into Snowflake data warehouse with partitioning and clustering"
+          },
+          "retryPolicy": {
+            "strategy": "exponential-backoff",
+            "maxAttempts": 4,
+            "initialInterval": "10s",
+            "maxInterval": "120s",
+            "backoffCoefficient": 3
+          }
+        }
+      },
+      {
+        "id": "activity-5",
+        "type": "activity",
+        "position": { "x": 1300, "y": 300 },
+        "data": {
+          "label": "Send Notifications",
+          "componentName": "SendNotificationActivity",
+          "config": {
+            "notifications": [
+              {
+                "channel": "slack",
+                "webhook": "${env.SLACK_WEBHOOK_URL}",
+                "message": "Daily ETL pipeline completed successfully. Processed ${workflow.recordCount} records in ${workflow.duration}.",
+                "attachments": [
+                  {
+                    "title": "Pipeline Statistics",
+                    "fields": [
+                      { "title": "Records Processed", "value": "${workflow.recordCount}" },
+                      { "title": "Validation Errors", "value": "${workflow.errorCount}" },
+                      { "title": "Duration", "value": "${workflow.duration}" },
+                      { "title": "Status", "value": "${workflow.status}" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "channel": "email",
+                "to": ["data-team@example.com"],
+                "subject": "Daily ETL Pipeline - ${workflow.executionDate}",
+                "template": "etl-completion",
+                "data": {
+                  "executionId": "${workflow.executionId}",
+                  "recordCount": "${workflow.recordCount}",
+                  "reportUrl": "${workflow.reportUrl}"
+                }
+              }
+            ],
+            "onlyOnSuccess": false,
+            "includeFailureDetails": true,
+            "description": "Sends completion notifications via Slack and email with pipeline statistics"
+          },
+          "retryPolicy": {
+            "strategy": "fail-after-x",
+            "maxAttempts": 3
+          }
+        }
+      },
+      {
+        "id": "end-1",
+        "type": "end",
+        "position": { "x": 1550, "y": 300 },
+        "data": {
+          "label": "Complete",
+          "config": {
+            "description": "ETL pipeline completed successfully"
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "activity-1",
+        "label": "Start pipeline"
+      },
+      {
+        "id": "e2",
+        "source": "activity-1",
+        "target": "activity-2",
+        "label": "Data extracted"
+      },
+      {
+        "id": "e3",
+        "source": "activity-2",
+        "target": "activity-3",
+        "label": "Data transformed"
+      },
+      {
+        "id": "e4",
+        "source": "activity-3",
+        "target": "activity-4",
+        "label": "Validation passed"
+      },
+      {
+        "id": "e5",
+        "source": "activity-4",
+        "target": "activity-5",
+        "label": "Data loaded"
+      },
+      {
+        "id": "e6",
+        "source": "activity-5",
+        "target": "end-1",
+        "label": "Notifications sent"
+      }
+    ],
+    "metadata": {
+      "timeout": "30m",
+      "description": "Complete ETL data pipeline with extraction, transformation, validation, loading, and notifications",
+      "expectedDuration": "5-15 minutes",
+      "features": [
+        "Multi-source data extraction",
+        "Complex data transformations",
+        "Data quality validation",
+        "Warehouse loading with partitioning",
+        "Multiple retry strategies",
+        "Notification on completion",
+        "Error handling and reporting"
+      ]
+    }
+  },
+  "executionSettings": {
+    "timeout": 1800,
+    "retryPolicy": {
+      "maxAttempts": 1,
+      "strategy": "none"
+    }
+  },
+  "sampleInput": {
+    "executionDate": "2025-11-19",
+    "lastRunTime": "2025-11-18T02:00:00Z",
+    "forceFull": false
+  },
+  "expectedOutput": {
+    "status": "success",
+    "recordsExtracted": 15234,
+    "recordsTransformed": 15234,
+    "recordsValid": 15187,
+    "recordsLoaded": 15187,
+    "validationErrors": 47,
+    "executionDuration": "8m 23s",
+    "dataQualityScore": 99.69,
+    "notifications": {
+      "slack": "sent",
+      "email": "sent"
+    }
+  },
+  "demoNotes": "This workflow showcases a production-grade data pipeline with multiple stages, sophisticated retry policies, and comprehensive error handling. It demonstrates how to handle different failure scenarios with appropriate retry strategies: keep-trying for transient issues, exponential backoff for rate-limited APIs, and fail-after-x for validation failures."
+}

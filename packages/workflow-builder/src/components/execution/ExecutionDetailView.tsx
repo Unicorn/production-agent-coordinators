@@ -1,7 +1,7 @@
 'use client';
 
-import { YStack, XStack, Text, Card, ScrollView, Button, Separator } from 'tamagui';
-import { Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { YStack, XStack, Text, Card, ScrollView, Separator } from 'tamagui';
+import { Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 import { format } from 'date-fns';
 
@@ -10,10 +10,9 @@ interface ExecutionDetailViewProps {
   workflowId: string;
 }
 
-export function ExecutionDetailView({ executionId, workflowId }: ExecutionDetailViewProps) {
+export function ExecutionDetailView({ executionId }: ExecutionDetailViewProps) {
   const { data, isLoading, error } = api.execution.getExecutionDetails.useQuery({
     executionId,
-    workflowId,
   });
 
   if (isLoading) {
@@ -32,8 +31,8 @@ export function ExecutionDetailView({ executionId, workflowId }: ExecutionDetail
     );
   }
 
-  const execution = data.execution;
-  const components = data.components || [];
+  const execution = data;
+  const components = data.componentExecutions || [];
 
   return (
     <ScrollView f={1}>
@@ -110,7 +109,7 @@ export function ExecutionDetailView({ executionId, workflowId }: ExecutionDetail
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const statusConfig: Record<string, { icon: any; color: string; bg: string }> = {
+  const statusConfig: Record<string, { icon: React.ComponentType<{ size?: number; color?: string }>; color: string; bg: string }> = {
     completed: { icon: CheckCircle, color: '$green11', bg: '$green2' },
     failed: { icon: XCircle, color: '$red11', bg: '$red2' },
     running: { icon: RefreshCw, color: '$blue11', bg: '$blue2' },
@@ -132,7 +131,24 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function ComponentExecutionCard({ component }: { component: any }) {
+interface ComponentExecution {
+  id: string;
+  componentName?: string;
+  nodeId?: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  retryCount?: number;
+  isExpectedRetry?: boolean;
+  inputData?: unknown;
+  outputData?: unknown;
+  errorMessage?: string;
+  errorType?: string;
+  config?: unknown;
+}
+
+function ComponentExecutionCard({ component }: { component: ComponentExecution }) {
   return (
     <Card p="$4" bg="$gray2">
       <YStack gap="$3">

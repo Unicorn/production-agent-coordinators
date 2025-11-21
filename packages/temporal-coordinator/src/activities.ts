@@ -606,8 +606,12 @@ export async function executeAgentTask(
   }
 
   // Import tools modules
-  const { getAllTools, executeTool, ToolContext, FileChange } = await import('./tools/registry.js');
+  const { getAllTools, executeTool } = await import('./tools/registry.js');
   const { validateChanges, summarizeChanges } = await import('./tools/validation.js');
+
+  // Import types
+  type ToolContext = import('./tools/registry.js').ToolContext;
+  type FileChange = import('./tools/registry.js').FileChange;
 
   // Create tool context for tracking changes
   const toolContext: ToolContext = {
@@ -720,7 +724,7 @@ After you've made all necessary changes, provide a summary of what you did.`;
       console.error(`[AgentExecution] Validation failed:`, validation.errors);
       return {
         success: false,
-        changes: toolContext.changes.map(c => `${c.operation}: ${c.path}`),
+        changes: toolContext.changes.map((c: FileChange) => `${c.operation}: ${c.path}`),
         output: `Validation failed:\n${validation.errors.join('\n')}\n\n${output}`
       };
     }
@@ -735,7 +739,7 @@ After you've made all necessary changes, provide a summary of what you did.`;
 
     return {
       success: true,
-      changes: toolContext.changes.map(c => `${c.operation}: ${c.path}`),
+      changes: toolContext.changes.map((c: FileChange) => `${c.operation}: ${c.path}`),
       output: `${changeSummary}\n\n${output}`
     };
 
@@ -745,7 +749,7 @@ After you've made all necessary changes, provide a summary of what you did.`;
 
     return {
       success: false,
-      changes: toolContext.changes.map(c => `${c.operation}: ${c.path}`),
+      changes: toolContext.changes.map((c: FileChange) => `${c.operation}: ${c.path}`),
       output: `Agent execution failed: ${errorMsg}`
     };
   }

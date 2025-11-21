@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getTemporalClient } from '@/lib/temporal/connection';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { createClientFromHeaders } from '@/lib/supabase/server';
 
 // Regex to extract hash and endpoint path from URL
 // Format: /api/v1/{hash}/{endpoint-path}
@@ -52,7 +52,7 @@ async function handleEndpoint(req: NextRequest, method: string) {
     const fullEndpointPath = `/${endpointPath}`;
 
     // Look up endpoint by hash (indexed, fast lookup)
-    const supabase = getSupabaseClient();
+    const supabase = createClientFromHeaders(req.headers);
     const { data: endpoint, error: endpointError } = await supabase
       .from('workflow_endpoints')
       .select('*, workflow:workflows(*, project:projects(*))')

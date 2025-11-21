@@ -8,6 +8,7 @@ import { YStack, XStack, Text, Button, Input, Label, Separator } from 'tamagui';
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { WorkflowNode } from '@/types/workflow';
+import { ActivityConfigPanel } from './ActivityConfigPanel';
 
 interface PropertyPanelProps {
   node: WorkflowNode;
@@ -94,6 +95,15 @@ export function PropertyPanel({ node, onUpdate, onClose }: PropertyPanelProps) {
           onBlur={handleSave}
         />
       </YStack>
+
+      {/* Activity-specific configuration */}
+      {(node.type === 'activity' || node.type === 'agent') && (
+        <>
+          <Separator />
+          <Text fontSize="$4" fontWeight="bold">Activity Settings</Text>
+          <ActivityConfigPanel node={node} onUpdate={onUpdate} />
+        </>
+      )}
 
       {/* Configuration */}
       <YStack gap="$2">

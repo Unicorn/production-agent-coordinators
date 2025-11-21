@@ -37,8 +37,7 @@ function NewProjectContent() {
     },
   });
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const handleSubmit = () => {
     setError('');
 
     if (!name.trim()) {

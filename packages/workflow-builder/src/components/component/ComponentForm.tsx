@@ -50,8 +50,7 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = () => {
     setError('');
 
     if (!name || !displayName || !componentType) {
@@ -157,7 +156,6 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
           <Select
             value={componentType}
             onValueChange={setComponentType}
-            disabled={createMutation.isLoading}
           >
             <Select.Trigger width="100%" iconAfter={ChevronDown}>
               <Select.Value placeholder="Select type" />
@@ -217,7 +215,6 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
           <Select
             value={visibility}
             onValueChange={setVisibility}
-            disabled={createMutation.isLoading}
           >
             <Select.Trigger width="100%" iconAfter={ChevronDown}>
               <Select.Value />

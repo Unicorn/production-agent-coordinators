@@ -99,7 +99,8 @@ export const workflowEndpointsRouter = createTRPCRouter({
         input.workflowId,
         ctx.user.id,
         workflow.project_id,
-        input.endpoints as WorkflowEndpoint[]
+        input.endpoints as WorkflowEndpoint[],
+        ctx.supabase
       );
 
       return {
@@ -132,7 +133,7 @@ export const workflowEndpointsRouter = createTRPCRouter({
       }
 
       // Unregister endpoints
-      await unregisterWorkflowEndpoints(input.workflowId);
+      await unregisterWorkflowEndpoints(input.workflowId, ctx.supabase);
 
       return { success: true };
     }),

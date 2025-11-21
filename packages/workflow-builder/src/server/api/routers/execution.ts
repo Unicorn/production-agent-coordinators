@@ -650,5 +650,122 @@ export const executionRouter = createTRPCRouter({
         last_execution_at: null,
       };
     }),
+
+  /**
+   * List all executions for the current user across all workflows
+   */
+  listUserExecutions: protectedProcedure
+    .input(z.object({
+      page: z.number().default(1),
+      pageSize: z.number().default(20),
+      status: z.enum(['running', 'completed', 'failed', 'cancelled', 'timed_out', 'building']).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const from = (input.page - 1) * input.pageSize;
+      const to = from + input.pageSize - 1;
+
+      let query = ctx.supabase
+        .from('workflow_executions')
+        .select(`
+          *,
+          workflow:workflows!workflow_executions_workflow_id_fkey (
+            id,
+            name,
+            display_name,
+            description
+          )
+        `, { count: 'exact' })
+        .eq('created_by', ctx.user.id);
+
+      if (input.status) {
+        query = query.eq('status', input.status);
+      }
+
+      const { data, error, count } = await query
+        .order('started_at', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return {
+        executions: data?.map(e => ({
+          id: e.id,
+          workflowId: e.workflow_id,
+          status: e.status,
+          startedAt: new Date(e.started_at).toISOString(),
+          completedAt: e.completed_at ? new Date(e.completed_at).toISOString() : null,
+          durationMs: e.duration_ms,
+          errorMessage: e.error_message,
+          workflow: e.workflow as any,
+        })) || [],
+        total: count || 0,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    }),
+
+  /**
+   * Get global execution statistics for the current user
+   */
+  getGlobalStats: protectedProcedure
+    .query(async ({ ctx }) => {
+      const { data: executions, error } = await ctx.supabase
+        .from('workflow_executions')
+        .select('status, duration_ms')
+        .eq('created_by', ctx.user.id);
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      if (!executions || executions.length === 0) {
+        return {
+          total: 0,
+          running: 0,
+          completed: 0,
+          failed: 0,
+          cancelled: 0,
+          timedOut: 0,
+          avgDuration: 0,
+          successRate: 0,
+        };
+      }
+
+      const total = executions.length;
+      const running = executions.filter(e => e.status === 'running' || e.status === 'building').length;
+      const completed = executions.filter(e => e.status === 'completed').length;
+      const failed = executions.filter(e => e.status === 'failed').length;
+      const cancelled = executions.filter(e => e.status === 'cancelled').length;
+      const timedOut = executions.filter(e => e.status === 'timed_out').length;
+
+      const durations = executions
+        .filter(e => e.duration_ms !== null && e.duration_ms !== undefined)
+        .map(e => e.duration_ms!);
+
+      const avgDuration = durations.length > 0
+        ? Math.round(durations.reduce((sum, d) => sum + d, 0) / durations.length)
+        : 0;
+
+      const successRate = total > 0 ? Math.round((completed / total) * 10000) / 100 : 0;
+
+      return {
+        total,
+        running,
+        completed,
+        failed,
+        cancelled,
+        timedOut,
+        avgDuration,
+        successRate,
+      };
+    }),
 });
 

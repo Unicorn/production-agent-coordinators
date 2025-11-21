@@ -73,13 +73,13 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     });
 
     if (codeExists) {
-      console.log(`[PreFlight] Package code exists at ${input.packagePath}`);
+      console.log(`[PreFlight] ✅ Package code exists at ${input.packagePath}`);
 
       // Check npm registry
       const npmStatus = await checkNpmPublished(input.packageName);
 
       if (npmStatus.published) {
-        console.log(`[PreFlight] Package already published at v${npmStatus.version}`);
+        console.log(`[PreFlight] 📦 Package already published to npm at v${npmStatus.version}`);
 
         // Check if this is an upgrade plan
         const isUpgrade = await checkIfUpgradePlan({
@@ -106,7 +106,8 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
 
         } else {
           // Already published, no upgrade needed - we're done!
-          console.log(`[PreFlight] Package already published, no upgrade plan. Workflow complete.`);
+          console.log(`[PreFlight] ⏭️  SKIPPING: Package already published (v${npmStatus.version}), no upgrade plan detected.`);
+          console.log(`[PreFlight] ℹ️  To republish, either update the version or create an upgrade plan.`);
 
           // Update MCP status to 'published' in case it wasn't synced
           await updateMCPPackageStatus(input.packageName, 'published');
@@ -123,7 +124,8 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
 
       } else {
         // SCENARIO 1: Partial implementation (code exists, not published)
-        console.log(`[PreFlight] Code exists but not published, auditing state...`);
+        console.log(`[PreFlight] 🔨 Code exists locally but NOT published to npm`);
+        console.log(`[PreFlight] 📋 Auditing package state to determine completion...`);
 
         const audit = await auditPackageState({
           workspaceRoot: input.workspaceRoot,
@@ -131,26 +133,31 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
           planPath: input.planPath
         });
 
-        console.log(`[PreFlight] Audit results:`, audit);
-        console.log(`[PreFlight] Completion: ${audit.completionPercentage}%`);
+        console.log(`[PreFlight] 📊 Audit results:`, audit);
+        console.log(`[PreFlight] 📈 Completion: ${audit.completionPercentage}%`);
 
         report.quality.lintScore = audit.completionPercentage;
 
         if (audit.status === 'complete') {
           // Code is complete, skip to build/test/publish
-          console.log(`[PreFlight] Package complete, skipping to build phase`);
+          console.log(`[PreFlight] ✅ Package code complete (100%), proceeding to build → test → publish`);
           // Skip scaffolding, jump to build below
         } else {
           // Continue with implementation based on audit findings
-          console.log(`[PreFlight] Package needs work:`, audit.nextSteps);
+          console.log(`[PreFlight] ⚠️  Package incomplete (${audit.completionPercentage}%), will attempt fixes`);
+          console.log(`[PreFlight] 📝 Next steps:`, audit.nextSteps);
           // For now, continue with normal flow
           // TODO: In future, spawn agents for specific gaps from audit.nextSteps
         }
       }
     } else {
       // Fresh start - no code exists, not published
-      console.log(`[PreFlight] No existing code found, starting fresh scaffolding`);
+      console.log(`[PreFlight] 🆕 No existing code found, starting fresh scaffolding`);
     }
+
+    console.log(`[PreFlight] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`[PreFlight] 🎯 Decision: Proceeding with full build pipeline`);
+    console.log(`[PreFlight] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ========================================================================
     // NORMAL WORKFLOW: Continue with package building
@@ -186,17 +193,25 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
       args: [{
         problem: scaffoldProblem,
         agentRegistry,
-        maxAttempts: 1,
+        maxAttempts: 3,
         workspaceRoot: input.workspaceRoot
       }]
     });
 
-    if (scaffoldAction.decision !== 'RESOLVED') {
-      report.error = `Scaffolding failed: ${scaffoldAction.reasoning}`;
+    // Handle coordinator decision
+    // For scaffolding, RETRY means "files created successfully, operation complete"
+    // RESOLVED also means success
+    // ESCALATE means scaffolding failed
+    if (scaffoldAction.decision === 'ESCALATE') {
+      report.error = `Scaffolding escalated: ${scaffoldAction.escalation!.reason}`;
+      throw new Error(`Scaffolding escalated: ${scaffoldAction.escalation!.reason}`);
+    } else if (scaffoldAction.decision === 'RETRY' || scaffoldAction.decision === 'RESOLVED') {
+      console.log(`[Scaffold] Package scaffolded successfully (${scaffoldAction.decision})`);
+    } else {
+      // Unexpected decision
+      report.error = `Scaffolding failed with unexpected decision: ${scaffoldAction.decision}`;
       throw new Error(`Scaffolding failed: ${scaffoldAction.reasoning}`);
     }
-
-    console.log(`[Scaffold] Package scaffolded successfully`);
 
     // Commit scaffolded package
     const commitResult = await commitChanges({

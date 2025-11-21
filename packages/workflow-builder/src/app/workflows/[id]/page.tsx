@@ -109,7 +109,7 @@ function WorkflowDetailContent() {
               </YStack>
               <Badge 
                 backgroundColor={workflow.status?.color || '$gray10'}
-                size="$3"
+                size="3"
               >
                 <Text fontSize="$3" color="white">
                   {workflow.status?.name || 'Unknown'}

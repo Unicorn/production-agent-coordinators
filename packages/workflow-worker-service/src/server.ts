@@ -123,7 +123,7 @@ app.get('/workers/status/:projectId', (req, res) => {
 app.get('/workers', (_req, res) => {
   try {
     const runningWorkers = projectWorkerManager.getRunningWorkers();
-    
+
     res.json({
       workers: runningWorkers,
       count: runningWorkers.length,
@@ -132,6 +132,39 @@ app.get('/workers', (_req, res) => {
     console.error('Error listing workers:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Reload workflows after deployment
+app.post('/workflows/reload', async (req, res) => {
+  try {
+    const { workflowId } = req.body;
+
+    if (!workflowId) {
+      return res.status(400).json({
+        success: false,
+        error: 'workflowId is required'
+      });
+    }
+
+    console.log(`🔄 Reload requested for workflow: ${workflowId}`);
+
+    // Worker will pick up new workflow files on next execution
+    // For hot reload, we would need to restart the worker process
+    // This is a placeholder for future hot-reload implementation
+
+    return res.json({
+      success: true,
+      workflowId,
+      message: 'Worker will reload workflow on next execution',
+      note: 'Hot reload not yet implemented - restart worker for immediate effect'
+    });
+  } catch (error) {
+    console.error('Error reloading workflows:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

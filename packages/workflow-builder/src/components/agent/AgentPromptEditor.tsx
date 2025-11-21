@@ -70,8 +70,7 @@ export function AgentPromptEditor({ promptId, onSuccess }: AgentPromptEditorProp
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <YStack gap="$4" maxWidth={800}>
+    <YStack gap="$4" maxWidth={800}>
         {error && (
           <YStack padding="$3" backgroundColor="$red3" borderRadius="$4">
             <Text color="$red11">{error}</Text>
@@ -153,7 +152,6 @@ export function AgentPromptEditor({ promptId, onSuccess }: AgentPromptEditorProp
             <Select
               value={visibility}
               onValueChange={setVisibility}
-              disabled={createMutation.isLoading}
             >
               <Select.Trigger width="100%" iconAfter={ChevronDown}>
                 <Select.Value />
@@ -273,7 +271,6 @@ export function AgentPromptEditor({ promptId, onSuccess }: AgentPromptEditorProp
           </Button>
         </XStack>
       </YStack>
-    </form>
   );
 }
 

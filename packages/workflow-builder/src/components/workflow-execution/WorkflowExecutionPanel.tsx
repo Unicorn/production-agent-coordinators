@@ -40,7 +40,7 @@ export function WorkflowExecutionPanel({
 }: WorkflowExecutionPanelProps) {
   if (!execution) {
     return (
-      <Card p="$6" ai="center" gap="$4" bg="$gray2">
+      <Card p="$6" ai="center" gap="$4" bg="$gray2" data-testid="execution-panel">
         <YStack ai="center" gap="$2">
           <Play size={40} color="$gray10" />
           <Text fontSize="$5" fontWeight="600" color="$gray12">
@@ -56,6 +56,7 @@ export function WorkflowExecutionPanel({
             size="$4"
             themeInverse
             onPress={onRun}
+            data-testid="build-run-workflow-button"
           >
             Build & Run Workflow
           </Button>
@@ -75,7 +76,7 @@ export function WorkflowExecutionPanel({
   const Icon = config.icon;
 
   return (
-    <YStack f={1} gap="$4" p="$4" bg="$background" borderLeftWidth={1} borderLeftColor="$borderColor" minWidth={350} maxWidth={450}>
+    <YStack f={1} gap="$4" p="$4" bg="$background" borderLeftWidth={1} borderLeftColor="$borderColor" minWidth={350} maxWidth={450} data-testid="execution-panel" data-execution-id={execution.id}>
       {/* Header */}
       <YStack gap="$2">
         <XStack ai="center" jc="space-between">
@@ -86,6 +87,7 @@ export function WorkflowExecutionPanel({
               icon={RefreshCw}
               onPress={onRetry}
               chromeless
+              data-testid="retry-execution-button"
             >
               Run Again
             </Button>
@@ -95,7 +97,7 @@ export function WorkflowExecutionPanel({
         {/* Status Badge */}
         <XStack ai="center" gap="$3">
           <Icon size={20} color={config.color} />
-          <Badge bg={`${config.color.replace('9', '3')}`} borderColor={`${config.color.replace('9', '6')}`}>
+          <Badge bg={`${config.color.replace('9', '3')}`} borderColor={`${config.color.replace('9', '6')}`} data-testid="execution-status">
             {config.label}
           </Badge>
           {execution.status === 'running' && execution.currentStep && (
@@ -138,7 +140,7 @@ export function WorkflowExecutionPanel({
               </XStack>
               <XStack jc="space-between">
                 <Text fontSize="$2" color="$gray11">Duration</Text>
-                <Text fontSize="$2" color="$gray12">
+                <Text fontSize="$2" color="$gray12" data-testid="execution-duration">
                   {Math.round((execution.completedAt.getTime() - execution.startedAt.getTime()) / 1000)}s
                 </Text>
               </XStack>
@@ -163,7 +165,7 @@ export function WorkflowExecutionPanel({
 
       {/* Error Display */}
       {execution.error && (
-        <Card p="$3" bg="$red2" borderWidth={1} borderColor="$red6">
+        <Card p="$3" bg="$red2" borderWidth={1} borderColor="$red6" data-testid="execution-error">
           <YStack gap="$2">
             <XStack ai="center" gap="$2">
               <AlertCircle size={16} color="$red11" />
@@ -180,7 +182,7 @@ export function WorkflowExecutionPanel({
 
       {/* Result Display */}
       {execution.result && execution.status === 'completed' && (
-        <Card p="$3" bg="$green2" borderWidth={1} borderColor="$green6">
+        <Card p="$3" bg="$green2" borderWidth={1} borderColor="$green6" data-testid="execution-output">
           <YStack gap="$2">
             <Text fontSize="$3" fontWeight="600" color="$green11">
               Result

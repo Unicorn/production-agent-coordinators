@@ -44,6 +44,8 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
       borderLeftColor="$borderColor"
       maxWidth={350}
       position="relative"
+      role="complementary"
+      aria-label="Node properties panel"
     >
       {/* Header */}
       <XStack ai="center" jc="space-between">
@@ -53,11 +55,22 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
             {node.type.replace('-', ' ')}
           </Text>
         </YStack>
-        <Button size="$3" icon={X} onPress={onClose} chromeless />
+        <Button
+          size="$3"
+          icon={X}
+          onPress={onClose}
+          chromeless
+          aria-label="Close properties panel"
+        />
       </XStack>
 
       {/* Content */}
-      <ScrollView f={1} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        f={1}
+        showsVerticalScrollIndicator={false}
+        role="region"
+        aria-label="Property fields"
+      >
         <YStack gap="$4">
           {node.type === 'activity' && <ActivityProperties properties={properties} onChange={handlePropertyChange} node={node} />}
           {node.type === 'agent' && <AgentProperties properties={properties} onChange={handlePropertyChange} />}
@@ -75,8 +88,16 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
       </ScrollView>
 
       {/* Actions */}
-      <XStack gap="$2" jc="flex-end" borderTopWidth={1} borderTopColor="$borderColor" pt="$3">
-        <Button onPress={onClose} chromeless>
+      <XStack
+        gap="$2"
+        jc="flex-end"
+        borderTopWidth={1}
+        borderTopColor="$borderColor"
+        pt="$3"
+        role="group"
+        aria-label="Property panel actions"
+      >
+        <Button onPress={onClose} chromeless aria-label="Cancel changes">
           Cancel
         </Button>
         <Button
@@ -84,6 +105,7 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
           icon={hasChanges ? Save : Check}
           onPress={handleSave}
           disabled={!hasChanges}
+          aria-label={hasChanges ? 'Save property changes' : 'Changes saved'}
         >
           {hasChanges ? 'Save Changes' : 'Saved'}
         </Button>

@@ -60,7 +60,6 @@ async function createAuthUsers() {
   for (const user of users) {
     try {
       const { data, error } = await supabase.auth.admin.createUser({
-        user_id: user.id,
         email: user.email,
         password: user.password,
         email_confirm: true,

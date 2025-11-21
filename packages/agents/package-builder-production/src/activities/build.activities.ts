@@ -134,23 +134,54 @@ export async function publishPackage(input: {
   const startTime = Date.now();
   const fullPath = path.join(input.config.workspaceRoot, input.packagePath);
 
+  // Check if this is a dry run
+  if (input.config.publishing.dryRun) {
+    console.log(`[Publish] DRY RUN: Would publish ${input.packageName} (skipping actual npm publish)`);
+    return {
+      success: true,
+      duration: Date.now() - startTime,
+      stdout: `DRY RUN: ${input.packageName} not actually published`
+    };
+  }
+
+  // Check for clean working directory if required
+  if (input.config.publishing.requireCleanWorkingDirectory) {
+    try {
+      const { stdout: statusOut } = await execAsync('git status --porcelain', { cwd: fullPath });
+      if (statusOut.trim()) {
+        console.warn(`[Publish] Warning: Working directory not clean for ${input.packageName}`);
+        console.warn(`[Publish] Uncommitted changes:\n${statusOut}`);
+        return {
+          success: false,
+          duration: Date.now() - startTime,
+          stdout: `Publish blocked: working directory not clean\n${statusOut}`
+        };
+      }
+    } catch (error: any) {
+      console.error(`[Publish] Failed to check git status: ${error.message}`);
+    }
+  }
+
   const env = {
     ...process.env,
     NPM_TOKEN: input.config.npmToken
   };
 
   try {
+    console.log(`[Publish] Publishing ${input.packageName} to npm...`);
     const { stdout } = await execAsync(
       'npm publish --access restricted',
       { cwd: fullPath, env }
     );
 
+    console.log(`[Publish] ✅ Successfully published ${input.packageName}`);
     return {
       success: true,
       duration: Date.now() - startTime,
       stdout
     };
   } catch (error: any) {
+    console.error(`[Publish] ❌ Failed to publish ${input.packageName}: ${error.message}`);
     return {
       success: false,
       duration: Date.now() - startTime,
@@ -204,6 +235,104 @@ export async function buildDependencyGraph(auditReportPath: string): Promise<Pac
     category: mainCategory,
     dependencies,
     layer: categoryToLayer(mainCategory),
+    buildStatus: 'pending'
+  });
+
+  // Sort by layer (validators first, suites last)
+  return packages.sort((a, b) => a.layer - b.layer);
+}
+
+/**
+ * Parse plan file to extract package info and dependencies
+ */
+export async function parsePlanFile(input: {
+  workspaceRoot: string;
+  planPath: string;
+}): Promise<PackageNode[]> {
+  const fullPath = path.join(input.workspaceRoot, input.planPath);
+  const content = await fs.readFile(fullPath, 'utf-8');
+
+  // Extract package name from first line: "# Package Name" or "**Package:** `@scope/name`"
+  let packageName = '';
+
+  // Try "**Package:** `@scope/name`" format first
+  const packageMatch = content.match(/\*\*Package:\*\*\s+`([^`]+)`/);
+  if (packageMatch) {
+    packageName = packageMatch[1];
+  }
+
+  // If not found, try extracting from header: "# @scope/package-name - MASTER PLAN"
+  if (!packageName) {
+    const headerMatch = content.match(/^#\s+(@[\w-]+\/[\w-]+)/m);
+    if (headerMatch) {
+      packageName = headerMatch[1];
+    }
+  }
+
+  if (!packageName) {
+    throw new Error(`Could not extract package name from plan file: ${input.planPath}`);
+  }
+
+  // Extract category from Type field: "**Type:** core|service|suite|ui|utility|validator"
+  let category: PackageCategory = 'suite';
+  const typeMatch = content.match(/\*\*Type:\*\*\s+(\w+)/);
+  if (typeMatch) {
+    const typeValue = typeMatch[1].toLowerCase();
+    if (['validator', 'core', 'utility', 'service', 'ui', 'suite'].includes(typeValue)) {
+      category = typeValue as PackageCategory;
+    }
+  }
+
+  // Extract dependencies from Dependencies section
+  const dependencies: string[] = [];
+  const depsMatch = content.match(/## Dependencies\s+([\s\S]*?)(?=\n##|\n---|\z)/);
+
+  if (depsMatch) {
+    const depsSection = depsMatch[1];
+
+    // Match lines like: "- `@scope/package-name`: description"
+    const depRegex = /^\s*-\s+`(@[a-z0-9-]+\/[a-z0-9-]+)`/gm;
+    let match;
+
+    while ((match = depRegex.exec(depsSection)) !== null) {
+      dependencies.push(match[1]);
+    }
+  }
+
+  // Helper function
+  const getCategory = (name: string): PackageCategory => {
+    if (name.includes('suite')) return 'suite';
+    if (name.includes('validator')) return 'validator';
+    if (name.includes('core')) return 'core';
+    if (name.includes('util')) return 'utility';
+    if (name.includes('service')) return 'service';
+    if (name.includes('ui')) return 'ui';
+    return 'core';
+  };
+
+  // Build package nodes
+  const packages: PackageNode[] = [];
+
+  // Add dependencies as nodes
+  dependencies.forEach((dep: string) => {
+    const depCategory = getCategory(dep);
+    const layer = categoryToLayer(depCategory);
+
+    packages.push({
+      name: dep,
+      category: depCategory,
+      dependencies: [],
+      layer,
+      buildStatus: 'pending'
+    });
+  });
+
+  // Add main package
+  packages.push({
+    name: packageName,
+    category,
+    dependencies,
+    layer: categoryToLayer(category),
     buildStatus: 'pending'
   });
 
@@ -401,7 +530,7 @@ export async function checkNpmPublished(packageName: string): Promise<NpmPublish
       return { published: false };
     }
 
-    const data = await response.json();
+    const data = await response.json() as { 'dist-tags'?: { latest?: string } };
     const latestVersion = data['dist-tags']?.latest;
 
     return {
@@ -561,4 +690,35 @@ export async function auditPackageUpgrade(input: {
     ],
     completionPercentage: 0
   };
+}
+
+/**
+ * Update MCP package status
+ *
+ * This activity updates the package status in the MCP (Model Context Protocol) system.
+ * Currently a stub implementation that logs the status update.
+ *
+ * @param packageName - The name of the package
+ * @param status - The status to set (e.g., 'published', 'building', 'failed')
+ * @param errorDetails - Optional error details if status indicates failure
+ */
+export async function updateMCPPackageStatus(
+  packageName: string,
+  status: string,
+  errorDetails?: string
+): Promise<void> {
+  console.log(`[MCP] Updating package status: ${packageName} -> ${status}`);
+
+  if (errorDetails) {
+    console.log(`[MCP] Error details: ${errorDetails}`);
+  }
+
+  // TODO: Implement actual MCP status update logic
+  // This could involve:
+  // - Updating a database
+  // - Making an HTTP request to an MCP service
+  // - Writing to a status file
+  // - Publishing to a message queue
+
+  // For now, just log the update
 }

@@ -7,7 +7,10 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest"
+    "test": "vitest",
+    "test:activities": "npm run build && node dist/test-client.js",
+    "worker": "./scripts/start-worker.sh",
+    "worker:dev": "./scripts/start-worker.sh dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

@@ -1,15 +1,17 @@
 /**
  * Seed Demo Workflows
- * 
- * Creates two demo workflows for showcase:
+ *
+ * Creates demo workflows for showcase:
  * 1. Hello World - Simple greeting workflow
  * 2. Agent Conversation - Two agents chatting
+ * 3. Milestone 1 Examples - Production-ready workflow patterns
  */
 
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -302,12 +304,74 @@ async function seedDemoWorkflows() {
 
   console.log(`   ✅ Created: ${conversationWorkflow.display_name}`);
 
+  // Step 6: Load and create Milestone 1 example workflows
+  console.log('\n6️⃣ Creating Milestone 1 example workflows...');
+
+  const milestone1Examples = [
+    'api-orchestration.json',
+    'data-pipeline.json',
+    'notification-chain.json',
+    'order-fulfillment.json'
+  ];
+
+  const createdExamples = [];
+
+  for (const exampleFile of milestone1Examples) {
+    try {
+      const examplePath = resolve(__dirname, '../examples/milestone-1', exampleFile);
+      const exampleContent = readFileSync(examplePath, 'utf-8');
+      const example = JSON.parse(exampleContent);
+
+      const workflowData = {
+        id: `m1-${example.name.substring(0, 8)}-${Date.now().toString(36)}`,
+        name: example.name,
+        display_name: example.displayName,
+        description: example.description,
+        version: example.version,
+        status_id: activeStatus.id,
+        visibility_id: publicVisibility.id,
+        created_by: user.id,
+        task_queue_id: defaultQueue.id,
+        project_id: project.id,
+        definition: example.definition,
+        execution_timeout_seconds: example.executionSettings?.timeout || 300,
+      };
+
+      const { data: workflow, error: workflowError } = await supabase
+        .from('workflows')
+        .upsert(workflowData, {
+          onConflict: 'name'
+        })
+        .select()
+        .single();
+
+      if (workflowError) {
+        console.error(`   ❌ Failed to create ${example.displayName}:`, workflowError.message);
+      } else {
+        console.log(`   ✅ Created: ${workflow.display_name}`);
+        createdExamples.push(workflow);
+      }
+    } catch (error: any) {
+      console.error(`   ❌ Error loading ${exampleFile}:`, error.message);
+    }
+  }
+
   // Summary
   console.log('\n✅ Demo workflows seeded successfully!\n');
   console.log('📋 Created:');
-  console.log(`   • ${helloWorkflow.display_name} (${helloWorkflow.kebab_name})`);
-  console.log(`   • ${conversationWorkflow.display_name} (${conversationWorkflow.kebab_name})`);
-  console.log('\n🌐 View them at: http://localhost:3010\n');
+  console.log('\n   Basic Demos:');
+  console.log(`   • ${helloWorkflow.display_name} (${helloWorkflow.name})`);
+  console.log(`   • ${conversationWorkflow.display_name} (${conversationWorkflow.name})`);
+
+  if (createdExamples.length > 0) {
+    console.log('\n   Milestone 1 Examples:');
+    createdExamples.forEach(workflow => {
+      console.log(`   • ${workflow.display_name} (${workflow.name})`);
+    });
+  }
+
+  console.log('\n🌐 View them at: http://localhost:3010');
+  console.log('📚 Documentation: docs/examples/milestone-1-demos.md\n');
 }
 
 seedDemoWorkflows().catch((error) => {

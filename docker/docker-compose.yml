@@ -90,10 +90,44 @@ services:
     networks:
       - coordinator-network
 
+  # Workflow Builder Worker Service
+  workflow-worker-service:
+    build:
+      context: ../packages/workflow-worker-service
+      dockerfile: Dockerfile
+    container_name: coordinator-workflow-worker
+    ports:
+      - "${WORKER_SERVICE_PORT:-3011}:3011"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      WORKER_SERVICE_PORT: 3011
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      NODE_ENV: ${NODE_ENV:-development}
+    depends_on:
+      temporal:
+        condition: service_healthy
+    volumes:
+      # Mount for hot reload in development
+      - ../packages/workflow-worker-service/src:/app/src:ro
+      # Temp directory for workflow bundles
+      - workflow_bundles:/tmp/workflow-builder
+    restart: unless-stopped
+    networks:
+      - coordinator-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  workflow_bundles:
     driver: local
 
 networks:

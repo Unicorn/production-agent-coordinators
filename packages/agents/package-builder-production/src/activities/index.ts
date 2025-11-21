@@ -60,6 +60,18 @@ export const ALL_ACTIVITY_NAMES = [
   // Phase executor activities
   'executePlanningPhase',
   'executeFoundationPhase',
+  'executeTypesPhase',
+  'executeCoreImplementationPhase',
+  'executeEntryPointPhase',
+  'executeUtilitiesPhase',
+  'executeErrorHandlingPhase',
+  'executeTestingPhase',
+  'executeDocumentationPhase',
+  'executeExamplesPhase',
+  'executeIntegrationReviewPhase',
+  'executeCriticalFixesPhase',
+  'executeBuildValidationPhase',
+  'executeFinalPolishPhase',
 
   // Generation state activities
   'saveGenerationState',

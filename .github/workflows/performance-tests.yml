@@ -1,0 +1,260 @@
+name: Performance Tests
+
+on:
+  # Run on pull requests to main
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/workflow-builder/src/**'
+      - 'packages/workflow-builder/tests/performance/**'
+      - '.github/workflows/performance-tests.yml'
+
+  # Run on schedule (daily at 2 AM UTC)
+  schedule:
+    - cron: '0 2 * * *'
+
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - creation
+          - execution
+          - compiler
+
+jobs:
+  performance-tests:
+    name: K6 Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: workflow_builder_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Verify k6 installation
+        run: k6 version
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd packages/workflow-builder
+          npm ci
+
+      - name: Setup test environment
+        working-directory: packages/workflow-builder
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/workflow_builder_test
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          # Create .env.test.local
+          cat > .env.test.local <<EOF
+          SUPABASE_TEST_ACCESS_TOKEN=${{ secrets.TEST_ACCESS_TOKEN }}
+          SUPABASE_TEST_REFRESH_TOKEN=${{ secrets.TEST_REFRESH_TOKEN }}
+          BASE_URL=http://localhost:3010
+          DATABASE_URL=$DATABASE_URL
+          NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+          SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+          EOF
+
+      - name: Start application
+        working-directory: packages/workflow-builder
+        run: |
+          npm run dev &
+          echo "Waiting for application to start..."
+
+          # Wait for application to be ready (max 60 seconds)
+          for i in {1..60}; do
+            if curl -f http://localhost:3010/api/health 2>/dev/null; then
+              echo "Application is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Application failed to start within 60 seconds"
+              exit 1
+            fi
+            echo "Waiting... ($i/60)"
+            sleep 1
+          done
+
+      - name: Run performance tests
+        working-directory: packages/workflow-builder
+        env:
+          BASE_URL: http://localhost:3010
+          ACCESS_TOKEN: ${{ secrets.TEST_ACCESS_TOKEN }}
+          TEST_ENV: ci
+        run: |
+          # Determine which tests to run
+          TEST_SUITE="${{ github.event.inputs.test_suite || 'all' }}"
+
+          if [ "$TEST_SUITE" = "all" ]; then
+            ./tests/performance/run-all-tests.sh
+          else
+            case "$TEST_SUITE" in
+              creation)
+                k6 run tests/performance/workflow-creation.k6.js
+                ;;
+              execution)
+                k6 run tests/performance/workflow-execution.k6.js
+                ;;
+              compiler)
+                k6 run tests/performance/compiler-stress.k6.js
+                ;;
+            esac
+          fi
+
+      - name: Upload performance reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-reports
+          path: packages/workflow-builder/tests/performance/reports/
+          retention-days: 30
+
+      - name: Check performance thresholds
+        if: github.event_name == 'pull_request'
+        working-directory: packages/workflow-builder
+        run: |
+          # Check if any test failed thresholds
+          if grep -q "FAILED" tests/performance/reports/*-summary.txt 2>/dev/null; then
+            echo "❌ Performance tests failed to meet thresholds"
+            cat tests/performance/reports/*-summary.txt
+            exit 1
+          else
+            echo "✅ All performance tests passed thresholds"
+          fi
+
+      - name: Comment PR with performance results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Read performance reports
+            const reportsDir = 'packages/workflow-builder/tests/performance/reports';
+            let comment = '## 📊 Performance Test Results\n\n';
+
+            try {
+              // Check if combined report exists
+              const files = fs.readdirSync(reportsDir);
+              const combinedReport = files.find(f => f.startsWith('combined-report') && f.endsWith('.md'));
+
+              if (combinedReport) {
+                const reportContent = fs.readFileSync(
+                  path.join(reportsDir, combinedReport),
+                  'utf8'
+                );
+                comment += reportContent;
+              } else {
+                // Fallback: read individual report summaries
+                const summaryFiles = files.filter(f => f.endsWith('-summary.txt'));
+
+                for (const file of summaryFiles) {
+                  const content = fs.readFileSync(
+                    path.join(reportsDir, file),
+                    'utf8'
+                  );
+                  comment += '\n---\n\n';
+                  comment += '```\n' + content + '\n```\n';
+                }
+              }
+
+              // Add helpful links
+              comment += '\n\n---\n\n';
+              comment += '📈 **View detailed reports in the artifacts section of this workflow run.**\n';
+              comment += '📚 **Documentation:** [Performance Benchmarks](packages/workflow-builder/docs/testing/performance-benchmarks.md)\n';
+
+            } catch (error) {
+              comment += '⚠️ Error reading performance reports: ' + error.message;
+            }
+
+            // Post comment
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Performance regression check
+        if: github.event_name == 'pull_request'
+        working-directory: packages/workflow-builder
+        run: |
+          echo "Checking for performance regressions..."
+
+          # This would compare against baseline metrics
+          # For now, just check that tests completed
+          if [ -f "tests/performance/reports/combined-report.json" ]; then
+            echo "✅ Performance tests completed successfully"
+          else
+            echo "⚠️ Performance test results not found"
+          fi
+
+      - name: Cleanup test data
+        if: always()
+        working-directory: packages/workflow-builder
+        run: |
+          # Clean up test workflows and data
+          # Note: This requires cleanup API endpoint or database access
+          echo "Cleanup would be performed here"
+          # ./tests/performance/cleanup.sh
+
+      - name: Send Slack notification
+        if: failure() && github.event_name == 'schedule'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Performance test failure in workflow-builder",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Performance Tests Failed*\n*Repository:* ${{ github.repository }}\n*Branch:* ${{ github.ref }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Results>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -68,13 +68,13 @@ export default function SignInPage() {
             <Text color="$gray11">Welcome back to Workflow Builder</Text>
           </YStack>
 
-          {error && (
+          {error ? (
             <Card padding="$3" backgroundColor="$red3" borderColor="$red7" borderWidth={1}>
               <Text color="$red11" fontSize="$3">
                 {error}
               </Text>
             </Card>
-          )}
+          ) : null}
 
           <YStack gap="$2">
             <Text fontSize="$3" fontWeight="600">
@@ -120,7 +120,7 @@ export default function SignInPage() {
 
           <XStack gap="$2" justifyContent="center" alignItems="center">
             <Text fontSize="$3" color="$gray11">
-              Don't have an account?{' '}
+              Don't have an account?
             </Text>
             <Link href="/auth/signup" style={{ textDecoration: 'none' }}>
               <Text fontSize="$3" color="$blue10" fontWeight="600" cursor="pointer" hoverStyle={{ color: '$blue11' }}>

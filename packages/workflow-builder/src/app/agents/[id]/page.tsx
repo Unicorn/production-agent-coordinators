@@ -142,7 +142,7 @@ function AgentDetailContent() {
                       Capabilities
                     </Text>
                     <XStack gap="$2" flexWrap="wrap">
-                      {prompt.capabilities.map((cap) => (
+                      {prompt.capabilities.map((cap: string) => (
                         <Text key={cap} fontSize="$2" color="$gray11">
                           {cap}
                         </Text>

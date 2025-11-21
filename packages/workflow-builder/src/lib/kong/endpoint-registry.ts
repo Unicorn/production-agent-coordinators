@@ -8,7 +8,8 @@
 import { KongClient } from './client';
 import { generateEndpointHash } from './hash-generator';
 import { getKongConfig, isKongEnabled } from './config';
-import { getSupabaseClient } from '../supabase/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database';
 
 export interface WorkflowEndpoint {
   endpointPath: string; // e.g., "/orders" (relative path)
@@ -41,7 +42,8 @@ export async function registerWorkflowEndpoints(
   workflowId: string,
   userId: string,
   projectId: string,
-  endpoints: WorkflowEndpoint[]
+  endpoints: WorkflowEndpoint[],
+  supabase: SupabaseClient<Database>
 ): Promise<RegisteredEndpoint[]> {
   if (!isKongEnabled()) {
     console.warn('⚠️  Kong is not enabled. Skipping endpoint registration.');
@@ -50,7 +52,6 @@ export async function registerWorkflowEndpoints(
 
   const config = getKongConfig();
   const kong = new KongClient();
-  const supabase = getSupabaseClient();
 
   // Verify Kong is accessible
   const isHealthy = await kong.healthCheck();
@@ -205,13 +206,15 @@ export async function registerWorkflowEndpoints(
 /**
  * Unregister workflow endpoints (delete from Kong and database)
  */
-export async function unregisterWorkflowEndpoints(workflowId: string): Promise<void> {
+export async function unregisterWorkflowEndpoints(
+  workflowId: string,
+  supabase: SupabaseClient<Database>
+): Promise<void> {
   if (!isKongEnabled()) {
     return;
   }
 
   const kong = new KongClient();
-  const supabase = getSupabaseClient();
 
   // Get all endpoints for this workflow
   const { data: endpoints, error } = await supabase

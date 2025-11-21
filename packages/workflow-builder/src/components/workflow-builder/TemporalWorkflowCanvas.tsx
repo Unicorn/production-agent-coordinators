@@ -75,9 +75,27 @@ export function TemporalWorkflowCanvas({
       />
 
       {/* Center: Workflow Canvas */}
-      <YStack f={1} ai="center" jc="center" bg="$gray2" position="relative">
+      <YStack
+        f={1}
+        ai="center"
+        jc="center"
+        bg="$gray2"
+        position="relative"
+        role="main"
+        aria-label="Workflow canvas area"
+      >
       {/* Placeholder - will be replaced with actual TemporalWorkflowBuilder */}
-      <YStack gap="$4" ai="center" p="$6" bg="$background" borderRadius="$4" borderWidth={1} borderColor="$borderColor">
+      <YStack
+        gap="$4"
+        ai="center"
+        p="$6"
+        bg="$background"
+        borderRadius="$4"
+        borderWidth={1}
+        borderColor="$borderColor"
+        role="region"
+        aria-label="Workflow builder placeholder"
+      >
         <YStack ai="center" gap="$2">
           <YStack w={60} h={60} bg="$blue5" borderRadius="$4" ai="center" jc="center">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -62,7 +62,7 @@ async function validateCreate(
   change: FileChange,
   fullPath: string,
   errors: string[],
-  warnings: string[]
+  _warnings: string[]
 ): Promise<void> {
   // Verify file exists
   try {
@@ -113,7 +113,7 @@ async function validateDelete(
   change: FileChange,
   fullPath: string,
   errors: string[],
-  warnings: string[]
+  _warnings: string[]
 ): Promise<void> {
   // Verify file no longer exists
   try {

@@ -87,7 +87,18 @@ export function ExecutionHistoryList({ workflowId, onSelectExecution }: Executio
   );
 }
 
-function ExecutionListItem({ execution, onClick }: { execution: any; onClick?: () => void }) {
+interface ExecutionItem {
+  id: string;
+  status: string;
+  startedAt: Date;
+  completedAt: Date | null;
+  durationMs: number | null;
+  result: unknown;
+  error: string | null;
+  historySyncStatus: string | null;
+}
+
+function ExecutionListItem({ execution, onClick }: { execution: ExecutionItem; onClick?: () => void }) {
   const statusColors: Record<string, string> = {
     completed: '$green11',
     failed: '$red11',

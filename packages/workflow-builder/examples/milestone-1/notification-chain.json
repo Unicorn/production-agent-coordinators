@@ -1,0 +1,307 @@
+{
+  "name": "incident-notification-chain-demo",
+  "displayName": "Incident Notification Chain",
+  "description": "Demonstrates an escalating notification workflow for critical incidents: Detect the incident, notify the on-call engineer, wait for acknowledgment with timeout, escalate to manager if needed, and create a post-mortem ticket. This example showcases timeout handling, conditional logic, and multi-channel notifications with 4 activities.",
+  "version": "1.0.0",
+  "tags": ["demo", "milestone-1", "notifications", "incident-management", "timeout"],
+  "definition": {
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": { "x": 100, "y": 250 },
+        "data": {
+          "label": "Incident Detected",
+          "config": {
+            "triggerType": "signal",
+            "signalName": "incident_detected",
+            "description": "Triggered when a critical incident is detected by monitoring systems"
+          }
+        }
+      },
+      {
+        "id": "activity-1",
+        "type": "activity",
+        "position": { "x": 300, "y": 250 },
+        "data": {
+          "label": "Notify On-Call Engineer",
+          "componentName": "SendPagerDutyNotification",
+          "config": {
+            "service": "pagerduty",
+            "apiKey": "${env.PAGERDUTY_API_KEY}",
+            "urgency": "high",
+            "incidentKey": "${workflow.incidentId}",
+            "title": "${workflow.incidentTitle}",
+            "details": {
+              "severity": "${workflow.severity}",
+              "affectedServices": "${workflow.affectedServices}",
+              "detectedAt": "${workflow.detectedAt}",
+              "monitoringUrl": "${workflow.monitoringUrl}"
+            },
+            "escalationPolicy": "primary-oncall",
+            "channels": [
+              {
+                "type": "push",
+                "priority": "high"
+              },
+              {
+                "type": "sms",
+                "delay": "30s"
+              },
+              {
+                "type": "phone",
+                "delay": "2m"
+              }
+            ],
+            "description": "Sends multi-channel alert to on-call engineer via PagerDuty with escalating urgency"
+          },
+          "retryPolicy": {
+            "strategy": "fail-after-x",
+            "maxAttempts": 3
+          }
+        }
+      },
+      {
+        "id": "activity-2",
+        "type": "activity",
+        "position": { "x": 550, "y": 250 },
+        "data": {
+          "label": "Wait for Acknowledgment",
+          "componentName": "WaitForSignalActivity",
+          "config": {
+            "signalName": "incident_acknowledged",
+            "timeout": "5m",
+            "timeoutAction": "escalate",
+            "expectedFields": ["acknowledgedBy", "ackTimestamp", "estimatedResolutionTime"],
+            "description": "Waits up to 5 minutes for engineer to acknowledge the incident before escalating"
+          },
+          "retryPolicy": {
+            "strategy": "none"
+          }
+        }
+      },
+      {
+        "id": "condition-1",
+        "type": "condition",
+        "position": { "x": 800, "y": 250 },
+        "data": {
+          "label": "Acknowledged?",
+          "config": {
+            "condition": "${activity-2.acknowledged} == true",
+            "truePath": "activity-4",
+            "falsePath": "activity-3",
+            "description": "Checks if incident was acknowledged within timeout period"
+          }
+        }
+      },
+      {
+        "id": "activity-3",
+        "type": "activity",
+        "position": { "x": 800, "y": 100 },
+        "data": {
+          "label": "Escalate to Manager",
+          "componentName": "EscalateIncidentActivity",
+          "config": {
+            "escalationLevel": "manager",
+            "notificationChannels": [
+              {
+                "type": "slack",
+                "channel": "#incident-escalations",
+                "webhook": "${env.SLACK_ESCALATION_WEBHOOK}",
+                "mention": "@engineering-managers",
+                "message": "CRITICAL: Incident ${workflow.incidentId} not acknowledged after 5 minutes. On-call engineer unresponsive.",
+                "priority": "urgent"
+              },
+              {
+                "type": "email",
+                "to": ["engineering-manager@example.com", "vp-engineering@example.com"],
+                "cc": ["on-call@example.com"],
+                "subject": "URGENT: Unacknowledged Critical Incident - ${workflow.incidentTitle}",
+                "template": "incident-escalation",
+                "priority": "high"
+              },
+              {
+                "type": "phone",
+                "numbers": ["${env.MANAGER_PHONE}"],
+                "message": "Critical incident requires immediate attention. Check Slack for details.",
+                "retryInterval": "1m",
+                "maxRetries": 3
+              }
+            ],
+            "updateIncidentPriority": "p0",
+            "assignToBackup": true,
+            "logEscalation": true,
+            "description": "Escalates unacknowledged incident to engineering manager via multiple channels"
+          },
+          "retryPolicy": {
+            "strategy": "exponential-backoff",
+            "maxAttempts": 4,
+            "initialInterval": "5s",
+            "maxInterval": "30s",
+            "backoffCoefficient": 2
+          }
+        }
+      },
+      {
+        "id": "activity-4",
+        "type": "activity",
+        "position": { "x": 1050, "y": 250 },
+        "data": {
+          "label": "Create Post-Mortem Ticket",
+          "componentName": "CreateJiraTicketActivity",
+          "config": {
+            "project": "INCIDENT",
+            "issueType": "Post-Mortem",
+            "summary": "Post-Mortem: ${workflow.incidentTitle}",
+            "description": {
+              "template": "incident-postmortem",
+              "fields": {
+                "incidentId": "${workflow.incidentId}",
+                "severity": "${workflow.severity}",
+                "detectedAt": "${workflow.detectedAt}",
+                "acknowledgedAt": "${activity-2.ackTimestamp}",
+                "acknowledgedBy": "${activity-2.acknowledgedBy}",
+                "affectedServices": "${workflow.affectedServices}",
+                "impactDuration": "${workflow.impactDuration}",
+                "escalated": "${condition-1.escalated}",
+                "timeline": "${workflow.timeline}"
+              }
+            },
+            "priority": "high",
+            "labels": ["incident", "post-mortem", "${workflow.severity}"],
+            "components": ["${workflow.affectedServices}"],
+            "assignee": "${activity-2.acknowledgedBy}",
+            "dueDate": "+7d",
+            "watchers": ["incident-response-team"],
+            "linkedIssues": [
+              {
+                "type": "caused by",
+                "key": "${workflow.rootCauseTicket}"
+              }
+            ],
+            "description": "Creates a post-mortem ticket in Jira for follow-up analysis and documentation"
+          },
+          "retryPolicy": {
+            "strategy": "fail-after-x",
+            "maxAttempts": 3
+          }
+        }
+      },
+      {
+        "id": "end-1",
+        "type": "end",
+        "position": { "x": 1300, "y": 250 },
+        "data": {
+          "label": "Complete",
+          "config": {
+            "description": "Incident notification workflow completed"
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "activity-1",
+        "label": "Incident detected"
+      },
+      {
+        "id": "e2",
+        "source": "activity-1",
+        "target": "activity-2",
+        "label": "On-call notified"
+      },
+      {
+        "id": "e3",
+        "source": "activity-2",
+        "target": "condition-1",
+        "label": "Check acknowledgment"
+      },
+      {
+        "id": "e4",
+        "source": "condition-1",
+        "target": "activity-3",
+        "label": "Not acknowledged (timeout)"
+      },
+      {
+        "id": "e5",
+        "source": "condition-1",
+        "target": "activity-4",
+        "label": "Acknowledged"
+      },
+      {
+        "id": "e6",
+        "source": "activity-3",
+        "target": "activity-4",
+        "label": "Escalated"
+      },
+      {
+        "id": "e7",
+        "source": "activity-4",
+        "target": "end-1",
+        "label": "Post-mortem created"
+      }
+    ],
+    "metadata": {
+      "timeout": "15m",
+      "description": "Incident notification workflow with timeout-based escalation and post-mortem tracking",
+      "expectedDuration": "30 seconds to 10 minutes",
+      "features": [
+        "Signal-based triggering",
+        "Multi-channel notifications",
+        "Timeout handling with escalation",
+        "Conditional branching",
+        "Automated escalation paths",
+        "Post-incident documentation"
+      ]
+    }
+  },
+  "executionSettings": {
+    "timeout": 900,
+    "retryPolicy": {
+      "maxAttempts": 1,
+      "strategy": "none"
+    }
+  },
+  "sampleInput": {
+    "incidentId": "INC-2025-001",
+    "incidentTitle": "Database Connection Pool Exhausted",
+    "severity": "critical",
+    "affectedServices": ["api-gateway", "user-service"],
+    "detectedAt": "2025-11-19T14:30:00Z",
+    "monitoringUrl": "https://grafana.example.com/d/incident-001",
+    "impactDuration": "5 minutes"
+  },
+  "expectedOutput": {
+    "status": "success",
+    "acknowledged": true,
+    "acknowledgedBy": "jane.engineer@example.com",
+    "acknowledgmentTime": "2m 15s",
+    "escalated": false,
+    "postMortemTicket": "INCIDENT-1234",
+    "notifications": {
+      "onCall": "sent",
+      "escalation": "not_needed",
+      "postMortem": "created"
+    }
+  },
+  "alternativeScenario": {
+    "name": "Timeout and Escalation",
+    "description": "What happens when on-call engineer doesn't acknowledge within 5 minutes",
+    "expectedOutput": {
+      "status": "success",
+      "acknowledged": false,
+      "acknowledgmentTime": "timeout (5m)",
+      "escalated": true,
+      "escalatedTo": ["engineering-manager@example.com", "vp-engineering@example.com"],
+      "postMortemTicket": "INCIDENT-1235",
+      "notifications": {
+        "onCall": "sent",
+        "escalation": "sent",
+        "postMortem": "created"
+      }
+    }
+  },
+  "demoNotes": "This workflow demonstrates time-sensitive notification handling with automatic escalation. It showcases how to use timeouts effectively in production scenarios where human response is required but not guaranteed. The conditional logic allows for different execution paths based on whether the incident is acknowledged, making it a perfect example of real-world workflow patterns."
+}
