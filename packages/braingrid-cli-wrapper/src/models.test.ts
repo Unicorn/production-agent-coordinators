@@ -4,7 +4,8 @@ import {
   BrainGridRequirementSchema,
   BrainGridTaskSchema,
   RequirementStatus,
-  TaskStatus
+  TaskStatus,
+  BrainGridCliError
 } from './models';
 
 describe('BrainGrid Schemas', () => {
@@ -50,7 +51,7 @@ describe('BrainGrid Schemas', () => {
     });
 
     it('should accept all valid statuses', () => {
-      const statuses: RequirementStatus[] = ['IDEA', 'PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+      const statuses: RequirementStatus[] = ['IDEA', 'PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'PAUSED'];
 
       statuses.forEach(status => {
         const req = {
@@ -62,6 +63,18 @@ describe('BrainGrid Schemas', () => {
         const result = BrainGridRequirementSchema.safeParse(req);
         expect(result.success).toBe(true);
       });
+    });
+
+    it('should reject invalid requirement status', () => {
+      const invalidReq = {
+        id: 'req-456',
+        projectId: 'proj-123',
+        title: 'Test',
+        status: 'INVALID_STATUS'
+      };
+
+      const result = BrainGridRequirementSchema.safeParse(invalidReq);
+      expect(result.success).toBe(false);
     });
   });
 
@@ -98,6 +111,81 @@ describe('BrainGrid Schemas', () => {
         expect(result.data.tags).toBeUndefined();
         expect(result.data.dependencies).toBeUndefined();
       }
+    });
+
+    it('should reject invalid task status', () => {
+      const invalidTask = {
+        id: 'task-789',
+        reqId: 'req-456',
+        title: 'Build login UI',
+        status: 'INVALID_STATUS'
+      };
+
+      const result = BrainGridTaskSchema.safeParse(invalidTask);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('BrainGridCliError', () => {
+    it('should create error with all properties', () => {
+      const error = new BrainGridCliError(
+        'Command failed',
+        'braingrid test-command',
+        1,
+        'Error output from stderr'
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error.name).toBe('BrainGridCliError');
+      expect(error.message).toBe('Command failed');
+      expect(error.command).toBe('braingrid test-command');
+      expect(error.exitCode).toBe(1);
+      expect(error.stderr).toBe('Error output from stderr');
+    });
+
+    it('should preserve error properties when thrown', () => {
+      try {
+        throw new BrainGridCliError(
+          'Test error',
+          'braingrid fail',
+          2,
+          'stderr content'
+        );
+      } catch (err) {
+        expect(err).toBeInstanceOf(BrainGridCliError);
+        if (err instanceof BrainGridCliError) {
+          expect(err.message).toBe('Test error');
+          expect(err.command).toBe('braingrid fail');
+          expect(err.exitCode).toBe(2);
+          expect(err.stderr).toBe('stderr content');
+        }
+      }
+    });
+
+    it('should handle empty stderr', () => {
+      const error = new BrainGridCliError(
+        'Command failed',
+        'braingrid cmd',
+        1,
+        ''
+      );
+
+      expect(error.stderr).toBe('');
+      expect(error.exitCode).toBe(1);
+    });
+
+    it('should handle different exit codes', () => {
+      const exitCodes = [0, 1, 2, 127, 255];
+
+      exitCodes.forEach(code => {
+        const error = new BrainGridCliError(
+          'Test',
+          'cmd',
+          code,
+          'stderr'
+        );
+        expect(error.exitCode).toBe(code);
+      });
     });
   });
 });
