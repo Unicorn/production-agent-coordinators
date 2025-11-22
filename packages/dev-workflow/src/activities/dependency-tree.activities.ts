@@ -4,10 +4,10 @@ import { TaskInput } from '../types/task.types';
 /**
  * Build dependency tree from task list
  */
-export function buildDependencyTree(
+export async function buildDependencyTree(
   reqId: string,
   tasks: TaskInput[]
-): DependencyTree {
+): Promise<DependencyTree> {
   const tree: DependencyTree = {
     reqId,
     tasks: new Map(),

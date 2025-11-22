@@ -5,7 +5,7 @@ import { TaskStatus } from '../types/dependency-tree.types';
 
 describe('Dependency Tree Activities', () => {
   describe('buildDependencyTree', () => {
-    it('should build tree with no dependencies (layer 0)', () => {
+    it('should build tree with no dependencies (layer 0)', async () => {
       const tasks: TaskInput[] = [
         {
           id: 'task-1',
@@ -25,7 +25,7 @@ describe('Dependency Tree Activities', () => {
         }
       ];
 
-      const tree = buildDependencyTree('req-123', tasks);
+      const tree = await buildDependencyTree('req-123', tasks);
 
       expect(tree.reqId).toBe('req-123');
       expect(tree.tasks.size).toBe(2);
@@ -37,7 +37,7 @@ describe('Dependency Tree Activities', () => {
       expect(task1?.status).toBe(TaskStatus.READY);
     });
 
-    it('should build tree with dependencies (multiple layers)', () => {
+    it('should build tree with dependencies (multiple layers)', async () => {
       const tasks: TaskInput[] = [
         {
           id: 'task-1',
@@ -73,7 +73,7 @@ describe('Dependency Tree Activities', () => {
         }
       ];
 
-      const tree = buildDependencyTree('req-123', tasks);
+      const tree = await buildDependencyTree('req-123', tasks);
 
       expect(tree.layers).toHaveLength(3);
       expect(tree.layers[0]).toHaveLength(1); // task-1
@@ -91,7 +91,7 @@ describe('Dependency Tree Activities', () => {
       expect(task4?.dependencies).toEqual(['task-2', 'task-3']);
     });
 
-    it('should detect circular dependencies', () => {
+    it('should detect circular dependencies', async () => {
       const tasks: TaskInput[] = [
         {
           id: 'task-1',
@@ -111,12 +111,12 @@ describe('Dependency Tree Activities', () => {
         }
       ];
 
-      expect(() => buildDependencyTree('req-123', tasks)).toThrow('Circular dependency detected');
+      await expect(buildDependencyTree('req-123', tasks)).rejects.toThrow('Circular dependency detected');
     });
   });
 
   describe('updateTaskReadiness', () => {
-    it('should mark dependent tasks as ready when dependency completes', () => {
+    it('should mark dependent tasks as ready when dependency completes', async () => {
       const tasks: TaskInput[] = [
         {
           id: 'task-1',
@@ -136,7 +136,7 @@ describe('Dependency Tree Activities', () => {
         }
       ];
 
-      const tree = buildDependencyTree('req-123', tasks);
+      const tree = await buildDependencyTree('req-123', tasks);
 
       // Initially task-2 is blocked
       expect(tree.tasks.get('task-2')?.status).toBe(TaskStatus.BLOCKED);
@@ -149,7 +149,7 @@ describe('Dependency Tree Activities', () => {
       expect(tree.tasks.get('task-2')?.status).toBe(TaskStatus.READY);
     });
 
-    it('should not mark task ready if other dependencies incomplete', () => {
+    it('should not mark task ready if other dependencies incomplete', async () => {
       const tasks: TaskInput[] = [
         {
           id: 'task-1',
@@ -177,7 +177,7 @@ describe('Dependency Tree Activities', () => {
         }
       ];
 
-      const tree = buildDependencyTree('req-123', tasks);
+      const tree = await buildDependencyTree('req-123', tasks);
 
       // Complete only task-1
       const nowReady = updateTaskReadiness(tree, 'task-1');
