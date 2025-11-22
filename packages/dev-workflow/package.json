@@ -13,7 +13,9 @@
     "dev": "tsx src/workers/dev-worker.ts",
     "worker:dev": "tsx src/workers/dev-worker.ts",
     "worker:test": "tsx src/workers/test-worker.ts",
-    "worker:deploy": "tsx src/workers/deploy-worker.ts"
+    "worker:deploy": "tsx src/workers/deploy-worker.ts",
+    "start:slack": "tsx src/slack/bot-server.ts",
+    "dev:slack": "tsx --watch src/slack/bot-server.ts"
   },
   "keywords": ["temporal", "workflow", "automation", "dev"],
   "author": "Bernier LLC",
