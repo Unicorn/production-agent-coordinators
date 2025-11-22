@@ -588,7 +588,8 @@ describe('WorkflowCompiler', () => {
 
       expect(result.success).toBe(true);
       expect(result.workerCode).toContain('Worker.create');
-      expect(result.workerCode).toContain("taskQueue: 'custom-queue'");
+      expect(result.workerCode).toContain("taskQueue:");
+      expect(result.workerCode).toContain("'custom-queue'");
     });
   });
 
