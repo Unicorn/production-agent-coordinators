@@ -19,11 +19,25 @@ interface ConversationState {
   awaitingApproval: boolean;
 }
 
+// Conversation state
+let conversationState: ConversationState = {
+  questions: [],
+  responses: [],
+  awaitingApproval: false
+};
+
+let pendingResponse: UserResponseSignal | undefined;
+let pendingApproval: PlanApprovalSignal | undefined;
+let stopRequested: StopWorkflowSignal | undefined;
+
 // Create activity proxies for ALL activities (Temporal best practice)
 const {
   createBrainGridREQ,
   createBrainGridTasks,
-  buildDependencyTree
+  buildDependencyTree,
+  // Add Slack activities
+  sendThreadMessage,
+  askQuestion
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: '5 minutes'
 });
@@ -32,6 +46,9 @@ export interface PlanningWorkflowInput {
   featureRequest: string;
   repoPath: string;
   projectId?: string;
+  // New: Slack integration
+  slackChannel?: string;
+  slackThreadTs?: string;
 }
 
 export interface PlanningWorkflowResult {
@@ -41,33 +58,131 @@ export interface PlanningWorkflowResult {
 }
 
 /**
- * Minimal FeaturePlanningWorkflow (Phase 1)
+ * FeaturePlanningWorkflow (Phase 2)
  *
- * Creates BrainGrid REQ and task breakdown
- * Does NOT include conversational gathering or Slack integration yet
+ * Creates BrainGrid REQ and task breakdown with conversational gathering via Slack
  */
 export async function FeaturePlanningWorkflow(
   input: PlanningWorkflowInput
 ): Promise<PlanningWorkflowResult> {
-  const { featureRequest, projectId } = input;
+  const { featureRequest, projectId, slackChannel, slackThreadTs } = input;
 
-  console.log(`[Planning] Creating REQ for: ${featureRequest}`);
+  // Set up signal handlers
+  setHandler(userResponseSignal, (signal: UserResponseSignal) => {
+    pendingResponse = signal;
+    conversationState.responses.push(signal);
+  });
 
-  // Step 1: Create BrainGrid REQ
+  setHandler(planApprovalSignal, (signal: PlanApprovalSignal) => {
+    pendingApproval = signal;
+  });
+
+  setHandler(stopWorkflowSignal, (signal: StopWorkflowSignal) => {
+    stopRequested = signal;
+  });
+
+  setHandler(getConversationStateQuery, () => conversationState);
+
+  console.log(`[Planning] Starting conversational planning for: ${featureRequest}`);
+
+  // Phase 2: If Slack enabled, gather requirements conversationally
+  let refinedRequirement = featureRequest;
+
+  if (slackChannel && slackThreadTs) {
+    console.log(`[Planning] Starting Slack conversation in ${slackChannel}`);
+
+    // Welcome message
+    await sendThreadMessage({
+      channel: slackChannel,
+      threadTs: slackThreadTs,
+      text: `Great! I'll help you plan this feature. Let me ask a few questions to understand your requirements better.`
+    });
+
+    // Ask clarifying questions
+    const questions = [
+      'What is the main goal of this feature?',
+      'Who are the primary users?',
+      'Are there any specific technical constraints or dependencies?'
+    ];
+
+    for (const question of questions) {
+      if (stopRequested) break;
+
+      conversationState.currentQuestion = question;
+      conversationState.questions.push(question);
+
+      await askQuestion({
+        channel: slackChannel,
+        threadTs: slackThreadTs,
+        question
+      });
+
+      // Wait for user response (via signal)
+      pendingResponse = undefined;
+      await condition(() => pendingResponse !== undefined || stopRequested !== undefined, '5m');
+
+      if (stopRequested) {
+        console.log('[Planning] Stop requested, saving state and exiting');
+        break;
+      }
+
+      console.log(`[Planning] Received response: ${pendingResponse?.response}`);
+    }
+
+    // Build refined requirement from conversation
+    refinedRequirement = conversationState.responses
+      .map(r => r.response)
+      .join(' | ');
+
+    // Present summary for approval
+    conversationState.awaitingApproval = true;
+
+    await sendThreadMessage({
+      channel: slackChannel,
+      threadTs: slackThreadTs,
+      text: `Based on our conversation, here's what I understand:\n\n${refinedRequirement}\n\nDoes this look correct? Reply 'approve' to continue or provide feedback to adjust.`
+    });
+
+    // Wait for approval
+    pendingApproval = undefined;
+    await condition(() => pendingApproval !== undefined, '10m');
+
+    if (!pendingApproval?.approved) {
+      console.log('[Planning] Plan not approved, feedback:', pendingApproval?.feedback);
+      // TODO: Iterate on plan with feedback
+    }
+
+    await sendThreadMessage({
+      channel: slackChannel,
+      threadTs: slackThreadTs,
+      text: `Perfect! I'll get started on creating the tasks. I'll update you as I make progress.`
+    });
+  }
+
+  // Create BrainGrid REQ with refined requirement
   const reqId = await createBrainGridREQ({
-    description: featureRequest,
+    description: refinedRequirement,
     projectId
   });
 
   console.log(`[Planning] Created REQ: ${reqId}`);
 
-  // Step 2: Mock task breakdown (Phase 1 - will be AI-powered later)
+  // Progress update
+  if (slackChannel && slackThreadTs) {
+    await sendThreadMessage({
+      channel: slackChannel,
+      threadTs: slackThreadTs,
+      text: `✅ Created requirement ${reqId}`
+    });
+  }
+
+  // Mock task breakdown (Phase 1 logic - will be AI-powered later)
   const mockTasks: TaskInput[] = [
     {
       id: 'task-1',
       reqId,
       name: 'Setup and configuration',
-      description: 'Initial setup for ' + featureRequest,
+      description: 'Initial setup for ' + refinedRequirement,
       tags: ['DEV', 'backend'],
       dependencies: []
     },
@@ -91,15 +206,24 @@ export async function FeaturePlanningWorkflow(
 
   console.log(`[Planning] Created ${mockTasks.length} tasks`);
 
-  // Step 3: Build dependency tree
+  // Build dependency tree
   const dependencyTree = await buildDependencyTree(reqId, mockTasks);
 
   console.log(`[Planning] Built dependency tree with ${dependencyTree.layers.length} layers`);
 
-  // Step 4: Create tasks in BrainGrid
+  // Create tasks in BrainGrid
   await createBrainGridTasks(reqId, mockTasks);
 
   console.log(`[Planning] Published tasks to BrainGrid`);
+
+  // Final progress update
+  if (slackChannel && slackThreadTs) {
+    await sendThreadMessage({
+      channel: slackChannel,
+      threadTs: slackThreadTs,
+      text: `✅ Planning complete! Created ${mockTasks.length} tasks organized in ${dependencyTree.layers.length} dependency layers.\n\nDevelopment workers will now pick up these tasks.`
+    });
+  }
 
   return {
     success: true,
