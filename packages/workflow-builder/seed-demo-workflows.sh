@@ -5,7 +5,7 @@
 
 set -e
 
-DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54333/postgres"
 
 echo "🌱 Seeding Demo Workflows..."
 echo ""

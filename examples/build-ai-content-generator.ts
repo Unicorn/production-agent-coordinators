@@ -1,5 +1,9 @@
 import { Connection, Client } from '@temporalio/client';
 import type { PackageBuilderInput } from '../packages/agents/package-builder-production/src/types/index.js';
+import * as dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 async function main() {
   console.log('╔════════════════════════════════════════════════════════════╗');
@@ -11,6 +15,14 @@ async function main() {
   console.log('🤖 Using PackageBuilderWorkflow with planPath mode');
   console.log('🔗 Will parse and build dependencies automatically');
   console.log('');
+
+  // Validate environment
+  if (!process.env.NPM_TOKEN) {
+    console.error('❌ Error: NPM_TOKEN environment variable not set');
+    console.error('   Please set NPM_TOKEN in your .env file');
+    console.error('');
+    process.exit(1);
+  }
 
   // Connect to Temporal
   console.log('📋 Step 1: Connecting to Temporal');
@@ -28,25 +40,46 @@ async function main() {
   // Build configuration
   const buildId = `ai-content-generator-${Date.now()}`;
   const workflowId = `build-${buildId}`;
+  const workspaceRoot = '/Users/mattbernier/projects/tools';
 
   console.log('📋 Step 2: Configuring Workflow');
   console.log(`   Build ID: ${buildId}`);
   console.log(`   Workflow ID: ${workflowId}`);
-  console.log('   Workspace: /Users/mattbernier/projects/tools');
+  console.log(`   Workspace: ${workspaceRoot}`);
   console.log('   Plan Path: plans/packages/service/ai-content-generator.md');
   console.log('   Max Concurrent: 4 packages');
   console.log('   Task Queue: engine');
+  console.log(`   Turn-Based Generation: ${process.env.ENABLE_TURN_BASED_GENERATION === 'true' ? 'ENABLED' : 'DISABLED'}`);
   console.log('');
 
   // Prepare workflow input
   const input: PackageBuilderInput = {
     buildId,
-    workspaceRoot: '/Users/mattbernier/projects/tools',
+    workspaceRoot,
     planPath: 'plans/packages/service/ai-content-generator.md',
     config: {
+      npmRegistry: 'https://registry.npmjs.org',
+      npmToken: process.env.NPM_TOKEN!,
+      workspaceRoot,
       maxConcurrentBuilds: 4,
-      enableAutoFix: true,
-      publishToNpm: true,
+      temporal: {
+        address: 'localhost:7233',
+        namespace: 'default',
+        taskQueue: 'engine'
+      },
+      testing: {
+        enableCoverage: true,
+        minCoveragePercent: 80,
+        failOnError: true
+      },
+      publishing: {
+        dryRun: false,
+        requireTests: true,
+        requireCleanWorkingDirectory: false
+      },
+      features: {
+        enableTurnBasedGeneration: process.env.ENABLE_TURN_BASED_GENERATION === 'true'
+      }
     },
   };
 

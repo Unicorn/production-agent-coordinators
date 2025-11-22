@@ -1,6 +1,6 @@
 import { proxyActivities, startChild, defineSignal } from '@temporalio/workflow';
 import { PackageBuildWorkflow } from './package-build.workflow.js';
-import { PackageBuildTurnBasedWorkflow } from './package-build-turn-based.workflow.js';
+import { TurnBasedCodingAgentWorkflow } from './turn-based-coding-agent.workflow.js';
 import type {
   PackageBuilderInput,
   PackageBuilderState,
@@ -40,14 +40,14 @@ export async function PackageBuilderWorkflow(input: PackageBuilderInput): Promis
   // Initialize state
   const state: PackageBuilderState = await initializePhase(input);
 
-  // PLAN phase
-  await planPhase(state);
+  // PLAN phase - validates dependencies and filters packages
+  await planPhase(state, input.workspaceRoot);
 
   // BUILD phase
   await buildPhase(state, input.workspaceRoot, input.config);
 
   // VERIFY phase
-  await verifyPhase(state, input.workspaceRoot);
+  await verifyPhase(state);
 
   // COMPLETE phase
   await completePhase(state, input.workspaceRoot);
@@ -131,10 +131,53 @@ function categoryToDirectory(category: string): string {
   return category;
 }
 
-async function planPhase(state: PackageBuilderState): Promise<void> {
+async function planPhase(state: PackageBuilderState, workspaceRoot: string): Promise<void> {
   console.log('Phase: PLAN');
 
-  // TODO: Verify package plans exist
+  // Validate dependency tree publish status BEFORE building
+  console.log('[Plan] Validating which packages need building...');
+
+  const packagesForValidation = state.packages.map(pkg => ({
+    packageName: pkg.name,
+    packagePath: `packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}`,
+    planPath: `plans/packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}.md`,
+    category: pkg.category
+  }));
+
+  const validation = await validateDependencyTreePublishStatus({
+    packages: packagesForValidation,
+    workspaceRoot
+  });
+
+  // Store validation results for use in COMPLETE phase
+  (state as any).publishValidation = validation;
+
+  // Filter out packages that don't need building
+  const packagesToSkip = new Set(validation.packagesToSkip);
+  const originalCount = state.packages.length;
+
+  state.packages = state.packages.filter(pkg => !packagesToSkip.has(pkg.name));
+
+  const skippedCount = originalCount - state.packages.length;
+
+  console.log(`[Plan] ✅ Filtered ${skippedCount} already-published packages`);
+  console.log(`[Plan] 📦 ${state.packages.length} packages will be built`);
+
+  if (state.packages.length > 0) {
+    console.log('[Plan] Packages to build:');
+    state.packages.forEach(pkg => console.log(`[Plan]   - ${pkg.name}`));
+  }
+
+  // Check for validation errors that would block the build
+  if (validation.packagesNeedingVersionBump.length > 0) {
+    console.log(`[Plan] ⚠️  Warning: ${validation.packagesNeedingVersionBump.length} package(s) need version bumps:`);
+    validation.packagesNeedingVersionBump.forEach(name => console.log(`[Plan]    - ${name}`));
+  }
+
+  if (validation.validationErrors.length > 0) {
+    console.log('[Plan] ⚠️  Validation warnings:');
+    validation.validationErrors.forEach(err => console.log(`[Plan]    - ${err}`));
+  }
 
   state.phase = 'BUILD' as BuildPhase;
 }
@@ -163,26 +206,38 @@ async function buildPhase(state: PackageBuilderState, workspaceRoot: string, con
       // Select workflow based on feature flag
       const enableTurnBased = config.features?.enableTurnBasedGeneration ?? false;
       const childWorkflow = enableTurnBased
-        ? PackageBuildTurnBasedWorkflow
+        ? TurnBasedCodingAgentWorkflow
         : PackageBuildWorkflow;
 
       if (enableTurnBased) {
-        console.log(`[Build] Using turn-based workflow for ${pkg.name}`);
+        console.log(`[Build] Using turn-based coding agent workflow for ${pkg.name}`);
       }
+
+      const packageDir = pkg.name.split('/')[1];
+      const categoryDir = categoryToDirectory(pkg.category);
 
       // Spawn child workflow (non-blocking - just gets the handle)
       const handle = await startChild(childWorkflow, {
         workflowId: `build-${state.buildId}-${pkg.name}`,
-        args: [{
-          packageName: pkg.name,
-          packagePath: `packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}`,
-          planPath: `plans/packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}.md`,
-          category: pkg.category,
-          dependencies: pkg.dependencies,
-          workspaceRoot,
-          config,
-          enableTurnBasedGeneration: enableTurnBased
-        }]
+        taskQueue: enableTurnBased ? 'turn-based-coding' : 'engine',
+        args: enableTurnBased
+          ? [{
+              task: 'build-package',
+              prompt: `Build ${pkg.name} package according to the plan file`,
+              workspaceRoot,
+              targetPath: `packages/${categoryDir}/${packageDir}`,
+              contextPaths: [`plans/packages/${categoryDir}/${packageDir}.md`],
+              category: pkg.category
+            }]
+          : [{
+              packageName: pkg.name,
+              packagePath: `packages/${categoryDir}/${packageDir}`,
+              planPath: `plans/packages/${categoryDir}/${packageDir}.md`,
+              category: pkg.category,
+              dependencies: pkg.dependencies,
+              workspaceRoot,
+              config
+            }]
       });
 
       activeBuilds.set(pkg.name, { handle, packageName: pkg.name });
@@ -237,39 +292,15 @@ function hasUnbuiltPackages(state: PackageBuilderState): boolean {
   );
 }
 
-async function verifyPhase(state: PackageBuilderState, workspaceRoot: string): Promise<void> {
+async function verifyPhase(state: PackageBuilderState): Promise<void> {
   console.log('Phase: VERIFY');
 
-  // Validate dependency tree publish status before publishing
-  const packagesForValidation = state.packages.map(pkg => ({
-    packageName: pkg.name,
-    packagePath: `packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}`,
-    planPath: `plans/packages/${categoryToDirectory(pkg.category)}/${pkg.name.split('/')[1]}.md`,
-    category: pkg.category
-  }));
-
-  const validation = await validateDependencyTreePublishStatus({
-    packages: packagesForValidation,
-    workspaceRoot
-  });
-
-  // Store validation results in state for use in COMPLETE phase
-  (state as any).publishValidation = validation;
-
-  // Check for errors
-  if (!validation.allPackagesValid) {
-    console.log('\n[Verify] ⚠️  Validation warnings detected:');
-    validation.validationErrors.forEach(err => console.log(`[Verify]    - ${err}`));
-
-    if (validation.packagesNeedingVersionBump.length > 0) {
-      console.log(`[Verify] ⚠️  ${validation.packagesNeedingVersionBump.length} package(s) need version bumps`);
-      console.log('[Verify] These packages will be skipped during publishing');
-    }
-  } else {
-    console.log('[Verify] ✅ All packages validated successfully');
-  }
+  // Validation already happened in PLAN phase
+  // This phase is for running integration tests
 
   // TODO: Run integration tests
+  console.log('[Verify] ⏭️  Integration tests not yet implemented');
+  console.log('[Verify] ✅ Verify phase complete');
 
   state.phase = 'COMPLETE' as BuildPhase;
 }

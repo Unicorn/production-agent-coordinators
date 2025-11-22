@@ -1,7 +1,12 @@
 /**
  * Temporal Worker for Package Builder Workflows
  *
- * This worker executes PackageBuildWorkflow tasks from the Temporal server.
+ * This worker runs TWO task queues simultaneously:
+ * 1. 'engine' queue - Executes PackageBuilderWorkflow (parent coordinator)
+ * 2. 'turn-based-coding' queue - Executes TurnBasedCodingAgentWorkflow (Claude API child workflows)
+ *
+ * The turn-based queue has maxConcurrentWorkflowTaskExecutions: 1 to prevent
+ * Claude API rate limiting by ensuring only one coding agent runs at a time.
  *
  * Start with: yarn workspace @coordinator/agent-package-builder-production start:worker
  */
@@ -32,23 +37,71 @@ async function run() {
     10
   );
 
-  const worker = await Worker.create({
-    taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'engine',
+  // If TEMPORAL_TASK_QUEUE is set, only run a single worker on that queue
+  // This is for backward compatibility and manual testing
+  const taskQueue = process.env.TEMPORAL_TASK_QUEUE;
+
+  if (taskQueue) {
+    const worker = await Worker.create({
+      taskQueue,
+      workflowsPath: path.join(__dirname, 'workflows'),
+      activities,
+      // Limit concurrent executions to prevent resource exhaustion
+      maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
+      maxConcurrentWorkflowTaskExecutions: maxConcurrentWorkflowTasks,
+    });
+
+    console.log('🔨 Package Builder Worker started (single queue mode)');
+    console.log(`   Task Queue: ${taskQueue}`);
+    console.log(`   Namespace: ${process.env.TEMPORAL_NAMESPACE || 'default'}`);
+    console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
+    console.log(`   Max Concurrent Workflow Tasks: ${maxConcurrentWorkflowTasks}`);
+    console.log('   Ready to execute workflow tasks\n');
+
+    await worker.run();
+    return;
+  }
+
+  // Default: Run TWO workers for both queues
+  console.log('🔨 Package Builder Workers starting (multi-queue mode)...\n');
+
+  // Worker 1: 'engine' queue (parent coordinator workflows)
+  const engineWorker = await Worker.create({
+    taskQueue: 'engine',
     workflowsPath: path.join(__dirname, 'workflows'),
     activities,
-    // Limit concurrent executions to prevent resource exhaustion
     maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
     maxConcurrentWorkflowTaskExecutions: maxConcurrentWorkflowTasks,
   });
 
-  console.log('🔨 Package Builder Worker started');
-  console.log(`   Task Queue: ${process.env.TEMPORAL_TASK_QUEUE || 'engine'}`);
-  console.log(`   Namespace: ${process.env.TEMPORAL_NAMESPACE || 'default'}`);
+  console.log('✅ Engine Worker ready');
+  console.log(`   Task Queue: engine`);
   console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
   console.log(`   Max Concurrent Workflow Tasks: ${maxConcurrentWorkflowTasks}`);
-  console.log('   Ready to execute PackageBuildWorkflow tasks\n');
 
-  await worker.run();
+  // Worker 2: 'turn-based-coding' queue (Claude API child workflows)
+  // CRITICAL: maxConcurrentWorkflowTaskExecutions: 1 prevents Claude API rate limiting
+  const turnBasedWorker = await Worker.create({
+    taskQueue: 'turn-based-coding',
+    workflowsPath: path.join(__dirname, 'workflows'),
+    activities,
+    maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
+    maxConcurrentWorkflowTaskExecutions: 1, // ← Only 1 concurrent Claude API workflow
+  });
+
+  console.log('✅ Turn-Based Coding Worker ready');
+  console.log(`   Task Queue: turn-based-coding`);
+  console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
+  console.log(`   Max Concurrent Workflow Tasks: 1 (Claude API rate limit control)`);
+
+  console.log(`\n   Namespace: ${process.env.TEMPORAL_NAMESPACE || 'default'}`);
+  console.log('   Ready to execute all workflow types\n');
+
+  // Run both workers concurrently
+  await Promise.all([
+    engineWorker.run(),
+    turnBasedWorker.run()
+  ]);
 }
 
 run().catch((err) => {

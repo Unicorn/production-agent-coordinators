@@ -56,7 +56,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY=$SERVICE_KEY
 
 # Local Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:54322/postgres
+DATABASE_URL=postgresql://postgres:postgres@localhost:54333/postgres
 
 # Temporal
 TEMPORAL_ADDRESS=localhost:7233
@@ -142,7 +142,7 @@ echo "  4. Login: test@example.com / testpassword123"
 echo ""
 echo "Useful URLs:"
 echo "  • App: http://localhost:3010"
-echo "  • Supabase Studio: http://localhost:54323"
+echo "  • Supabase Studio: http://localhost:54334"
 echo "  • Temporal Web: http://localhost:8233 (after starting Temporal)"
 echo ""
 echo -e "${BLUE}Happy coding! 🎉${NC}"

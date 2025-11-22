@@ -321,6 +321,25 @@ export interface GenerationStep {
   };
 }
 
+/**
+ * Conversation message for Claude API
+ *
+ * Tracks messages exchanged with Claude during turn-based generation.
+ * Stored per-phase for debugging and resume functionality.
+ */
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  phase: GenerationPhase;
+  tokensUsed?: {
+    input?: number;
+    output?: number;
+  };
+}
+
+export type ConversationHistory = ConversationMessage[];
+
 export interface GenerationContext {
   sessionId: string;
   branch: string;
@@ -348,6 +367,28 @@ export interface GenerationContext {
     failedStep: number;
     error: string;
     retryCount: number;
+  };
+
+  // NEW: Conversation tracking for context preservation
+  /**
+   * Full conversation history across all phases.
+   * Enables resuming with complete context for validation feedback.
+   */
+  fullConversationHistory?: ConversationHistory;
+
+  /**
+   * Per-phase conversation history for debugging and analysis.
+   * Maps phase name to conversation messages exchanged during that phase.
+   */
+  phaseConversations?: Record<GenerationPhase, ConversationHistory>;
+
+  /**
+   * Total tokens consumed across all phases.
+   * Helps track Claude API usage and costs.
+   */
+  totalTokensUsed?: {
+    input: number;
+    output: number;
   };
 }
 

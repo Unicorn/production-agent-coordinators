@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { YStack, XStack, useToastController } from 'tamagui';
+import { YStack, XStack } from 'tamagui';
 import { api } from '@/lib/trpc/client';
 import { ComponentPalette } from './ComponentPalette';
 import { PropertyPanel } from './PropertyPanel';
@@ -46,8 +46,6 @@ export function WorkflowCanvas({
     activitiesCode?: string;
     workerCode?: string;
   }>({});
-
-  const toast = useToastController();
 
   // History management for undo/redo
   const [past, setPast] = useState<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -95,17 +93,11 @@ export function WorkflowCanvas({
           workerCode: result.compiled.workerCode,
         });
         setShowCodeModal(true);
-        toast.show('Workflow compiled successfully!', {
-          message: 'View the generated TypeScript code',
-          type: 'success',
-        });
+        console.log('✅ Workflow compiled successfully! View the generated TypeScript code');
       }
     },
     onError: (error) => {
-      toast.show('Compilation failed', {
-        message: error.message,
-        type: 'error',
-      });
+      console.error('❌ Compilation failed:', error.message);
     },
   });
 

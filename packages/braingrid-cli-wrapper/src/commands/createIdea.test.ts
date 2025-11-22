@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createIdea } from './createIdea';
-import { BrainGridRequirementSchema } from '../models';
 
 vi.mock('../cli', () => ({
   runBrainGridCommand: vi.fn()
@@ -23,7 +22,7 @@ describe('createIdea', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockReq);
 
-    const result = await createIdea('Add OAuth2 authentication');
+    await createIdea('Add OAuth2 authentication');
 
     expect(runBrainGridCommand).toHaveBeenCalledWith([
       'specify',
@@ -46,7 +45,7 @@ describe('createIdea', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockReq);
 
-    const result = await createIdea('Add OAuth2 authentication', 'proj-456');
+    await createIdea('Add OAuth2 authentication', 'proj-456');
 
     expect(runBrainGridCommand).toHaveBeenCalledWith([
       'specify',

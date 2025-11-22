@@ -1,13 +1,13 @@
 import { proxyActivities } from '@temporalio/workflow';
 import type * as activities from '../activities';
-import { buildDependencyTree } from '../activities/dependency-tree.activities';
 import { DependencyTree, TaskStatus } from '../types/dependency-tree.types';
 import { TaskInput } from '../types/task.types';
 
-// Create activity proxies for BrainGrid activities
+// Create activity proxies for ALL activities (Temporal best practice)
 const {
   createBrainGridREQ,
-  createBrainGridTasks
+  createBrainGridTasks,
+  buildDependencyTree
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: '5 minutes'
 });

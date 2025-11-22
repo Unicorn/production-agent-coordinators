@@ -30,7 +30,7 @@ describe('listTasks', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockTasks);
 
-    const result = await listTasks();
+    await listTasks();
 
     expect(runBrainGridCommand).toHaveBeenCalledWith([
       'task',
@@ -55,7 +55,7 @@ describe('listTasks', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockTasks);
 
-    const result = await listTasks({ reqId: 'req-123' });
+    await listTasks({ reqId: 'req-123' });
 
     expect(runBrainGridCommand).toHaveBeenCalledWith([
       'task',
@@ -79,7 +79,7 @@ describe('listTasks', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockTasks);
 
-    const result = await listTasks({
+    await listTasks({
       status: ['TODO', 'READY']
     });
 
@@ -106,7 +106,7 @@ describe('listTasks', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockTasks);
 
-    const result = await listTasks({
+    await listTasks({
       tags: ['DEV', 'frontend']
     });
 
@@ -133,7 +133,7 @@ describe('listTasks', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockTasks);
 
-    const result = await listTasks({
+    await listTasks({
       reqId: 'req-123',
       status: ['TODO'],
       tags: ['DEV']
@@ -156,7 +156,7 @@ describe('listTasks', () => {
   it('should return empty array when no tasks', async () => {
     vi.mocked(runBrainGridCommand).mockResolvedValue([]);
 
-    const result = await listTasks();
+    await listTasks();
 
     expect(result).toEqual([]);
   });

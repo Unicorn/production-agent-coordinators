@@ -127,20 +127,46 @@ export async function validatePackagePublishStatus(input: {
 }): Promise<PackagePublishStatus> {
   console.log(`[DependencyTreeValidator] Checking publish status for ${input.packageName}...`);
 
-  // Get local version
-  const localVersion = await getLocalPackageVersion(
-    input.workspaceRoot,
-    input.packagePath
-  );
-
-  // Get npm version
+  // Check npm FIRST to see if package is published
   const npmVersion = await checkNpmPackageVersion(input.packageName);
-
-  // Check if this is an update plan
-  const isUpdate = await isUpdatePlan(input.workspaceRoot, input.planPath);
-
   const isPublished = npmVersion !== null;
   const isNew = !isPublished;
+
+  // Try to get local version - this may fail if package is a dependency with no local source
+  let localVersion: string | null = null;
+  try {
+    localVersion = await getLocalPackageVersion(
+      input.workspaceRoot,
+      input.packagePath
+    );
+  } catch (error: any) {
+    // No local package.json - check if this is an already-published dependency
+    if (isPublished) {
+      // Package exists on npm but no local version = skip (already published dependency)
+      console.log(`[DependencyTreeValidator] ${input.packageName}: Already published dependency (v${npmVersion}) - no local build needed`);
+      return {
+        packageName: input.packageName,
+        localVersion: npmVersion,
+        npmVersion,
+        isPublished: true,
+        isNew: false,
+        isUpdate: false,
+        needsPublish: false,
+        needsVersionBump: false,
+        reason: `Already published dependency (v${npmVersion}) - no local build needed`
+      };
+    }
+
+    // Package not on npm and no local version = error
+    throw new Error(
+      `Package ${input.packageName} not found locally or on npm. ` +
+      `Tried local path: ${input.packagePath}/package.json. ` +
+      `Original error: ${error.message}`
+    );
+  }
+
+  // Check if this is an update plan (only if we have local source)
+  const isUpdate = await isUpdatePlan(input.workspaceRoot, input.planPath);
 
   let needsPublish = false;
   let needsVersionBump = false;

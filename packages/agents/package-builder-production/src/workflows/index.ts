@@ -10,3 +10,4 @@ export { PackageBuilderWorkflow } from './package-builder.workflow.js';
 export { CoordinatorWorkflow } from './coordinator.workflow.js';
 export { AgentExecutorWorkflow } from './agent-executor.workflow.js';
 export { PackageBuildTurnBasedWorkflow } from './package-build-turn-based.workflow.js';
+export { TurnBasedCodingAgentWorkflow } from './turn-based-coding-agent.workflow.js';

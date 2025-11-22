@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:phase1": "tsx test-phase1.ts",
+    "lint": "eslint src --ext .ts",
     "dev": "tsx src/workers/dev-worker.ts",
     "worker:dev": "tsx src/workers/dev-worker.ts",
     "worker:test": "tsx src/workers/test-worker.ts",

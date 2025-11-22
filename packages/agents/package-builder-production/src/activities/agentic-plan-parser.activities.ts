@@ -12,7 +12,6 @@ import type { PackageNode, PackageCategory } from '../types/index.js';
 
 interface ParsedPlanData {
   packageName: string;
-  category: PackageCategory;
   dependencies: Array<{
     name: string;
     category: PackageCategory;
@@ -32,6 +31,11 @@ export async function parsePlanFileWithAgent(input: {
 
   console.log(`[AgenticParser] Parsing plan with AI: ${input.planPath}`);
 
+  // Derive category from plan file path (e.g., plans/packages/service/foo.md → service)
+  const pathParts = input.planPath.split('/');
+  const categoryFromPath = extractCategoryFromPath(pathParts);
+  console.log(`[AgenticParser] Category from path: ${categoryFromPath}`);
+
   // Initialize Anthropic client
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -45,13 +49,12 @@ ${planContent}
 
 INSTRUCTIONS:
 1. Identify the main package name (format: @scope/package-name)
-2. Identify the package category (validator, core, utility, service, ui, or suite)
-3. Find ALL package dependencies mentioned in the plan, regardless of which section they appear in
+2. Find ALL package dependencies mentioned in the plan, regardless of which section they appear in
    - Look in "Dependencies" sections
    - Look in "Package Hierarchy" sections
    - Look in any lists of packages with @ symbols
    - Include packages from subsections like "Core Packages", "Service Packages", "UI Packages", etc.
-4. For each dependency, determine its category from its name:
+3. For each dependency, determine its category from its name:
    - If name contains "validator" → category: validator
    - If name contains "suite" → category: suite
    - If name contains "ui" or "component" → category: ui
@@ -64,7 +67,6 @@ IMPORTANT: Extract ALL packages mentioned in the plan, not just from a single se
 Return your response as valid JSON in this exact format:
 {
   "packageName": "@scope/main-package",
-  "category": "suite",
   "dependencies": [
     {
       "name": "@scope/dependency-1",
@@ -128,11 +130,11 @@ Return ONLY the JSON object, no additional text or explanation.`;
       });
     }
 
-    // Add main package
-    const mainLayer = categoryToLayer(parsedData.category);
+    // Add main package (use category from path, not AI)
+    const mainLayer = categoryToLayer(categoryFromPath);
     packages.push({
       name: parsedData.packageName,
-      category: parsedData.category,
+      category: categoryFromPath,
       dependencies: parsedData.dependencies.map(d => d.name),
       layer: mainLayer,
       buildStatus: 'pending',
@@ -151,14 +153,14 @@ Return ONLY the JSON object, no additional text or explanation.`;
 
     // Fallback to regex-based parsing if AI fails
     console.log(`[AgenticParser] Falling back to regex parser`);
-    return fallbackRegexParser(planContent, input.planPath);
+    return fallbackRegexParser(planContent, input.planPath, categoryFromPath);
   }
 }
 
 /**
  * Fallback regex-based parser (same as original parsePlanFile)
  */
-function fallbackRegexParser(content: string, planPath: string): PackageNode[] {
+function fallbackRegexParser(content: string, planPath: string, categoryFromPath: PackageCategory): PackageNode[] {
   console.log('[AgenticParser] Using fallback regex parser');
 
   // Extract package name
@@ -179,15 +181,7 @@ function fallbackRegexParser(content: string, planPath: string): PackageNode[] {
     throw new Error(`Could not extract package name from plan file: ${planPath}`);
   }
 
-  // Extract category
-  let category: PackageCategory = 'suite';
-  const typeMatch = content.match(/\*\*Type:\*\*\s+(\w+)/);
-  if (typeMatch) {
-    const typeValue = typeMatch[1].toLowerCase();
-    if (['validator', 'core', 'utility', 'service', 'ui', 'suite'].includes(typeValue)) {
-      category = typeValue as PackageCategory;
-    }
-  }
+  console.log(`[AgenticParser] Using category from path: ${categoryFromPath}`);
 
   // Extract dependencies
   const dependencies: string[] = [];
@@ -231,14 +225,41 @@ function fallbackRegexParser(content: string, planPath: string): PackageNode[] {
   // Add main package
   packages.push({
     name: packageName,
-    category,
+    category: categoryFromPath,
     dependencies,
-    layer: categoryToLayer(category),
+    layer: categoryToLayer(categoryFromPath),
     buildStatus: 'pending',
   });
 
   // Sort by layer
   return packages.sort((a, b) => a.layer - b.layer);
+}
+
+/**
+ * Extract category from plan file path
+ * E.g., "plans/packages/service/foo.md" → "service"
+ */
+function extractCategoryFromPath(pathParts: string[]): PackageCategory {
+  // Find the index of "packages" in the path
+  const packagesIndex = pathParts.indexOf('packages');
+
+  if (packagesIndex === -1 || packagesIndex === pathParts.length - 1) {
+    throw new Error(`Invalid plan path structure: ${pathParts.join('/')}`);
+  }
+
+  // The category is the directory after "packages"
+  const category = pathParts[packagesIndex + 1];
+
+  // Map directory names to categories (validators → validator)
+  if (category === 'validators') return 'validator';
+
+  // Validate it's a known category
+  const validCategories: PackageCategory[] = ['validator', 'core', 'utility', 'service', 'ui', 'suite'];
+  if (!validCategories.includes(category as PackageCategory)) {
+    throw new Error(`Unknown category "${category}" from path: ${pathParts.join('/')}`);
+  }
+
+  return category as PackageCategory;
 }
 
 function categoryToLayer(category: PackageCategory): number {

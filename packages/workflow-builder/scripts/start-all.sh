@@ -45,8 +45,8 @@ echo ""
 # 3. Get Supabase connection details
 echo -e "${BLUE}Step 3: Supabase Connection Details${NC}"
 SUPABASE_STATUS=$(supabase status 2>/dev/null || echo "")
-API_URL=$(echo "$SUPABASE_STATUS" | grep "API URL" | awk '{print $NF}' || echo "http://localhost:54321")
-STUDIO_URL=$(echo "$SUPABASE_STATUS" | grep "Studio URL" | awk '{print $NF}' || echo "http://localhost:54323")
+API_URL=$(echo "$SUPABASE_STATUS" | grep "API URL" | awk '{print $NF}' || echo "http://localhost:54332")
+STUDIO_URL=$(echo "$SUPABASE_STATUS" | grep "Studio URL" | awk '{print $NF}' || echo "http://localhost:54334")
 ANON_KEY=$(echo "$SUPABASE_STATUS" | grep "anon key" | awk '{print $NF}' || echo "")
 SERVICE_KEY=$(echo "$SUPABASE_STATUS" | grep "service_role key" | awk '{print $NF}' || echo "")
 
@@ -67,7 +67,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=${ANON_KEY}
 SUPABASE_SERVICE_ROLE_KEY=${SERVICE_KEY}
 
 # Local Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:54322/postgres
+DATABASE_URL=postgresql://postgres:postgres@localhost:54333/postgres
 
 # Temporal
 TEMPORAL_ADDRESS=localhost:7233
