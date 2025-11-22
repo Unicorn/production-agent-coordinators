@@ -38,19 +38,19 @@ function DashboardContent() {
           <YStack gap="$2">
             <H1>Welcome, {user?.display_name || 'User'}!</H1>
             <Text color="$gray11">
-              Start building workflows by composing reusable components
+              Start building services by composing reusable components
             </Text>
           </YStack>
 
           <XStack gap="$4" flexWrap="wrap">
             <Card flex={1} minWidth={280} padding="$4" elevate>
               <YStack gap="$2">
-                <H2 fontSize="$6">Workflows</H2>
+                <H2 fontSize="$6">Services</H2>
                 <Text fontSize="$8" fontWeight="bold" color="$blue10">
                   {activeWorkflowsCount}
                 </Text>
                 <Text color="$gray11">
-                  Active workflows ({workflows?.total || 0} total)
+                  Active services ({workflows?.total || 0} total)
                 </Text>
               </YStack>
             </Card>
@@ -81,8 +81,8 @@ function DashboardContent() {
               <H2 fontSize="$6">Getting Started</H2>
               <YStack gap="$2">
                 <Text>• Create your first component from the Components page</Text>
-                <Text>• Design a workflow using the visual builder</Text>
-                <Text>• Deploy and monitor your workflow executions</Text>
+                <Text>• Design a service using the visual builder</Text>
+                <Text>• Deploy and monitor your service executions</Text>
               </YStack>
             </YStack>
           </Card>

@@ -12,10 +12,11 @@ import { Header } from '@/components/shared/Header';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { api } from '@/lib/trpc/client';
 import { formatDistanceToNow } from 'date-fns';
-import { Edit, Play, Pause, Trash, History, BarChart3 } from 'lucide-react';
+import { Edit, Play, Pause, Trash, History, BarChart3, Network } from 'lucide-react';
 import { ExecutionHistoryList } from '@/components/execution/ExecutionHistoryList';
 import { ExecutionDetailView } from '@/components/execution/ExecutionDetailView';
 import { WorkflowStatisticsPanel } from '@/components/execution/WorkflowStatisticsPanel';
+import { ServiceInterfaces } from '@/components/service/ServiceInterfaces';
 import { useState } from 'react';
 
 function WorkflowDetailContent() {
@@ -68,7 +69,7 @@ function WorkflowDetailContent() {
           <Sidebar />
           <YStack flex={1} alignItems="center" justifyContent="center">
             <Spinner size="large" />
-            <Text marginTop="$4">Loading workflow...</Text>
+            <Text marginTop="$4">Loading service...</Text>
           </YStack>
         </XStack>
       </YStack>
@@ -83,7 +84,7 @@ function WorkflowDetailContent() {
           <Sidebar />
           <YStack flex={1} alignItems="center" justifyContent="center">
             <Text color="$red10">
-              {error?.message || 'Workflow not found'}
+              {error?.message || 'Service not found'}
             </Text>
           </YStack>
         </XStack>
@@ -157,7 +158,7 @@ function WorkflowDetailContent() {
               theme="orange"
               icon={Trash}
               onPress={() => {
-                if (confirm('Are you sure you want to archive this workflow? You can unarchive it later.')) {
+                if (confirm('Are you sure you want to archive this service? You can unarchive it later.')) {
                   archiveMutation.mutate({ id: workflowId });
                 }
               }}
@@ -185,13 +186,19 @@ function WorkflowDetailContent() {
                   <Text>Statistics</Text>
                 </XStack>
               </Tabs.Tab>
+              <Tabs.Tab value="interfaces">
+                <XStack gap="$2" ai="center">
+                  <Network size={16} />
+                  <Text>Interfaces</Text>
+                </XStack>
+              </Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Content value="overview">
               {/* Metadata */}
               <Card padding="$4" elevate>
                 <YStack gap="$3">
-                  <Text fontSize="$5" fontWeight="600">Workflow Details</Text>
+                  <Text fontSize="$5" fontWeight="600">Service Details</Text>
                   <Separator />
 
                   <XStack justifyContent="space-between">
@@ -210,7 +217,7 @@ function WorkflowDetailContent() {
                   </XStack>
 
                   <XStack justifyContent="space-between">
-                    <Text color="$gray11">Task Queue</Text>
+                    <Text color="$gray11">Channel</Text>
                     <Text>{workflow.task_queue?.name || 'Not set'}</Text>
                   </XStack>
 
@@ -281,6 +288,10 @@ function WorkflowDetailContent() {
 
             <Tabs.Content value="statistics">
               <WorkflowStatisticsPanel workflowId={workflowId} />
+            </Tabs.Content>
+
+            <Tabs.Content value="interfaces">
+              <ServiceInterfaces serviceId={workflowId} />
             </Tabs.Content>
           </Tabs>
         </YStack>

@@ -24,30 +24,30 @@ function WorkflowsContent() {
         <Sidebar />
         <YStack flex={1} padding="$6" gap="$4" role="main" id="main-content">
             <XStack justifyContent="space-between" alignItems="center">
-              <H1>Workflows</H1>
+              <H1>Services</H1>
               <Button
                 theme="blue"
                 onPress={() => router.push('/workflows/new')}
               >
-                New Workflow
+                New Service
               </Button>
             </XStack>
 
             {isLoading ? (
               <YStack flex={1} alignItems="center" justifyContent="center">
                 <Spinner size="large" />
-                <Text marginTop="$4">Loading workflows...</Text>
+                <Text marginTop="$4">Loading services...</Text>
               </YStack>
             ) : (
               <YStack gap="$3">
                 {data?.workflows.length === 0 ? (
                   <YStack padding="$6" alignItems="center">
-                    <Text color="$gray11">No workflows yet</Text>
+                    <Text color="$gray11">No services yet</Text>
                     <Button
                       marginTop="$4"
                       onPress={() => router.push('/workflows/new')}
                     >
-                      Create Your First Workflow
+                      Create Your First Service
                     </Button>
                   </YStack>
                 ) : (
@@ -84,7 +84,7 @@ function WorkflowsContent() {
                         <XStack justifyContent="space-between" alignItems="center">
                           <XStack gap="$3" alignItems="center">
                             <Text fontSize="$2" color="$gray10">
-                              Queue: {workflow.task_queue.name}
+                              Channel: {workflow.task_queue.name}
                             </Text>
                             <Text fontSize="$2" color="$gray10">
                               v{workflow.version}

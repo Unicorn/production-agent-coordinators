@@ -9,9 +9,10 @@ import { Header } from '@/components/shared/Header';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { api } from '@/lib/trpc/client';
 import { formatDistanceToNow } from 'date-fns';
-import { Edit, Trash, Save, X, ExternalLink, Play, Square, BarChart3, Database } from 'lucide-react';
+import { Edit, Trash, Save, X, ExternalLink, Play, Square, BarChart3, Database, Globe } from 'lucide-react';
 import { ProjectStatisticsPanel } from '@/components/execution/ProjectStatisticsPanel';
 import { ConnectionManager } from '@/components/project/ConnectionManager';
+import { ConnectorManager } from '@/components/connector/ConnectorManager';
 
 function ProjectDetailContent() {
   const router = useRouter();
@@ -221,7 +222,7 @@ function ProjectDetailContent() {
               </XStack>
 
               <XStack justifyContent="space-between" flexWrap="wrap">
-                <Text color="$gray11">Task Queue Name</Text>
+                <Text color="$gray11">Channel Name</Text>
                 <Text fontFamily="$mono">{project.task_queue_name}</Text>
               </XStack>
 
@@ -272,7 +273,7 @@ function ProjectDetailContent() {
           <Tabs defaultValue="workflows" flex={1}>
             <Tabs.List>
               <Tabs.Tab value="workflows">
-                <Text>Workflows</Text>
+                <Text>Services</Text>
               </Tabs.Tab>
               <Tabs.Tab value="statistics">
                 <XStack gap="$2" ai="center">
@@ -283,7 +284,13 @@ function ProjectDetailContent() {
               <Tabs.Tab value="connections">
                 <XStack gap="$2" ai="center">
                   <Database size={16} />
-                  <Text>Connections</Text>
+                  <Text>Database Connections</Text>
+                </XStack>
+              </Tabs.Tab>
+              <Tabs.Tab value="connectors">
+                <XStack gap="$2" ai="center">
+                  <Globe size={16} />
+                  <Text>Connectors</Text>
                 </XStack>
               </Tabs.Tab>
             </Tabs.List>
@@ -293,25 +300,25 @@ function ProjectDetailContent() {
               <Card padding="$4" elevate>
                 <YStack gap="$3">
                   <XStack justifyContent="space-between" alignItems="center">
-                    <H2 fontSize="$5">Workflows ({workflowsInProject.length})</H2>
+                    <H2 fontSize="$5">Services ({workflowsInProject.length})</H2>
                     <Button
                       size="$3"
                       theme="blue"
                       onPress={() => router.push(`/workflows/new?projectId=${projectId}`)}
                     >
-                      New Workflow
+                      New Service
                     </Button>
                   </XStack>
                   <Separator />
 
                   {workflowsInProject.length === 0 ? (
                     <YStack padding="$4" alignItems="center" gap="$2">
-                      <Text color="$gray11">No workflows in this project yet</Text>
+                      <Text color="$gray11">No services in this project yet</Text>
                       <Button
                         size="$3"
                         onPress={() => router.push(`/workflows/new?projectId=${projectId}`)}
                       >
-                        Create First Workflow
+                        Create First Service
                       </Button>
                     </YStack>
                   ) : (
@@ -358,6 +365,10 @@ function ProjectDetailContent() {
 
             <Tabs.Content value="connections">
               <ConnectionManager projectId={projectId} />
+            </Tabs.Content>
+
+            <Tabs.Content value="connectors">
+              <ConnectorManager projectId={projectId} />
             </Tabs.Content>
           </Tabs>
         </YStack>
