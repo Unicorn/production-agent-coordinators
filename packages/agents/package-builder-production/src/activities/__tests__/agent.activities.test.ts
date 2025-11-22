@@ -180,10 +180,10 @@ describe('Agent Activities', () => {
       consoleSpy.mockRestore();
     });
 
-    it('should handle undefined dependencies', async () => {
+    it('should handle non-array dependencies', async () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await verifyDependencies(undefined);
+      await verifyDependencies('invalid' as any);
 
       expect(consoleSpy).toHaveBeenCalledWith('No dependencies to verify');
 

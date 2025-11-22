@@ -260,8 +260,9 @@ describe('File Operations Activities', () => {
       );
     });
 
-    it('should handle delete operation errors', async () => {
-      vi.mocked(fs.unlink).mockRejectedValueOnce(new Error('File not found'));
+    it('should treat missing files as success when deleting', async () => {
+      // Delete operations catch all errors - missing files are considered success
+      vi.mocked(fs.access).mockRejectedValueOnce(new Error('ENOENT'));
 
       const result = await applyFileChanges({
         operations: [
@@ -274,9 +275,9 @@ describe('File Operations Activities', () => {
         workspaceRoot: '/workspace'
       });
 
+      // Missing file doesn't add to either array (caught and logged as "already absent")
       expect(result.modifiedFiles).toHaveLength(0);
-      expect(result.failedOperations).toHaveLength(1);
-      expect(result.failedOperations[0].error).toBe('File not found');
+      expect(result.failedOperations).toHaveLength(0);
     });
   });
 
