@@ -38,6 +38,7 @@
     "@supabase/auth-helpers-nextjs": "^0.8.7",
     "@supabase/ssr": "^0.0.10",
     "@supabase/supabase-js": "^2.38.4",
+    "@swc/helpers": "^0.5.17",
     "@tamagui/config": "^1.94.4",
     "@tamagui/core": "^1.94.4",
     "@tamagui/dialog": "^1.94.4",

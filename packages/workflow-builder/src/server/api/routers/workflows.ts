@@ -33,9 +33,9 @@ export const workflowsRouter = createTRPCRouter({
         .from('workflows')
         .select(`
           *,
-          service_display_name,
+          
           status:workflow_statuses(id, name, color),
-          task_queue:task_queues(id, name, channel_display_name),
+          task_queue:task_queues(id, name),
           created_by_user:users!workflows_created_by_fkey(id, display_name)
         `, { count: 'exact' });
       
@@ -93,9 +93,9 @@ export const workflowsRouter = createTRPCRouter({
         .from('workflows')
         .select(`
           *,
-          service_display_name,
+          
           status:workflow_statuses(id, name, color, description),
-          task_queue:task_queues(id, name, channel_display_name, description),
+          task_queue:task_queues(id, name,  description),
           created_by_user:users!workflows_created_by_fkey(id, display_name, email),
           visibility:component_visibility(id, name),
           project:projects(id, name, description, task_queue_name),

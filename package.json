@@ -55,6 +55,7 @@
     "yarn": ">=1.22.0"
   },
   "dependencies": {
+    "@swc/helpers": "^0.5.17",
     "@temporalio/testing": "^1.13.2"
   }
 }

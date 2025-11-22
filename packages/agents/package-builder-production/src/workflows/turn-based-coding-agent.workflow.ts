@@ -99,7 +99,19 @@ const {
 // Phase executor activities (longer - includes Claude API calls)
 const {
   executePlanningPhase,
-  executeFoundationPhase
+  executeFoundationPhase,
+  executeTypesPhase,
+  executeCoreImplementationPhase,
+  executeEntryPointPhase,
+  executeUtilitiesPhase,
+  executeErrorHandlingPhase,
+  executeTestingPhase,
+  executeDocumentationPhase,
+  executeExamplesPhase,
+  executeIntegrationReviewPhase,
+  executeCriticalFixesPhase,
+  executeBuildValidationPhase,
+  executeFinalPolishPhase
 } = proxyActivities<typeof phaseActivities>({
   startToCloseTimeout: '15 minutes'
 });
@@ -157,7 +169,7 @@ export interface TurnBasedCodingAgentResult {
  * Executes any coding task in 15 sequential phases with Claude API calls.
  * Each phase has a focused token budget and commits to git for recovery.
  *
- * Phases:
+ * Phases (ALL IMPLEMENTED):
  * 1. PLANNING - Create plan and architecture blueprint (5000 tokens)
  * 2. FOUNDATION - Generate config files (3000 tokens)
  * 3. TYPES - Generate type definitions (4000 tokens)
@@ -172,7 +184,6 @@ export interface TurnBasedCodingAgentResult {
  * 12. CRITICAL_FIXES - Fix issues from review (5000 tokens)
  * 13. BUILD_VALIDATION - Validate build and tests (4000 tokens)
  * 14. FINAL_POLISH - Final quality pass (3000 tokens)
- * 15. MERGE - Prepare for merge (manual)
  *
  * Total execution time: 25-35 minutes
  * Total token budget: ~58,000 tokens across all phases
@@ -203,11 +214,21 @@ export async function TurnBasedCodingAgentWorkflow(
     }
 
     // Execute phases in order
-    // Currently only PLANNING and FOUNDATION are implemented
-    // TODO: Add remaining 13 phases
     const phases: GenerationPhase[] = [
       'PLANNING',
-      'FOUNDATION'
+      'FOUNDATION',
+      'TYPES',
+      'CORE_IMPLEMENTATION',
+      'ENTRY_POINT',
+      'UTILITIES',
+      'ERROR_HANDLING',
+      'TESTING',
+      'DOCUMENTATION',
+      'EXAMPLES',
+      'INTEGRATION_REVIEW',
+      'CRITICAL_FIXES',
+      'BUILD_VALIDATION',
+      'FINAL_POLISH'
     ];
 
     const filesModified: string[] = [];
@@ -331,6 +352,30 @@ async function executePhase(
       return executePlanningPhase(context);
     case 'FOUNDATION':
       return executeFoundationPhase(context);
+    case 'TYPES':
+      return executeTypesPhase(context);
+    case 'CORE_IMPLEMENTATION':
+      return executeCoreImplementationPhase(context);
+    case 'ENTRY_POINT':
+      return executeEntryPointPhase(context);
+    case 'UTILITIES':
+      return executeUtilitiesPhase(context);
+    case 'ERROR_HANDLING':
+      return executeErrorHandlingPhase(context);
+    case 'TESTING':
+      return executeTestingPhase(context);
+    case 'DOCUMENTATION':
+      return executeDocumentationPhase(context);
+    case 'EXAMPLES':
+      return executeExamplesPhase(context);
+    case 'INTEGRATION_REVIEW':
+      return executeIntegrationReviewPhase(context);
+    case 'CRITICAL_FIXES':
+      return executeCriticalFixesPhase(context);
+    case 'BUILD_VALIDATION':
+      return executeBuildValidationPhase(context);
+    case 'FINAL_POLISH':
+      return executeFinalPolishPhase(context);
     default:
       throw new Error(`Phase ${phase} not implemented yet`);
   }

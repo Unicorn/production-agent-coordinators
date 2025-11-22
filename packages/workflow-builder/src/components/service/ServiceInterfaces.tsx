@@ -1,6 +1,7 @@
 'use client';
 
-import { YStack, XStack, Text, Button, Card, Spinner, Separator, Badge, Select, Label, Input, TextArea } from 'tamagui';
+import { YStack, XStack, Text, Button, Card, Spinner, Separator, Select, Label, Input, TextArea } from 'tamagui';
+import { Badge } from '@/components/shared/Badge';
 import { Plus, Radio, Search, Edit, Trash, Globe, Send, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '@/lib/trpc/client';
