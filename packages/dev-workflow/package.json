@@ -19,7 +19,10 @@
   "author": "Bernier LLC",
   "license": "MIT",
   "dependencies": {
-    "@bernierllc/braingrid-cli-wrapper": "workspace:*",
+    "@bernierllc/braingrid-cli-wrapper": "*",
+    "@bernierllc/chat-integration-slack": "file:../../../tools/packages/service/chat-integration-slack",
+    "@slack/bolt": "^3.17.1",
+    "@slack/web-api": "^7.0.2",
     "@temporalio/activity": "^1.10.0",
     "@temporalio/client": "^1.10.0",
     "@temporalio/worker": "^1.10.0",
