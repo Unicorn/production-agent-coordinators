@@ -53,8 +53,24 @@ export interface PlanningWorkflowInput {
 
 export interface PlanningWorkflowResult {
   success: boolean;
-  reqId: string;
-  taskCount: number;
+  reqId?: string;
+  taskCount?: number;
+  error?: string;
+  feedback?: string;
+}
+
+/**
+ * Helper function to safely send Slack messages without failing workflow
+ * Logs warnings on failure but allows workflow to continue
+ */
+async function safeSlackMessage(
+  params: SendThreadMessageParams
+): Promise<void> {
+  try {
+    await sendThreadMessage(params);
+  } catch (error) {
+    console.warn('[Planning] Non-critical Slack message failed:', error);
+  }
 }
 
 /**
@@ -66,6 +82,16 @@ export async function FeaturePlanningWorkflow(
   input: PlanningWorkflowInput
 ): Promise<PlanningWorkflowResult> {
   const { featureRequest, projectId, slackChannel, slackThreadTs } = input;
+
+  // Reset state at workflow start to prevent state pollution
+  conversationState = {
+    questions: [],
+    responses: [],
+    awaitingApproval: false
+  };
+  pendingResponse = undefined;
+  pendingApproval = undefined;
+  stopRequested = undefined;
 
   // Set up signal handlers
   setHandler(userResponseSignal, (signal: UserResponseSignal) => {
@@ -92,7 +118,7 @@ export async function FeaturePlanningWorkflow(
     console.log(`[Planning] Starting Slack conversation in ${slackChannel}`);
 
     // Welcome message
-    await sendThreadMessage({
+    await safeSlackMessage({
       channel: slackChannel,
       threadTs: slackThreadTs,
       text: `Great! I'll help you plan this feature. Let me ask a few questions to understand your requirements better.`
@@ -137,7 +163,7 @@ export async function FeaturePlanningWorkflow(
     // Present summary for approval
     conversationState.awaitingApproval = true;
 
-    await sendThreadMessage({
+    await safeSlackMessage({
       channel: slackChannel,
       threadTs: slackThreadTs,
       text: `Based on our conversation, here's what I understand:\n\n${refinedRequirement}\n\nDoes this look correct? Reply 'approve' to continue or provide feedback to adjust.`
@@ -149,10 +175,23 @@ export async function FeaturePlanningWorkflow(
 
     if (!pendingApproval?.approved) {
       console.log('[Planning] Plan not approved, feedback:', pendingApproval?.feedback);
-      // TODO: Iterate on plan with feedback
+
+      // Send rejection message to Slack
+      await safeSlackMessage({
+        channel: slackChannel,
+        threadTs: slackThreadTs,
+        text: `Plan was not approved. Feedback: ${pendingApproval?.feedback || 'No feedback provided'}\n\nPlease restart the workflow with updated requirements.`
+      });
+
+      // Return early with error result
+      return {
+        success: false,
+        error: 'Plan rejected by user',
+        feedback: pendingApproval?.feedback
+      };
     }
 
-    await sendThreadMessage({
+    await safeSlackMessage({
       channel: slackChannel,
       threadTs: slackThreadTs,
       text: `Perfect! I'll get started on creating the tasks. I'll update you as I make progress.`
@@ -169,7 +208,7 @@ export async function FeaturePlanningWorkflow(
 
   // Progress update
   if (slackChannel && slackThreadTs) {
-    await sendThreadMessage({
+    await safeSlackMessage({
       channel: slackChannel,
       threadTs: slackThreadTs,
       text: `✅ Created requirement ${reqId}`
@@ -218,7 +257,7 @@ export async function FeaturePlanningWorkflow(
 
   // Final progress update
   if (slackChannel && slackThreadTs) {
-    await sendThreadMessage({
+    await safeSlackMessage({
       channel: slackChannel,
       threadTs: slackThreadTs,
       text: `✅ Planning complete! Created ${mockTasks.length} tasks organized in ${dependencyTree.layers.length} dependency layers.\n\nDevelopment workers will now pick up these tasks.`
