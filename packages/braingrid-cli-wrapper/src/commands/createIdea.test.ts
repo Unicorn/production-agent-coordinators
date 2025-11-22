@@ -22,7 +22,7 @@ describe('createIdea', () => {
 
     vi.mocked(runBrainGridCommand).mockResolvedValue(mockReq);
 
-    await createIdea('Add OAuth2 authentication');
+    const result = await createIdea('Add OAuth2 authentication');
 
     expect(runBrainGridCommand).toHaveBeenCalledWith([
       'specify',

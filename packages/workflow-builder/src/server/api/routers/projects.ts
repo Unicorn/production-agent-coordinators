@@ -55,6 +55,12 @@ export const projectsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const userRecord = await ctx.getUserRecord();
       
+      console.log('🔍 [Projects Get] Looking for project:', {
+        projectId: input.id,
+        userId: userRecord.id,
+        authUserId: ctx.authUser?.id,
+      });
+      
       const { data, error } = await ctx.supabase
         .from('projects')
         .select(`
@@ -66,12 +72,43 @@ export const projectsRouter = createTRPCRouter({
         .eq('created_by', userRecord.id)
         .single();
       
+      if (error) {
+        console.error('❌ [Projects Get] Supabase error:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+      }
+      
       if (error || !data) {
+        // Check if project exists but user doesn't have access
+        const { data: projectExists } = await ctx.supabase
+          .from('projects')
+          .select('id, name, created_by')
+          .eq('id', input.id)
+          .single();
+        
+        if (projectExists) {
+          console.error('❌ [Projects Get] Project exists but access denied:', {
+            projectId: input.id,
+            projectName: projectExists.name,
+            projectCreatedBy: projectExists.created_by,
+            currentUserId: userRecord.id,
+            authUserId: ctx.authUser?.id,
+          });
+        }
+        
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Project not found',
         });
       }
+      
+      console.log('✅ [Projects Get] Project found:', {
+        id: data.id,
+        name: data.name,
+      });
       
       return { project: data };
     }),
