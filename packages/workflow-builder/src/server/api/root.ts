@@ -19,6 +19,11 @@ import { agentTesterRouter } from './routers/agent-tester';
 import { workflowEndpointsRouter } from './routers/workflow-endpoints';
 import { connectionsRouter } from './routers/connections';
 import { activitiesRouter } from './routers/activities';
+import { apiKeysRouter } from './routers/apiKeys';
+import { serviceInterfacesRouter } from './routers/serviceInterfaces';
+import { publicInterfacesRouter } from './routers/publicInterfaces';
+import { connectorsRouter } from './routers/connectors';
+import { projectConnectorsRouter } from './routers/projectConnectors';
 
 export const appRouter = createTRPCRouter({
   users: usersRouter,
@@ -38,6 +43,11 @@ export const appRouter = createTRPCRouter({
   workflowEndpoints: workflowEndpointsRouter,
   connections: connectionsRouter,
   activities: activitiesRouter,
+  apiKeys: apiKeysRouter,
+  serviceInterfaces: serviceInterfacesRouter,
+  publicInterfaces: publicInterfacesRouter,
+  connectors: connectorsRouter,
+  projectConnectors: projectConnectorsRouter,
 });
 
 export type AppRouter = typeof appRouter;

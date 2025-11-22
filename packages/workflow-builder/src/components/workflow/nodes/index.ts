@@ -13,6 +13,7 @@ import { ConditionNode as ConditionNodeComponent } from './ConditionNode';
 import { PhaseNode as PhaseNodeComponent } from './PhaseNode';
 import { RetryNode as RetryNodeComponent } from './RetryNode';
 import { StateVariableNode as StateVariableNodeComponent } from './StateVariableNode';
+import { ServiceContainerNode as ServiceContainerNodeComponent } from './ServiceContainerNode';
 
 export { ActivityNodeComponent as ActivityNode };
 export { AgentNodeComponent as AgentNode };
@@ -25,6 +26,7 @@ export { ConditionNodeComponent as ConditionNode };
 export { PhaseNodeComponent as PhaseNode };
 export { RetryNodeComponent as RetryNode };
 export { StateVariableNodeComponent as StateVariable };
+export { ServiceContainerNodeComponent as ServiceContainerNode };
 
 // Node type registry for React Flow
 export const nodeTypes = {
@@ -39,5 +41,6 @@ export const nodeTypes = {
   phase: PhaseNodeComponent,
   retry: RetryNodeComponent,
   'state-variable': StateVariableNodeComponent,
+  'service-container': ServiceContainerNodeComponent,
 };
 

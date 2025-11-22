@@ -14,6 +14,7 @@ export const taskQueuesRouter = createTRPCRouter({
         .from('task_queues')
         .select(`
           *,
+          channel_display_name,
           created_by_user:users!task_queues_created_by_fkey(id, display_name)
         `)
         .order('is_system_queue', { ascending: false })
@@ -37,6 +38,7 @@ export const taskQueuesRouter = createTRPCRouter({
         .from('task_queues')
         .select(`
           *,
+          channel_display_name,
           created_by_user:users!task_queues_created_by_fkey(id, display_name, email)
         `)
         .eq('id', input.id)

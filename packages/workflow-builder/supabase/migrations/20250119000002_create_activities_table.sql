@@ -6,7 +6,7 @@
 -- ============================================================================
 
 -- Activities table - Registry of all available activities in the system
-CREATE TABLE activities (
+CREATE TABLE IF NOT EXISTS activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
   -- Core identification
@@ -61,7 +61,7 @@ CREATE INDEX idx_activities_search ON activities USING GIN(
 ) WHERE is_active = true;
 
 -- Activity categories lookup table (for standardization)
-CREATE TABLE activity_categories (
+CREATE TABLE IF NOT EXISTS activity_categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(100) UNIQUE NOT NULL,
   description TEXT,

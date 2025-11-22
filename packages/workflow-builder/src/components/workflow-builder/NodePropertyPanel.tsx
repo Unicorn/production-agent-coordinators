@@ -5,6 +5,7 @@ import { X, Save, Check, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { CronExpressionBuilder } from '../cron/CronExpressionBuilder';
 import { api } from '@/lib/trpc/client';
+import { ConnectorSelector } from '../connector/ConnectorSelector';
 
 interface NodePropertyPanelProps {
   node: {
@@ -145,11 +146,14 @@ function ActivityProperties({ properties, onChange, node }: any) {
       </YStack>
 
       <YStack gap="$2">
-        <Label>Task Queue</Label>
+        <Label>Channel</Label>
         <Input
-          value={properties.taskQueue || ''}
-          onChangeText={(v) => onChange('taskQueue', v)}
-          placeholder="e.g., data-processing-queue"
+          value={properties.taskQueue || properties.channel || ''}
+          onChangeText={(v) => {
+            onChange('taskQueue', v); // Keep legacy field
+            onChange('channel', v); // New field
+          }}
+          placeholder="e.g., data-processing-channel"
         />
       </YStack>
 
@@ -486,10 +490,13 @@ function ChildWorkflowProperties({ properties, onChange }: any) {
       </YStack>
 
       <YStack gap="$2">
-        <Label>Task Queue</Label>
+        <Label>Channel</Label>
         <Input
-          value={properties.taskQueue || ''}
-          onChangeText={(v) => onChange('taskQueue', v)}
+          value={properties.taskQueue || properties.channel || ''}
+          onChangeText={(v) => {
+            onChange('taskQueue', v); // Keep legacy field
+            onChange('channel', v); // New field
+          }}
           placeholder="e.g., order-processing"
         />
       </YStack>
@@ -1226,35 +1233,25 @@ function StateVariableProperties({ properties, onChange }: any) {
 // PostgreSQL Properties
 function PostgreSQLProperties({ properties, onChange }: any) {
   const projectId = properties.projectId;
-  const { data: connections } = api.connections.list.useQuery(
-    { projectId: projectId! },
-    { enabled: !!projectId }
-  );
 
   return (
     <YStack gap="$3">
       <Text fontSize="$4" fontWeight="600">PostgreSQL Query</Text>
 
-      <YStack gap="$2">
-        <Label>Connection</Label>
-        <Select
-          value={properties.connectionId || ''}
-          onValueChange={(v) => onChange('connectionId', v)}
-        >
-          <Select.Trigger>
-            <Select.Value placeholder="Select connection" />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Viewport>
-              {connections?.connections.map((conn) => (
-                <Select.Item key={conn.id} value={conn.id}>
-                  <Select.ItemText>{conn.name}</Select.ItemText>
-                </Select.Item>
-              ))}
-            </Select.Viewport>
-          </Select.Content>
-        </Select>
-      </YStack>
+      {projectId && (
+        <ConnectorSelector
+          projectId={projectId}
+          connectorType="database"
+          value={properties.connectorId || properties.connectionId}
+          onChange={(connectorId) => {
+            // Support both connectorId (new) and connectionId (legacy) for backward compatibility
+            onChange('connectorId', connectorId);
+            if (connectorId) {
+              onChange('connectionId', connectorId); // Keep legacy field for now
+            }
+          }}
+        />
+      )}
 
       <YStack gap="$2">
         <Label>Query</Label>
@@ -1367,35 +1364,25 @@ function PostgreSQLProperties({ properties, onChange }: any) {
 // Redis Properties
 function RedisProperties({ properties, onChange }: any) {
   const projectId = properties.projectId;
-  const { data: connections } = api.connections.list.useQuery(
-    { projectId: projectId! },
-    { enabled: !!projectId }
-  );
 
   return (
     <YStack gap="$3">
       <Text fontSize="$4" fontWeight="600">Redis Command</Text>
 
-      <YStack gap="$2">
-        <Label>Connection</Label>
-        <Select
-          value={properties.connectionId || ''}
-          onValueChange={(v) => onChange('connectionId', v)}
-        >
-          <Select.Trigger>
-            <Select.Value placeholder="Select connection" />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Viewport>
-              {connections?.connections.map((conn) => (
-                <Select.Item key={conn.id} value={conn.id}>
-                  <Select.ItemText>{conn.name}</Select.ItemText>
-                </Select.Item>
-              ))}
-            </Select.Viewport>
-          </Select.Content>
-        </Select>
-      </YStack>
+      {projectId && (
+        <ConnectorSelector
+          projectId={projectId}
+          connectorType="database"
+          value={properties.connectorId || properties.connectionId}
+          onChange={(connectorId) => {
+            // Support both connectorId (new) and connectionId (legacy) for backward compatibility
+            onChange('connectorId', connectorId);
+            if (connectorId) {
+              onChange('connectionId', connectorId); // Keep legacy field for now
+            }
+          }}
+        />
+      )}
 
       <YStack gap="$2">
         <Label>Command</Label>
