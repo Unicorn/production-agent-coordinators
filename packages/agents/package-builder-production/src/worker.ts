@@ -80,19 +80,23 @@ async function run() {
   console.log(`   Max Concurrent Workflow Tasks: ${maxConcurrentWorkflowTasks}`);
 
   // Worker 2: 'turn-based-coding' queue (Claude API child workflows)
-  // CRITICAL: maxConcurrentWorkflowTaskExecutions: 1 prevents Claude API rate limiting
+  // CRITICAL: Both limits set to 1 to prevent Claude API rate limiting
+  //   - maxConcurrentWorkflowTaskExecutions: 1 limits workflow task concurrency
+  //   - maxConcurrentActivityTaskExecutions: 1 limits Claude API call concurrency (THE KEY!)
+  // maxCachedWorkflows: 0 prevents runtime conflicts when running multiple workers in same process
   const turnBasedWorker = await Worker.create({
     taskQueue: 'turn-based-coding',
     workflowsPath: path.join(__dirname, 'workflows'),
     activities,
-    maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
-    maxConcurrentWorkflowTaskExecutions: 1, // ← Only 1 concurrent Claude API workflow
+    maxConcurrentActivityTaskExecutions: 1, // ← Only 1 concurrent Claude API call
+    maxConcurrentWorkflowTaskExecutions: 1, // ← Only 1 concurrent workflow task
+    maxCachedWorkflows: 0, // ← Disable caching to avoid runtime conflicts
   });
 
   console.log('✅ Turn-Based Coding Worker ready');
   console.log(`   Task Queue: turn-based-coding`);
-  console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
-  console.log(`   Max Concurrent Workflow Tasks: 1 (Claude API rate limit control)`);
+  console.log(`   Max Concurrent Activities: 1 (Claude API rate limit control)`);
+  console.log(`   Max Concurrent Workflow Tasks: 1`);
 
   console.log(`\n   Namespace: ${process.env.TEMPORAL_NAMESPACE || 'default'}`);
   console.log('   Ready to execute all workflow types\n');

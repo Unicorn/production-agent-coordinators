@@ -120,10 +120,17 @@ export default function SignInPage() {
 
           <XStack gap="$2" justifyContent="center" alignItems="center">
             <Text fontSize="$3" color="$gray11">
-              Don't have an account?
+              Don't have an account?{' '}
             </Text>
-            <Link href="/auth/signup" style={{ textDecoration: 'none' }}>
-              <Text fontSize="$3" color="$blue10" fontWeight="600" cursor="pointer" hoverStyle={{ color: '$blue11' }}>
+            <Link href="/auth/signup" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <Text 
+                as="span"
+                fontSize="$3" 
+                color="$blue10" 
+                fontWeight="600" 
+                cursor="pointer" 
+                hoverStyle={{ color: '$blue11' }}
+              >
                 Sign Up
               </Text>
             </Link>

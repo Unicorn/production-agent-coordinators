@@ -219,6 +219,7 @@ async function main() {
   const { data: helloWorkflow, error: helloError } = await supabase
     .from('workflows')
     .upsert({
+      name: 'hello-world-demo',
       kebab_name: 'hello-world-demo',
       display_name: 'Hello World Demo',
       description: 'A simple greeting workflow demonstrating the basic agent coordinator system. The agent says hello and the workflow completes.',
@@ -344,6 +345,7 @@ async function main() {
   const { data: conversationWorkflow, error: conversationError } = await supabase
     .from('workflows')
     .upsert({
+      name: 'agent-conversation-demo',
       kebab_name: 'agent-conversation-demo',
       display_name: 'Agent Conversation Demo',
       description: 'Two agents (Alice and Bob) having a conversation about their favorite programming languages. Demonstrates multi-step coordination.',

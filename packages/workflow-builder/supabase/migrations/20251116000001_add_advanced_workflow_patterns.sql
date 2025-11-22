@@ -11,7 +11,7 @@
 -- NOTE: This table must be created FIRST because workflow_queries and 
 -- workflow_signals reference it via foreign key
 
-CREATE TABLE workflow_work_queues (
+CREATE TABLE IF NOT EXISTS workflow_work_queues (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
   queue_name VARCHAR(100) NOT NULL,
@@ -55,7 +55,7 @@ COMMENT ON COLUMN workflow_work_queues.work_item_schema IS 'JSON schema describi
 -- WORKFLOW QUERIES
 -- ============================================================================
 
-CREATE TABLE workflow_queries (
+CREATE TABLE IF NOT EXISTS workflow_queries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
   query_name VARCHAR(100) NOT NULL,
@@ -84,7 +84,7 @@ COMMENT ON COLUMN workflow_queries.return_type IS 'JSON schema describing the qu
 -- WORKFLOW SIGNALS
 -- ============================================================================
 
-CREATE TABLE workflow_signals (
+CREATE TABLE IF NOT EXISTS workflow_signals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workflow_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
   signal_name VARCHAR(100) NOT NULL,

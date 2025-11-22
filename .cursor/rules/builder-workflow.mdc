@@ -1,0 +1,7 @@
+---
+globs: packages/builder-workflow/**/**
+alwaysApply: false
+---
+All components for the builder workflow need to be in the seed data for supabase.
+
+The seed data for supabase MUST be idempotent and optimized.

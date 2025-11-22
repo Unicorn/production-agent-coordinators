@@ -1,0 +1,12 @@
+{
+  "setup-worktree": [
+    "npm install"
+  ],
+  "worktrees": {
+    "phase12-integration": {
+      "path": "../production-agent-coordinators-phase12-integration",
+      "branch": "phase12-integration",
+      "description": "Agent 4: Integration & Security (Phases 12-14)"
+    }
+  }
+}

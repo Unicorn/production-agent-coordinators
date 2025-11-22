@@ -198,7 +198,12 @@ describe('Build Activities', () => {
         packagePath: 'packages/core/test-package',
         config: {
           npmToken: 'test-token',
-          workspaceRoot: '/test/workspace'
+          workspaceRoot: '/test/workspace',
+          publishing: {
+            dryRun: false,
+            requireTests: false,
+            requireCleanWorkingDirectory: false
+          }
         } as any
       });
 
@@ -225,7 +230,12 @@ describe('Build Activities', () => {
         packagePath: 'packages/core/test-package',
         config: {
           npmToken: 'test-token',
-          workspaceRoot: '/test/workspace'
+          workspaceRoot: '/test/workspace',
+          publishing: {
+            dryRun: false,
+            requireTests: false,
+            requireCleanWorkingDirectory: false
+          }
         } as any
       });
 
