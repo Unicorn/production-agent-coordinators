@@ -125,3 +125,91 @@ export async function waitForResponse(
     timedOut: true
   };
 }
+
+export interface SendProgressUpdateParams {
+  channel: string;
+  threadTs: string;
+  phase: string;
+  status: 'started' | 'in_progress' | 'completed' | 'failed';
+  message: string;
+  metadata?: Record<string, any>;
+  workflowId?: string;
+}
+
+/**
+ * Send progress update to Slack thread with interactive controls
+ *
+ * Phase 2: Includes stop/pause buttons for in-progress tasks
+ */
+export async function sendProgressUpdate(
+  params: SendProgressUpdateParams
+): Promise<SendThreadMessageResult> {
+  const emoji = {
+    started: '🏁',
+    in_progress: '⚙️',
+    completed: '✅',
+    failed: '❌'
+  }[params.status];
+
+  const blocks: (Block | KnownBlock)[] = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${emoji} *${params.phase}*\n${params.message}`
+      }
+    }
+  ];
+
+  // Add metadata context if provided
+  if (params.metadata && Object.keys(params.metadata).length > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: Object.entries(params.metadata)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(' • ')
+        }
+      ]
+    });
+  }
+
+  // Add stop/pause buttons if workflow is in progress
+  if (params.status === 'in_progress' || params.status === 'started') {
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '⏸️ Pause' },
+          action_id: 'pause_workflow',
+          style: 'primary'
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '⏹️ Stop' },
+          action_id: 'stop_workflow',
+          style: 'danger',
+          confirm: {
+            title: { type: 'plain_text', text: 'Stop Workflow?' },
+            text: { type: 'plain_text', text: 'This will stop the workflow. Are you sure?' },
+            confirm: { type: 'plain_text', text: 'Yes, stop it' },
+            deny: { type: 'plain_text', text: 'Cancel' }
+          }
+        }
+      ]
+    });
+  }
+
+  // Send the message with blocks
+  const result = await sendThreadMessage({
+    channel: params.channel,
+    threadTs: params.threadTs,
+    text: `${emoji} ${params.phase}: ${params.message}`,
+    blocks
+  });
+
+  return result;
+}
