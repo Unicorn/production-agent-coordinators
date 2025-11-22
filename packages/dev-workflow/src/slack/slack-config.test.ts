@@ -44,33 +44,33 @@ describe('Slack Configuration', () => {
   });
 
   describe('createDevWorkflowSlackConfig', () => {
-    it('should create config from environment variables', () => {
+    it('should create config from environment variables', async () => {
       process.env.SLACK_BOT_TOKEN = 'xoxb-test';
       process.env.SLACK_SIGNING_SECRET = 'secret';
       process.env.SLACK_APP_TOKEN = 'xapp-test';
       process.env.SLACK_SOCKET_MODE = 'true';
 
-      const config = createDevWorkflowSlackConfig();
+      const config = await createDevWorkflowSlackConfig();
 
       expect(config.slack.botToken).toBe('xoxb-test');
       expect(config.slack.signingSecret).toBe('secret');
       expect(config.slack.appToken).toBe('xapp-test');
-      expect(config.slack.socketMode).toBe(true);
+      expect(config.connection.socketMode).toBe(true);
     });
 
-    it('should throw if environment validation fails', () => {
+    it('should throw if environment validation fails', async () => {
       process.env = {}; // Clear all env vars
 
-      expect(() => createDevWorkflowSlackConfig()).toThrow('Slack environment validation failed');
+      await expect(createDevWorkflowSlackConfig()).rejects.toThrow('Slack environment validation failed');
     });
 
-    it('should enable dev-workflow specific commands', () => {
+    it('should enable dev-workflow specific commands', async () => {
       process.env.SLACK_BOT_TOKEN = 'xoxb-test';
       process.env.SLACK_SIGNING_SECRET = 'secret';
 
-      const config = createDevWorkflowSlackConfig();
+      const config = await createDevWorkflowSlackConfig();
 
-      expect(config.slack.commandsEnabled).toBe(true);
+      expect(config.slashCommands.enabled).toBe(true);
       expect(config.messaging.bridgeThreads).toBe(true);
     });
   });

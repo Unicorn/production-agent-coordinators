@@ -4,27 +4,54 @@ import { sendThreadMessage, askQuestion, waitForResponse } from './slack.activit
 // Mock the slack config module
 vi.mock('../slack/slack-config', () => ({
   createDevWorkflowSlackConfig: vi.fn().mockReturnValue({
+    enabled: true,
     slack: {
       botToken: 'xoxb-test',
       signingSecret: 'test-secret',
-      appToken: 'xapp-test',
-      socketMode: true,
-      commandsEnabled: true
+      appToken: 'xapp-test'
+    },
+    connection: {
+      socketMode: true
+    },
+    channels: {
+      whitelist: ['#general']
+    },
+    userMapping: {
+      strategy: 'external',
+      displayFormat: '{real_name}',
+      syncPresence: true,
+      syncAvatars: true
     },
     messaging: {
       bidirectional: true,
-      bridgeThreads: true,
+      formatMessages: true,
       bridgeReactions: true,
-      formatMessages: true
+      bridgeThreads: true,
+      maxMessageLength: 4000
+    },
+    slashCommands: {
+      enabled: true,
+      autoRegister: true,
+      responseStyle: 'ephemeral',
+      timeout: 30000
+    },
+    roleMapping: {},
+    neverhub: {
+      enabled: false,
+      serviceName: 'test'
     }
   })
 }));
 
-// Mock @bernierllc/chat-integration-slack
-vi.mock('@bernierllc/chat-integration-slack', () => ({
-  SlackIntegration: vi.fn().mockImplementation(() => ({
-    sendMessage: vi.fn().mockResolvedValue({ ts: '1234567890.123456' }),
-    getStatus: vi.fn().mockReturnValue({ enabled: true })
+// Mock @slack/web-api
+vi.mock('@slack/web-api', () => ({
+  WebClient: vi.fn().mockImplementation(() => ({
+    chat: {
+      postMessage: vi.fn().mockResolvedValue({
+        ok: true,
+        ts: '1234567890.123456'
+      })
+    }
   }))
 }));
 

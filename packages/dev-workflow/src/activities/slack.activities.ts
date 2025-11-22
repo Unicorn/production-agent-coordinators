@@ -1,24 +1,25 @@
-import { SlackIntegration } from '@bernierllc/chat-integration-slack';
+import { WebClient } from '@slack/web-api';
+import type { Block, KnownBlock } from '@slack/web-api';
 import { createDevWorkflowSlackConfig } from '../slack/slack-config';
 
-let slackInstance: SlackIntegration | null = null;
+let webClient: WebClient | null = null;
 
 /**
- * Get or create Slack integration instance
+ * Get or create Slack Web API client
  */
-function getSlackInstance(): SlackIntegration {
-  if (!slackInstance) {
-    const config = createDevWorkflowSlackConfig();
-    slackInstance = new SlackIntegration(config);
+async function getSlackClient(): Promise<WebClient> {
+  if (!webClient) {
+    const config = await createDevWorkflowSlackConfig();
+    webClient = new WebClient(config.slack.botToken);
   }
-  return slackInstance;
+  return webClient;
 }
 
 export interface SendThreadMessageParams {
   channel: string;
   threadTs: string;
   text: string;
-  blocks?: any[];
+  blocks?: (Block | KnownBlock)[];
 }
 
 export interface SendThreadMessageResult {
@@ -34,9 +35,9 @@ export async function sendThreadMessage(
   params: SendThreadMessageParams
 ): Promise<SendThreadMessageResult> {
   try {
-    const slack = getSlackInstance();
+    const client = await getSlackClient();
 
-    const result = await slack.sendMessage({
+    const result = await client.chat.postMessage({
       channel: params.channel,
       thread_ts: params.threadTs,
       text: params.text,
@@ -45,7 +46,7 @@ export async function sendThreadMessage(
 
     return {
       success: true,
-      ts: result.ts
+      ts: result.ts as string
     };
   } catch (error) {
     return {
