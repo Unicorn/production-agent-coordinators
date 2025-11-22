@@ -1,4 +1,4 @@
-import { Connection, Client } from '@temporalio/client';
+import { getTemporalClient } from '../temporal/connection';
 import { FeaturePlanningWorkflow } from '../workflows/feature-planning.workflow';
 
 export interface SlackCommandPayload {
@@ -18,6 +18,8 @@ export interface CommandHandlerResult {
 
 /**
  * Handle /dev-workflow slash command
+ *
+ * Uses singleton Temporal connection to prevent resource leaks.
  */
 export async function handleDevWorkflowCommand(
   payload: SlackCommandPayload
@@ -30,23 +32,30 @@ export async function handleDevWorkflowCommand(
     };
   }
 
-  try {
-    // Connect to Temporal
-    const connection = await Connection.connect({
-      address: process.env.TEMPORAL_ADDRESS || 'localhost:7233'
-    });
+  // Validate required environment variables
+  const taskQueue = process.env.DEV_WORKFLOW_TASK_QUEUE || 'dev-workflow';
+  const repoPath = process.env.REPO_PATH;
 
-    const client = new Client({ connection });
+  if (!repoPath) {
+    return {
+      success: false,
+      error: 'Server configuration error: REPO_PATH environment variable is not set'
+    };
+  }
+
+  try {
+    // Get singleton Temporal client (prevents resource leaks)
+    const client = await getTemporalClient();
 
     // Start planning workflow with Slack context
     const workflowId = `dev-workflow-${payload.channel_id}-${Date.now()}`;
 
     await client.workflow.start(FeaturePlanningWorkflow, {
-      taskQueue: 'dev-workflow',
+      taskQueue,
       workflowId,
       args: [{
         featureRequest: payload.text,
-        repoPath: process.env.REPO_PATH || '/default/repo',
+        repoPath,
         slackChannel: payload.channel_id,
         slackThreadTs: undefined // Will be set by first message response
       }]
@@ -57,9 +66,12 @@ export async function handleDevWorkflowCommand(
       workflowId
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`❌ Failed to start dev workflow for channel ${payload.channel_id}:`, error);
+
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: `Failed to start workflow: ${errorMessage}. Please check server configuration and try again.`
     };
   }
 }
