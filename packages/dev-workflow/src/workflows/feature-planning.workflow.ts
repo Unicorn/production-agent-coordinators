@@ -1,7 +1,23 @@
-import { proxyActivities } from '@temporalio/workflow';
+import { proxyActivities, defineSignal, defineQuery, setHandler, condition } from '@temporalio/workflow';
 import type * as activities from '../activities';
 import { DependencyTree, TaskStatus } from '../types/dependency-tree.types';
 import { TaskInput } from '../types/task.types';
+import { UserResponseSignal, PlanApprovalSignal, StopWorkflowSignal } from '../types/signals.types';
+
+// Define signals
+export const userResponseSignal = defineSignal<[UserResponseSignal]>('userResponse');
+export const planApprovalSignal = defineSignal<[PlanApprovalSignal]>('planApproval');
+export const stopWorkflowSignal = defineSignal<[StopWorkflowSignal]>('stopWorkflow');
+
+// Define query
+export const getConversationStateQuery = defineQuery<ConversationState>('getConversationState');
+
+interface ConversationState {
+  questions: string[];
+  responses: UserResponseSignal[];
+  currentQuestion?: string;
+  awaitingApproval: boolean;
+}
 
 // Create activity proxies for ALL activities (Temporal best practice)
 const {
