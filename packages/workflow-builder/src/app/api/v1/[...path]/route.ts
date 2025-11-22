@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTemporalClient } from '@/lib/temporal/connection';
 import { createClientFromHeaders } from '@/lib/supabase/server';
+import { validateApiKey, extractApiKeyFromHeaders } from '@/lib/security/api-key-auth';
 
 // Regex to extract hash and endpoint path from URL
 // Format: /api/v1/{hash}/{endpoint-path}
@@ -53,20 +54,88 @@ async function handleEndpoint(req: NextRequest, method: string) {
 
     // Look up endpoint by hash (indexed, fast lookup)
     const supabase = createClientFromHeaders(req.headers);
-    const { data: endpoint, error: endpointError } = await supabase
-      .from('workflow_endpoints')
-      .select('*, workflow:workflows(*, project:projects(*))')
-      .eq('route_hash', routeHash)
-      .eq('endpoint_path', fullEndpointPath)
-      .eq('method', method)
-      .eq('is_active', true)
+    
+    // Try public_interfaces first (new system), then fall back to workflow_endpoints (legacy)
+    let endpoint: any = null;
+    let targetType: string = '';
+    let targetName: string = '';
+    let workflow: any = null;
+    let project: any = null;
+    let authType: string | null = null;
+
+    // Check public_interfaces table
+    const { data: publicInterface, error: piError } = await supabase
+      .from('public_interfaces')
+      .select(`
+        *,
+        service_interface:service_interfaces!inner(
+          *,
+          workflow:workflows!inner(
+            *,
+            project:projects!inner(*)
+          )
+        )
+      `)
+      .eq('http_path', fullEndpointPath)
+      .eq('http_method', method)
       .single();
 
-    if (endpointError || !endpoint) {
-      return NextResponse.json(
-        { error: 'Endpoint not found or inactive' },
-        { status: 404 }
-      );
+    if (!piError && publicInterface) {
+      // Found in public_interfaces - use this
+      const si = publicInterface.service_interface as any;
+      endpoint = publicInterface;
+      targetType = si.interface_type;
+      targetName = si.callable_name;
+      workflow = si.workflow;
+      project = workflow.project;
+      authType = publicInterface.auth_type;
+    } else {
+      // Fall back to workflow_endpoints (legacy)
+      const { data: legacyEndpoint, error: endpointError } = await supabase
+        .from('workflow_endpoints')
+        .select('*, workflow:workflows(*, project:projects(*))')
+        .eq('route_hash', routeHash)
+        .eq('endpoint_path', fullEndpointPath)
+        .eq('method', method)
+        .eq('is_active', true)
+        .single();
+
+      if (endpointError || !legacyEndpoint) {
+        return NextResponse.json(
+          { error: 'Endpoint not found or inactive' },
+          { status: 404 }
+        );
+      }
+
+      endpoint = legacyEndpoint;
+      targetType = legacyEndpoint.target_type;
+      targetName = legacyEndpoint.target_name;
+      workflow = legacyEndpoint.workflow;
+      project = workflow.project;
+      authType = legacyEndpoint.auth_type;
+    }
+
+    // Validate API key if authentication is required
+    if (authType === 'api-key' || authType === 'api_key') {
+      const apiKey = extractApiKeyFromHeaders(req.headers);
+      const validation = await validateApiKey(apiKey, supabase);
+
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.error || 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+
+      // Verify API key is associated with this endpoint's public interface
+      if (endpoint.id && validation.publicInterfaceId) {
+        if (endpoint.id !== validation.publicInterfaceId) {
+          return NextResponse.json(
+            { error: 'API key not authorized for this endpoint' },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Validate request schema if provided
@@ -87,11 +156,9 @@ async function handleEndpoint(req: NextRequest, method: string) {
     }
 
     const client = await getTemporalClient();
-    const workflow = endpoint.workflow as any;
-    const project = workflow.project as any;
 
     // Handle different target types
-    if (endpoint.target_type === 'start') {
+    if (targetType === 'start') {
       // Start new workflow execution
       let body = {};
       try {
@@ -130,7 +197,7 @@ async function handleEndpoint(req: NextRequest, method: string) {
       }
 
       const handle = client.workflow.getHandle(workflowExecutionId);
-      await handle.signal(endpoint.target_name, body);
+      await handle.signal(targetName, body);
 
       return NextResponse.json({ success: true });
     } else if (endpoint.target_type === 'query') {
@@ -144,7 +211,7 @@ async function handleEndpoint(req: NextRequest, method: string) {
       }
 
       const handle = client.workflow.getHandle(workflowExecutionId);
-      const result = await handle.query(endpoint.target_name);
+      const result = await handle.query(targetName);
 
       return NextResponse.json(result);
     }
