@@ -6,6 +6,12 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-export { readPlanFile } from './utils';
-export type { PackageResult } from './types';
-```
+/**
+ * Standard result pattern for package operations.
+ * @template T The type of data returned on success. Defaults to unknown.
+ */
+export interface PackageResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
