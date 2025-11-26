@@ -184,47 +184,97 @@ TEMPORAL_ADDRESS=localhost:7233
 
 ## Testing Requirements (Workflow Builder)
 
-### General
+**See**: `.cursor/rules/testing-standards.mdc` for comprehensive testing standards  
+**See**: `docs/testing/README.md` for testing guide and troubleshooting  
+**See**: `plans/testing/` for testing architecture and phase plans
 
-- Prefer **real systems** (Temporal, Supabase, tRPC) over mocks.
-- If a mock is introduced:
-  - It must have a **verification test** that compares its behavior to the real system for the supported scenarios.
-  - The rationale for using the mock must be documented in the test file.
+### Quick Reference
 
-### Layers
+**Test Commands:**
+```bash
+# Unit tests (fast, no dependencies)
+yarn test:unit
 
-- **Model & Helpers** (pure TS):
-  - Comprehensive unit tests for:
-    - Timeout parsing and normalization.
-    - Retry policy parsing and normalization.
-    - `WorkflowDefinition` validation.
-- **Compiler & Generators**:
-  - Snapshot + invariant tests to ensure:
-    - Workflow function is exported as `export async function ${workflow.name}`.
-    - All referenced activities/agents are exported.
-    - Timeouts and retry policies are wired correctly into `proxyActivities`.
-- **Temporal Integration**:
-  - Tests under `tests/integration/compiler-execution/**` must:
-    - Run against the `yarn infra:up` Temporal instance (`localhost:7233`, `default` namespace).
-    - Cover:
-      - Simple workflows.
-      - Timeouts (activity + workflow).
-      - Retries and backoff strategies.
-      - Cancellations and concurrent workflows.
-- **UI & UX**:
-  - React component tests for:
-    - Component palette grouping and drag behavior.
-    - Service builder / inside-outside visualization.
-  - Playwright tests for:
-    - Building and running a workflow from the UI.
-    - Configuring and observing timeouts and retries end-to-end.
+# Integration tests (requires Temporal: yarn infra:up)
+yarn test:integration
+
+# E2E tests (requires Temporal + dev server)
+yarn test:e2e
+
+# Debug mode (preserves artifacts)
+WORKFLOW_BUILDER_TEST_DEBUG=1 yarn test:integration
+```
+
+### General Principles
+
+- ✅ Prefer **real systems** (Temporal, Supabase, tRPC) over mocks
+- ✅ If mocking is required:
+  - Document rationale in test file
+  - Provide verification test comparing mock to real system
+  - Keep mocks local to test suite
+
+### Testing Layers
+
+**Layer 1: Unit Tests** (`tests/unit/`)
+- Helper functions (timeout parsing, retry validation, AST utilities)
+- Generator sub-functions (buildImports, buildRetryOptions, etc.)
+- Workflow definition validation
+- **Command**: `yarn test:unit`
+
+**Layer 2: Integration Tests** (`tests/integration/compiler-execution/`)
+- Workflow compilation to TypeScript
+- Temporal workflow initialization and execution
+- Activity timeouts, retries, cancellations, concurrency
+- **Command**: `yarn test:integration` (requires `yarn infra:up`)
+
+**Layer 3: UI Component Tests** (`tests/ui/`)
+- React component rendering and interactions
+- Form validation (timeout/retry configuration)
+- **Command**: `yarn test:unit` (includes UI tests)
+
+**Layer 4: E2E Tests** (`tests/e2e/`)
+- Complete user flows (create → compile → deploy → run)
+- UI interactions end-to-end
+- **Command**: `yarn test:e2e` (requires `yarn infra:up` + dev server)
 
 ### Debugging Support
 
-- Use `WORKFLOW_BUILDER_TEST_DEBUG=1` when running integration tests to:
-  - Preserve generated `workflows/index.ts` for failing cases.
-  - Log exported workflow function names.
-  - Write small JSON artifacts summarizing workflow histories.
+**Environment Variable**: `WORKFLOW_BUILDER_TEST_DEBUG=1`
+
+**What it enables:**
+- Preserves `.test-workflows` directories for failing tests
+- Dumps generated `workflows/index.ts` to `tests/_artifacts/`
+- Logs workflow names, IDs, and exported function names
+- Writes JSON history summaries for failing tests
+
+**Usage:**
+```bash
+WORKFLOW_BUILDER_TEST_DEBUG=1 yarn test:integration
+```
+
+### For New Features
+
+**Minimum test requirements:**
+- ✅ At least one unit test for helper functions
+- ✅ At least one integration test if feature involves Temporal
+- ✅ At least one UI test if feature has UI components
+- ✅ At least one E2E test if feature is user-facing
+
+### Temporal Setup
+
+**For integration and E2E tests:**
+```bash
+# Start Temporal stack (from repo root)
+yarn infra:up
+
+# Verify it's running
+curl http://localhost:7233/health
+```
+
+**Configuration:**
+- Address: `localhost:7233` (default)
+- Namespace: `default`
+- Task Queue: `test-queue` (or `test-queue-concurrent` for concurrency tests)
 
 ---
 

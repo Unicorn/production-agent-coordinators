@@ -36,13 +36,13 @@
 
 ### 3.1 Package Scripts
 
-- [ ] Update `packages/workflow-builder/package.json` to include:
-  - [ ] `test:unit` – pure TS + generator tests.
-  - [ ] `test:integration` – Temporal integration tests.
-  - [ ] `test:e2e` – Playwright E2E tests.
-- [ ] Document these scripts in:
-  - [ ] `docs/testing/README.md` (or equivalent).
-  - [ ] `packages/workflow-builder/AGENTINFO.md` (already partially updated).
+- [x] Update `packages/workflow-builder/package.json` to include:
+  - [x] `test:unit` – pure TS + generator tests.
+  - [x] `test:integration` – Temporal integration tests.
+  - [x] `test:e2e` – Playwright E2E tests.
+- [x] Document these scripts in:
+  - [x] `docs/testing/README.md` (or equivalent).
+  - [x] `packages/workflow-builder/AGENTINFO.md` (already partially updated).
 
 ### 3.2 CI Integration (Future Work)
 
@@ -57,24 +57,24 @@
 
 ### 4.1 Debug Mode for Tests
 
-- [ ] Implement `WORKFLOW_BUILDER_TEST_DEBUG=1` support in:
-  - [ ] `IntegrationTestContext`:
-    - [ ] Preserve `.test-workflows` directories for failing tests.
-    - [ ] Copy `workflows/index.ts` into `tests/_artifacts/` with a filename that includes:
+- [x] Implement `WORKFLOW_BUILDER_TEST_DEBUG=1` support in:
+  - [x] `IntegrationTestContext`:
+    - [x] Preserve `.test-workflows` directories for failing tests.
+    - [x] Copy `workflows/index.ts` into `tests/_artifacts/` with a filename that includes:
       - Workflow name.
       - Test name or workflow ID.
-    - [ ] Log exported workflow function names.
-  - [ ] E2E helpers:
-    - [ ] Capture screenshots and traces for failing tests.
+    - [x] Log exported workflow function names.
+  - [x] E2E helpers:
+    - [x] Capture screenshots and traces for failing tests (Playwright default behavior).
 
 ### 4.2 History and Metadata Dumps
 
-- [ ] Add a small utility `tests/integration/utils/artifacts.ts` to:
-  - [ ] Write JSON summary files for failing Temporal tests:
+- [x] Add a small utility `tests/integration/compiler-execution/test-helpers.ts` (writeHistorySummary):
+  - [x] Write JSON summary files for failing Temporal tests:
     - Workflow name and ID.
     - First N history events (IDs, types).
     - Key attributes from timeouts or failures.
-  - [ ] Ensure artifact path is stable (e.g., `tests/_artifacts/histories/`).
+  - [x] Ensure artifact path is stable (`tests/_artifacts/`).
 
 ---
 
@@ -82,21 +82,21 @@
 
 ### 5.1 Documentation
 
-- [ ] Create or update `docs/testing/` documents to:
-  - [ ] Explain the layered testing strategy (Phases 1–4).
-  - [ ] Show example commands and expected runtimes.
-  - [ ] Provide troubleshooting guidance for:
+- [x] Create or update `docs/testing/` documents to:
+  - [x] Explain the layered testing strategy (Phases 1–4).
+  - [x] Show example commands and expected runtimes.
+  - [x] Provide troubleshooting guidance for:
     - Temporal connectivity issues.
-    - “no such function exported by the workflow bundle”.
+    - "no such function exported by the workflow bundle".
     - Flaky timeouts or retries.
 
 ### 5.2 Cursor Rules and Agent Guidance
 
-- [ ] Ensure `.cursor/rules/testing-standards.mdc` stays in sync with reality:
-  - [ ] Update rule content when test scripts or expectations change.
-  - [ ] Cross-reference `AGENTINFO.md` and `docs/testing/**`.
-- [ ] If new test types or patterns are introduced:
-  - [ ] Add a short “when to use this” section in both the docs and rules.
+- [x] Ensure `.cursor/rules/testing-standards.mdc` stays in sync with reality:
+  - [x] Update rule content when test scripts or expectations change.
+  - [x] Cross-reference `AGENTINFO.md` and `docs/testing/**`.
+- [x] If new test types or patterns are introduced:
+  - [x] Add a short "when to use this" section in both the docs and rules.
 
 ---
 
@@ -124,16 +124,31 @@
 
 ## 7. Exit Criteria
 
-- Developers can:
+- ✅ Developers can:
   - Run unit, integration, and E2E tests with a single, documented command each.
   - Quickly inspect artifacts and logs for failing tests to identify root causes.
-- Documentation:
+- ✅ Documentation:
   - Accurately reflects:
     - How to run tests.
     - How to debug workflow and UI issues.
     - How to extend the testing architecture.
-- Agents:
+- ✅ Agents:
   - Use `.cursor/rules/testing-standards.mdc` and `AGENTINFO.md` to make testing-aware changes by default.
+
+## 8. Status
+
+**Phase 4 Status: COMPLETE ✅**
+
+All objectives met:
+- ✅ Test scripts documented and working (`test:unit`, `test:integration`, `test:e2e`)
+- ✅ Debug mode implemented (`WORKFLOW_BUILDER_TEST_DEBUG=1`)
+- ✅ Artifact generation for failing tests
+- ✅ Comprehensive testing documentation created:
+  - `docs/testing/README.md` - Complete testing guide
+  - `.cursor/rules/testing-standards.mdc` - Testing standards for agents
+  - `AGENTINFO.md` - Updated with testing requirements
+- ✅ All test commands documented with prerequisites and expected runtimes
+- ✅ Troubleshooting guides for common issues
 
 
 

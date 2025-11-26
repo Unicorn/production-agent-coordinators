@@ -1,0 +1,271 @@
+# Testing Standards - Workflow Builder
+
+**Last Updated**: 2025-11-26  
+**Testing Architecture Plan**: `packages/workflow-builder/plans/testing/2025-11-26-testing-architecture-master-plan.md`
+
+---
+
+## Overview
+
+The Workflow Builder uses a **layered testing strategy** with clear requirements at each level. All new code must include appropriate tests.
+
+---
+
+## Testing Layers
+
+### Layer 1: Unit Tests (Pure TypeScript)
+
+**Location**: `tests/unit/`
+
+**What to test:**
+- Helper functions (timeout parsing, retry policy validation, AST utilities)
+- Generator sub-functions (buildImports, buildRetryOptions, etc.)
+- Workflow definition validation
+- UI model mapping
+
+**Requirements:**
+- ✅ All helper modules in `src/lib/**` must have unit tests
+- ✅ Generator functions must be broken down into testable sub-functions
+- ✅ Use snapshot tests for code generation output
+- ✅ No external dependencies (pure functions)
+
+**Commands:**
+```bash
+yarn test:unit
+yarn test:watch tests/unit/
+```
+
+---
+
+### Layer 2: Integration Tests (Temporal)
+
+**Location**: `tests/integration/compiler-execution/`
+
+**What to test:**
+- Workflow compilation to TypeScript
+- Temporal workflow initialization
+- Activity timeouts and retry policies
+- Workflow cancellation and concurrency
+
+**Requirements:**
+- ✅ Must run against real Temporal instance (`yarn infra:up`)
+- ✅ Use `IntegrationTestContext` for resource management
+- ✅ Test all workflow types (simple, timeout, retry, cancel, concurrent)
+- ✅ Verify "no such function exported" errors don't occur
+- ✅ Use debug mode for artifact generation: `WORKFLOW_BUILDER_TEST_DEBUG=1`
+
+**Commands:**
+```bash
+# Start Temporal first
+yarn infra:up
+
+# Run integration tests
+yarn test:integration
+
+# With debug artifacts
+WORKFLOW_BUILDER_TEST_DEBUG=1 yarn test:integration
+```
+
+**Temporal Setup:**
+- Address: `localhost:7233` (default)
+- Namespace: `default`
+- Task Queue: `test-queue` (or `test-queue-concurrent` for concurrency tests)
+
+---
+
+### Layer 3: UI Component Tests (React Testing Library)
+
+**Location**: `tests/ui/`
+
+**What to test:**
+- Component rendering and structure
+- User interactions (form inputs, button clicks)
+- State management and callbacks
+- Form validation
+
+**Requirements:**
+- ✅ Use `render` helper from `tests/ui/test-helpers.tsx` (includes providers)
+- ✅ Test component structure, not implementation details
+- ✅ Mock tRPC queries appropriately
+- ✅ Test form validation and error states
+
+**Commands:**
+```bash
+yarn test:unit  # UI tests are included in unit test suite
+yarn test tests/ui/
+```
+
+---
+
+### Layer 4: E2E Tests (Playwright)
+
+**Location**: `tests/e2e/`
+
+**What to test:**
+- Complete user flows (create → compile → deploy → run)
+- UI interactions end-to-end
+- Timeout and retry configuration via UI
+- Error handling and user feedback
+
+**Requirements:**
+- ✅ Run in headless mode by default
+- ✅ Require Temporal stack (`yarn infra:up`)
+- ✅ Require dev server (`yarn dev`)
+- ✅ Use page objects for maintainability
+- ✅ Clean up test data after each test
+
+**Commands:**
+```bash
+# Start prerequisites
+yarn infra:up
+yarn dev  # in another terminal
+
+# Run E2E tests
+yarn test:e2e
+
+# Debug mode (headed browser)
+yarn test:e2e:debug
+```
+
+---
+
+## Mocking Policy
+
+### Preferred: Real Systems
+
+**Always prefer real systems over mocks:**
+- ✅ Use real Temporal instance for integration tests
+- ✅ Use real Supabase for database tests
+- ✅ Use real tRPC for API tests
+
+### When Mocking is Required
+
+**If a mock is necessary:**
+1. **Document the rationale** in the test file
+2. **Provide a verification test** that compares mock behavior to real system
+3. **Keep mocks local** to the test suite (no global/shared mocks)
+4. **Test the mock itself** to ensure it matches real behavior
+
+**Example:**
+```typescript
+// Mock rationale: Testing UI component in isolation
+// Verification: See tests/integration/compiler-execution/ for real tRPC behavior
+vi.mock('@/lib/trpc/client', () => ({
+  api: {
+    workflows: {
+      get: { useQuery: () => ({ data: mockData, isLoading: false }) },
+    },
+  },
+}));
+```
+
+---
+
+## Debug Mode
+
+**Environment Variable**: `WORKFLOW_BUILDER_TEST_DEBUG=1`
+
+**What it enables:**
+- Preserves `.test-workflows` directories for failing tests
+- Dumps generated `workflows/index.ts` to `tests/_artifacts/`
+- Logs workflow names, IDs, and exported function names
+- Writes JSON history summaries for failing tests
+
+**Usage:**
+```bash
+WORKFLOW_BUILDER_TEST_DEBUG=1 yarn test:integration
+```
+
+**Artifacts location**: `tests/_artifacts/`
+
+---
+
+## Test Commands Reference
+
+```bash
+# Unit tests (fast, no dependencies)
+yarn test:unit
+
+# Integration tests (requires Temporal)
+yarn test:integration
+yarn test:integration:compiler  # Compiler tests only
+
+# E2E tests (requires Temporal + dev server)
+yarn test:e2e
+yarn test:e2e:ui      # Headed browser
+yarn test:e2e:debug  # Debug mode
+yarn test:e2e:report # View HTML report
+
+# All tests
+yarn test
+```
+
+---
+
+## Required Test Coverage
+
+### For New Features
+
+**Minimum requirements:**
+- ✅ At least one unit test for helper functions
+- ✅ At least one integration test if feature involves Temporal
+- ✅ At least one UI test if feature has UI components
+- ✅ At least one E2E test if feature is user-facing
+
+### For Refactors
+
+**Requirements:**
+- ✅ All existing tests must pass
+- ✅ Add tests for any new code paths
+- ✅ Update snapshots if code generation changes
+
+---
+
+## Common Issues and Solutions
+
+### "Failed to connect before the deadline"
+
+**Problem**: Temporal not running
+
+**Solution**: Run `yarn infra:up` before integration/E2E tests
+
+### "no such function is exported by the workflow bundle"
+
+**Problem**: Generated function name mismatch
+
+**Solution**:
+1. Enable debug mode: `WORKFLOW_BUILDER_TEST_DEBUG=1`
+2. Check `tests/_artifacts/` for generated code
+3. Verify function name matches `workflow.name` exactly
+4. See `workflow-initialization.test.ts` for examples
+
+### Flaky Timeout Tests
+
+**Problem**: Timing issues
+
+**Solution**:
+- Use generous but bounded time ranges
+- Check Temporal worker status
+- Verify activity timeout configuration
+
+---
+
+## Test File Organization
+
+```
+tests/
+├── unit/              # Unit tests (pure TS)
+├── integration/       # Integration tests (Temporal)
+├── ui/               # UI component tests
+├── e2e/              # E2E tests (Playwright)
+└── _artifacts/       # Debug artifacts (gitignored)
+```
+
+---
+
+## References
+
+- [Testing Guide](../../docs/testing/README.md)
+- [Testing Architecture Plan](../../plans/testing/2025-11-26-testing-architecture-master-plan.md)
+- [AGENTINFO.md](../../AGENTINFO.md) - Testing requirements section
+- [Phase Plans](../../plans/testing/) - Detailed phase breakdowns
