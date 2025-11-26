@@ -7,28 +7,36 @@ Redistribution or use in other products or commercial offerings is not permitted
 */
 
 import * as fs from 'fs/promises';
-import { PackageResult } from './types';
+import { PackageResult } from './index';
 
 /**
- * Reads a plan file from the given path.
- *
- * This function handles file system operations and provides a standard `PackageResult`
- * for consistent error handling.
- *
- * @param filePath - The path to the plan file.
- * @returns A `PackageResult` containing the file content as a string on success,
- *          or an error message on failure (e.g., file not found, permission issues).
+ * Reads a file from the given path and attempts to parse it as JSON.
+ * @param filePath The path to the file.
+ * @returns A PackageResult containing the parsed data or an error.
  */
-export async function readPlanFile(filePath: string): Promise<PackageResult<string>> {
-  if (!filePath) {
-    return { success: false, error: 'File path cannot be empty.' };
+export async function readAndParseFile<T>(filePath: string): Promise<PackageResult<T>> {
+  if (!filePath || filePath.trim() === '') {
+    return { success: false, error: "File path cannot be empty." };
   }
 
   try {
-    const content: string = await fs.readFile(filePath, { encoding: 'utf-8' });
-    return { success: true, data: content };
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return { success: false, error: `Failed to read plan file at '${filePath}': ${errorMessage}` };
+    const fileContent = await fs.readFile(filePath, { encoding: 'utf-8' });
+    const parsedData: T = JSON.parse(fileContent);
+    return { success: true, data: parsedData };
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { success: false, error: `File not found: ${filePath}` };
+      }
+      if ((error as NodeJS.ErrnoException).code === 'EACCES') {
+        return { success: false, error: `Permission denied to read file: ${filePath}` };
+      }
+      if (error.name === 'SyntaxError') { // For JSON.parse errors
+        return { success: false, error: `Failed to parse file content as JSON: ${error.message}` };
+      }
+      return { success: false, error: `Unknown file operation error: ${error.message}` };
+    }
+    return { success: false, error: `An unexpected error occurred: ${String(error)}` };
   }
 }
+```
