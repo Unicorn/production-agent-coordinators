@@ -1,0 +1,43 @@
+/*
+Copyright (c) 2025 Bernier LLC
+
+This file is licensed to the client under a limited-use license.
+The client may use and modify this code *only within the scope of the project it was delivered for*.
+Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
+*/
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module",
+    "project": "./tsconfig.json"
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:@typescript-eslint/recommended-requiring-type-checking"
+  ],
+  "rules": {
+    // Bernier LLC specific rules
+    "@typescript-eslint/semi": ["error", "always"],
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/restrict-template-expressions": ["error", { "allowNumber": true, "allowBoolean": true, "allowAny": false, "allowNullish": false, "allowRegExp": false }],
+    "@typescript-eslint/no-unsafe-assignment": "error",
+    "@typescript-eslint/no-unsafe-member-access": "error",
+    "@typescript-eslint/no-unsafe-call": "error",
+    "@typescript-eslint/no-unsafe-return": "error",
+    "@typescript-eslint/no-floating-promises": "error",
+    "no-constant-condition": "warn",
+    "prefer-const": "error"
+  },
+  "env": {
+    "node": true,
+    "jest": true
+  }
+}
