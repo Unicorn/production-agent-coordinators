@@ -6,86 +6,102 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-import { PackageResult } from './interfaces';
-
 /**
- * Base custom error for the package.
+ * Base custom error class for the Agent Coordinator package.
  */
-export class BernierError extends Error {
-  public readonly code: string;
-
-  constructor(message: string, code: string = 'BERNIER_ERROR') {
-    super(message);
-    this.name = 'BernierError';
-    this.code = code;
-    Object.setPrototypeOf(this, BernierError.prototype);
-  }
-
+export class AgentCoordinatorError extends Error {
   /**
-   * Creates a PackageResult indicating failure from this error.
-   * @param data Optional data to include in the error result.
-   * @returns A failed PackageResult.
+   * Constructs an AgentCoordinatorError.
+   * @param message - The error message.
    */
-  public toPackageResult<T = unknown>(data?: T): PackageResult<T> {
-    return {
-      success: false,
-      error: this.message,
-      data: data,
-    };
+  constructor(message: string) {
+    super(message);
+    this.name = 'AgentCoordinatorError';
+    Object.setPrototypeOf(this, AgentCoordinatorError.prototype);
   }
 }
 
 /**
- * Error specifically for network or communication issues.
+ * Represents an error specifically related to network or API communication issues.
  */
-export class NetworkError extends BernierError {
-  constructor(message: string, code: string = 'NETWORK_ERROR') {
-    super(message, code);
+export class NetworkError extends AgentCoordinatorError {
+  /** The HTTP status code if available. */
+  public readonly statusCode?: number;
+
+  /**
+   * Constructs a NetworkError.
+   * @param message - The error message.
+   * @param statusCode - Optional HTTP status code.
+   */
+  constructor(message: string, statusCode?: number) {
+    super(message);
     this.name = 'NetworkError';
+    this.statusCode = statusCode;
     Object.setPrototypeOf(this, NetworkError.prototype);
   }
 }
 
 /**
- * Error for invalid input or arguments.
+ * Represents an error where a required resource (e.g., agent, message) was not found.
  */
-export class ValidationError extends BernierError {
-  constructor(message: string, code: string = 'VALIDATION_ERROR') {
-    super(message, code);
-    this.name = 'ValidationError';
-    Object.setPrototypeOf(this, ValidationError.prototype);
-  }
-}
-
-/**
- * Error for authentication or authorization failures.
- */
-export class AuthError extends BernierError {
-  constructor(message: string, code: string = 'AUTH_ERROR') {
-    super(message, code);
-    this.name = 'AuthError';
-    Object.setPrototypeOf(this, AuthError.prototype);
-  }
-}
-
-/**
- * Error for when a resource is not found.
- */
-export class NotFoundError extends BernierError {
-  constructor(message: string, code: string = 'NOT_FOUND_ERROR') {
-    super(message, code);
+export class NotFoundError extends AgentCoordinatorError {
+  /**
+   * Constructs a NotFoundError.
+   * @param message - The error message.
+   */
+  constructor(message: string) {
+    super(message);
     this.name = 'NotFoundError';
     Object.setPrototypeOf(this, NotFoundError.prototype);
   }
 }
 
 /**
- * Error for when an operation times out.
+ * Represents an error due to invalid input or request parameters.
  */
-export class TimeoutError extends BernierError {
-  constructor(message: string, code: string = 'TIMEOUT_ERROR') {
-    super(message, code);
-    this.name = 'TimeoutError';
-    Object.setPrototypeOf(this, TimeoutError.prototype);
+export class ValidationError extends AgentCoordinatorError {
+  /**
+   * Constructs a ValidationError.
+   * @param message - The error message.
+   */
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
+    Object.setPrototypeOf(this, ValidationError.prototype);
+  }
+}
+
+/**
+ * Represents an error due to authentication or authorization issues.
+ */
+export class AuthenticationError extends AgentCoordinatorError {
+  /**
+   * Constructs an AuthenticationError.
+   * @param message - The error message.
+   */
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthenticationError';
+    Object.setPrototypeOf(this, AuthenticationError.prototype);
+  }
+}
+
+/**
+ * Represents a generic unknown or unexpected error.
+ */
+export class UnknownError extends AgentCoordinatorError {
+  /** The original error object, if available. */
+  public readonly originalError?: unknown;
+
+  /**
+   * Constructs an UnknownError.
+   * @param message - The error message.
+   * @param originalError - The original error object that caused this unknown error.
+   */
+  constructor(message: string, originalError?: unknown) {
+    super(message);
+    this.name = 'UnknownError';
+    this.originalError = originalError;
+    Object.setPrototypeOf(this, UnknownError.prototype);
   }
 }

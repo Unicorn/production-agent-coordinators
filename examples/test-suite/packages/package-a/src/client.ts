@@ -6,267 +6,319 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-import WebSocket from 'ws';
-import { AgentClientConfig, AgentId, AgentMessage, AgentStatus } from './types';
-import { PackageResult } from './interfaces';
-import { BernierError, NetworkError } from './errors';
-import { delay, safeJsonParse, safeJsonStringify } from './utils';
+import {
+  Agent,
+  AgentEvent,
+  AgentEventListResponse,
+  AgentListResponse,
+  AgentMessage,
+  AgentMessageListResponse,
+  ClientConfig,
+  CreateAgentInput,
+  ListAgentEventsOptions,
+  ListAgentMessagesOptions,
+  ListAgentsOptions,
+  PackageResult,
+  SendMessageInput,
+  UpdateAgentInput,
+} from './types';
+import {
+  handleFetchError,
+  handleHttpResponseError,
+  buildFetchOptions,
+  validateNonEmptyString,
+  validateNonNegativeInteger,
+} from './utils';
+import { initializeConfig } from './config';
+import { AuthenticationError, NotFoundError, ValidationError } from './errors';
 
-export class AgentClient {
-  private ws: WebSocket | null = null;
-  private readonly config: AgentClientConfig;
-  private status: AgentStatus = AgentStatus.Offline;
-  private reconnectAttempts: number = 0;
-  private readonly MAX_RECONNECT_ATTEMPTS: number = 10;
-  private readonly RECONNECT_DELAY_MS: number = 5000;
-  private readonly PING_INTERVAL_MS: number = 30000; // 30 seconds
-  private pingInterval: NodeJS.Timeout | null = null;
+/**
+ * The `AgentCoordinatorClient` provides methods to interact with the Agent Coordinator API.
+ * It manages agents, their messages, and events.
+ */
+export class AgentCoordinatorClient {
+  private readonly config: ClientConfig;
 
-  constructor(config: AgentClientConfig) {
-    this.config = config;
-    // Ensure agentId is always present in config
-    if (!config.agentId) {
-      throw new BernierError('AgentClientConfig must include an agentId', 'CLIENT_CONFIG_ERROR');
+  /**
+   * Constructs a new `AgentCoordinatorClient` instance.
+   * @param config - The client configuration. This will be validated upon initialization.
+   * @throws {AuthenticationError | ValidationError} if the configuration is invalid.
+   */
+  constructor(config: ClientConfig) {
+    const initResult = initializeConfig(config);
+    if (!initResult.success || !initResult.data) {
+      if (initResult.error?.includes('apiKey')) {
+        throw new AuthenticationError(initResult.error);
+      }
+      throw new ValidationError(initResult.error || 'Failed to initialize client configuration.');
     }
-    console.log(`AgentClient created for ID: ${config.agentId}`);
-  }
-
-  public getAgentId(): AgentId {
-    return this.config.agentId;
-  }
-
-  public getStatus(): AgentStatus {
-    return this.status;
+    this.config = initResult.data;
   }
 
   /**
-   * Connects the agent client to the coordinator.
-   * Handles initial connection and manages reconnection logic.
-   * @returns A PackageResult indicating the success or failure of the connection attempt.
+   * Internal helper for making API requests.
+   * @param path - The API endpoint path (e.g., '/agents').
+   * @param method - The HTTP method (e.g., 'GET', 'POST').
+   * @param body - Optional request body.
+   * @returns A `PackageResult` containing the parsed JSON response or an error.
    */
-  public async connect(): Promise<PackageResult<boolean>> {
-    if (this.status === AgentStatus.Connecting || this.status === AgentStatus.Online) {
-      return { success: true, data: true, error: 'Already connecting or online.' };
-    }
-
-    this.status = AgentStatus.Connecting;
-    console.log(`Agent ${this.config.agentId} attempting to connect to ws://${this.config.coordinatorHost}:${this.config.coordinatorPort}`);
+  private async request<T>(path: string, method: string, body?: unknown): Promise<PackageResult<T>> {
+    const url = `${this.config.baseUrl}${path}`;
+    const fetchOptions = buildFetchOptions(method, this.config.apiKey, body, this.config.timeoutMs);
 
     try {
-      this.ws = new WebSocket(`ws://${this.config.coordinatorHost}:${this.config.coordinatorPort}`);
+      const response = await fetch(url, fetchOptions);
 
-      // Setup event listeners
-      this.ws.onopen = () => this.handleOpen();
-      this.ws.onmessage = (event: WebSocket.MessageEvent) => this.handleMessage(event);
-      this.ws.onerror = (event: WebSocket.ErrorEvent) => this.handleError(event);
-      this.ws.onclose = (event: WebSocket.CloseEvent) => this.handleClose(event);
-
-      // Await connection or error
-      return new Promise((resolve) => {
-        const onOpen = (): void => {
-          this.cleanupConnectionListeners();
-          resolve({ success: true, data: true });
-        };
-        const onError = (errorEvent: WebSocket.ErrorEvent): void => {
-          this.cleanupConnectionListeners();
-          resolve({ success: false, error: new NetworkError(`Failed to connect: ${errorEvent.message || 'Unknown network error'}`).message });
-        };
-
-        // Add temporary listeners for initial connection outcome
-        this.ws?.addEventListener('open', onOpen, { once: true });
-        this.ws?.addEventListener('error', onError, { once: true });
-      });
-
-    } catch (err: unknown) {
-      this.status = AgentStatus.Offline;
-      if (err instanceof Error) {
-        return { success: false, error: new NetworkError(`Failed to initiate WebSocket connection: ${err.message}`).message };
+      const errorResult = await handleHttpResponseError<T>(response);
+      if (!errorResult.success) {
+        return errorResult;
       }
-      return { success: false, error: new NetworkError('Failed to initiate WebSocket connection: Unknown error').message };
+
+      const data: T = await response.json();
+      return { success: true, data };
+    } catch (e: unknown) {
+      return handleFetchError(e, url);
     }
   }
 
   /**
-   * Disconnects the agent client from the coordinator.
-   * @returns A PackageResult indicating the success or failure of the disconnection.
+   * Retrieves a list of agents.
+   * @param options - Optional query parameters for pagination and filtering.
+   * @returns A `PackageResult` containing an `AgentListResponse` or an error.
    */
-  public disconnect(): PackageResult<boolean> {
-    if (this.ws && (this.status === AgentStatus.Online || this.status === AgentStatus.Connecting)) {
-      this.stopPing();
-      this.ws.close(1000, 'Client initiated disconnect');
-      this.status = AgentStatus.Offline;
-      console.log(`Agent ${this.config.agentId} disconnected.`);
-      return { success: true, data: true };
+  public async listAgents(options?: ListAgentsOptions): Promise<PackageResult<AgentListResponse>> {
+    const query = new URLSearchParams();
+    if (options?.offset !== undefined) {
+      const validation = validateNonNegativeInteger(options.offset, 'Offset');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid offset').message };
+      }
+      query.append('offset', options.offset.toString());
     }
-    return { success: false, error: 'Agent not connected or already disconnecting.' };
+    if (options?.limit !== undefined) {
+      const validation = validateNonNegativeInteger(options.limit, 'Limit');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid limit').message };
+      }
+      query.append('limit', options.limit.toString());
+    }
+    if (options?.status !== undefined) {
+      const validation = validateNonEmptyString(options.status, 'Status');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid status').message };
+      }
+      query.append('status', options.status);
+    }
+
+    const path = `/agents${query.toString() ? `?${query.toString()}` : ''}`;
+    return this.request<AgentListResponse>(path, 'GET');
   }
 
   /**
-   * Sends a message to the connected coordinator.
-   * @param message The AgentMessage to send.
-   * @returns A PackageResult indicating the success or failure of sending the message.
+   * Creates a new agent.
+   * @param input - The details for the new agent.
+   * @returns A `PackageResult` containing the created `Agent` or an error.
    */
-  public async sendMessage(message: AgentMessage): Promise<PackageResult<boolean>> {
-    if (this.status !== AgentStatus.Online || !this.ws) {
-      return { success: false, error: 'Agent is not online. Cannot send message.' };
+  public async createAgent(input: CreateAgentInput): Promise<PackageResult<Agent>> {
+    const nameValidation = validateNonEmptyString(input.name, 'Agent name');
+    if (!nameValidation.success) {
+      return { success: false, error: new ValidationError(nameValidation.error || 'Invalid agent name').message };
+    }
+    const statusValidation = validateNonEmptyString(input.status, 'Agent status');
+    if (!statusValidation.success) {
+      return { success: false, error: new ValidationError(statusValidation.error || 'Invalid agent status').message };
     }
 
-    const stringifyResult = safeJsonStringify(message);
-    if (!stringifyResult.success || !stringifyResult.data) {
-      return { success: false, error: `Failed to serialize message: ${stringifyResult.error || 'Unknown stringify error'}` };
-    }
+    return this.request<Agent>('/agents', 'POST', input);
+  }
 
-    try {
-      this.ws.send(stringifyResult.data);
-      return { success: true, data: true };
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        return { success: false, error: new NetworkError(`Failed to send message: ${err.message}`).message };
+  /**
+   * Retrieves a specific agent by its ID.
+   * @param agentId - The unique identifier of the agent.
+   * @returns A `PackageResult` containing the `Agent` or an error.
+   */
+  public async getAgent(agentId: string): Promise<PackageResult<Agent>> {
+    const validation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!validation.success) {
+      return { success: false, error: new ValidationError(validation.error || 'Invalid agent ID').message };
+    }
+    return this.request<Agent>(`/agents/${agentId}`, 'GET');
+  }
+
+  /**
+   * Updates an existing agent.
+   * @param agentId - The unique identifier of the agent to update.
+   * @param input - The fields to update.
+   * @returns A `PackageResult` containing the updated `Agent` or an error.
+   */
+  public async updateAgent(agentId: string, input: UpdateAgentInput): Promise<PackageResult<Agent>> {
+    const idValidation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!idValidation.success) {
+      return { success: false, error: new ValidationError(idValidation.error || 'Invalid agent ID').message };
+    }
+    if (Object.keys(input).length === 0) {
+      return { success: false, error: new ValidationError('Update input cannot be empty.').message };
+    }
+    if (input.name !== undefined) {
+      const nameValidation = validateNonEmptyString(input.name, 'Agent name');
+      if (!nameValidation.success) {
+        return { success: false, error: new ValidationError(nameValidation.error || 'Invalid agent name').message };
       }
-      return { success: false, error: new NetworkError('Failed to send message: Unknown error').message };
     }
-  }
-
-  private cleanupConnectionListeners(): void {
-    if (this.ws) {
-      this.ws.removeEventListener('open', this.handleOpen);
-      this.ws.removeEventListener('error', this.handleError);
-    }
-  }
-
-  private handleOpen(): void {
-    this.status = AgentStatus.Online;
-    this.reconnectAttempts = 0; // Reset attempts on successful connection
-    console.log(`Agent ${this.config.agentId} connected to coordinator.`);
-    this.startPing(); // Start sending pings
-    this.sendRegistrationMessage().catch(err => {
-      console.error(`Error sending registration message for agent ${this.config.agentId}: ${err.error || err}`);
-    });
-  }
-
-  private async sendRegistrationMessage(): Promise<PackageResult<boolean>> {
-    const registrationMessage: AgentMessage = {
-      type: 'agent-register',
-      payload: { agentId: this.config.agentId },
-      timestamp: Date.now(),
-      senderId: this.config.agentId,
-    };
-    return await this.sendMessage(registrationMessage);
-  }
-
-  private handleMessage(event: WebSocket.MessageEvent): void {
-    const data = event.data;
-    if (typeof data !== 'string') {
-      console.warn(`Agent ${this.config.agentId} received non-string message, ignoring.`);
-      return;
-    }
-    console.log(`Agent ${this.config.agentId} received message: ${data}`);
-    const parseResult = safeJsonParse<AgentMessage>(data);
-
-    if (parseResult.success && parseResult.data) {
-      this.processIncomingMessage(parseResult.data);
-    } else {
-      console.error(`Agent ${this.config.agentId} failed to parse incoming message: ${parseResult.error}`);
-    }
-  }
-
-  private processIncomingMessage(message: AgentMessage): void {
-    console.log(`Agent ${this.config.agentId} processing message type: ${message.type}`);
-    // Implement agent-specific message handling logic
-    switch (message.type) {
-      case 'ping-response':
-        // Acknowledged by coordinator, reset watchdog or similar if implemented
-        console.debug(`Agent ${this.config.agentId} received ping response.`);
-        break;
-      case 'command':
-        // Example: Execute a command
-        console.log(`Executing command: ${message.payload.command}`);
-        // Add specific command execution logic here
-        break;
-      case 'status-request':
-        // Example: Respond with current status
-        this.sendStatusUpdate().catch(err => console.error(`Failed to send status update: ${err.error || err}`));
-        break;
-      default:
-        console.warn(`Unknown message type received by agent: ${message.type}`);
-    }
-  }
-
-  private async sendStatusUpdate(): Promise<PackageResult<boolean>> {
-    const statusMessage: AgentMessage = {
-      type: 'agent-status',
-      payload: { status: this.status },
-      timestamp: Date.now(),
-      senderId: this.config.agentId,
-    };
-    return await this.sendMessage(statusMessage);
-  }
-
-  private handleError(event: WebSocket.ErrorEvent): void {
-    console.error(`Agent ${this.config.agentId} WebSocket error: ${event.message || event}`);
-    this.status = AgentStatus.Error;
-    this.stopPing();
-    // Attempt reconnection if not already trying
-    this.reconnect().catch(err => console.error(`Failed to initiate reconnection after error: ${err.error || err}`));
-  }
-
-  private handleClose(event: WebSocket.CloseEvent): void {
-    console.warn(`Agent ${this.config.agentId} WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
-    this.status = AgentStatus.Offline;
-    this.stopPing();
-    if (!event.wasClean) {
-      // Unclean close, attempt reconnect
-      this.reconnect().catch(err => console.error(`Failed to initiate reconnection after unclean close: ${err.error || err}`));
-    }
-  }
-
-  private async reconnect(): Promise<PackageResult<boolean>> {
-    if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
-      console.error(`Agent ${this.config.agentId}: Max reconnect attempts (${this.MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`);
-      this.status = AgentStatus.Offline; // Ensure status reflects failure
-      return { success: false, error: 'Max reconnect attempts reached.' };
+    if (input.status !== undefined) {
+      const statusValidation = validateNonEmptyString(input.status, 'Agent status');
+      if (!statusValidation.success) {
+        return { success: false, error: new ValidationError(statusValidation.error || 'Invalid agent status').message };
+      }
     }
 
-    this.reconnectAttempts++;
-    console.log(`Agent ${this.config.agentId}: Attempting reconnect ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${this.RECONNECT_DELAY_MS}ms...`);
-    await delay(this.RECONNECT_DELAY_MS);
-
-    const connectResult = await this.connect();
-    if (connectResult.success) {
-      console.log(`Agent ${this.config.agentId}: Reconnected successfully.`);
-      return { success: true, data: true };
-    } else {
-      console.error(`Agent ${this.config.agentId}: Reconnect attempt failed: ${connectResult.error}`);
-      // Recursive call, will eventually hit MAX_RECONNECT_ATTEMPTS or succeed
-      return this.reconnect();
-    }
+    return this.request<Agent>(`/agents/${agentId}`, 'PUT', input);
   }
 
-  private startPing(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
+  /**
+   * Deletes an agent by its ID.
+   * @param agentId - The unique identifier of the agent to delete.
+   * @returns A `PackageResult` indicating success or failure.
+   */
+  public async deleteAgent(agentId: string): Promise<PackageResult<true>> {
+    const validation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!validation.success) {
+      return { success: false, error: new ValidationError(validation.error || 'Invalid agent ID').message };
     }
-    this.pingInterval = setInterval(() => {
-      this.sendPing().catch(err => console.error(`Failed to send ping: ${err.error || err}`));
-    }, this.PING_INTERVAL_MS);
-    console.log(`Agent ${this.config.agentId}: Started ping interval.`);
+    const result = await this.request<Record<string, never>>(`/agents/${agentId}`, 'DELETE'); // Assuming DELETE returns empty object
+    return { success: result.success, error: result.error, data: result.success ? true : undefined };
   }
 
-  private stopPing(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-      console.log(`Agent ${this.config.agentId}: Stopped ping interval.`);
+  /**
+   * Sends a message to a specific agent.
+   * @param agentId - The unique identifier of the agent.
+   * @param input - The message details.
+   * @returns A `PackageResult` containing the sent `AgentMessage` or an error.
+   */
+  public async sendMessageToAgent(agentId: string, input: SendMessageInput): Promise<PackageResult<AgentMessage>> {
+    const idValidation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!idValidation.success) {
+      return { success: false, error: new ValidationError(idValidation.error || 'Invalid agent ID').message };
     }
+    const contentValidation = validateNonEmptyString(input.content, 'Message content');
+    if (!contentValidation.success) {
+      return { success: false, error: new ValidationError(contentValidation.error || 'Invalid message content').message };
+    }
+
+    return this.request<AgentMessage>(`/agents/${agentId}/messages`, 'POST', input);
   }
 
-  private async sendPing(): Promise<PackageResult<boolean>> {
-    const pingMessage: AgentMessage = {
-      type: 'ping',
-      payload: {},
-      timestamp: Date.now(),
-      senderId: this.config.agentId,
-    };
-    return await this.sendMessage(pingMessage);
+  /**
+   * Retrieves a list of messages for a specific agent.
+   * @param agentId - The unique identifier of the agent.
+   * @param options - Optional query parameters for pagination and filtering.
+   * @returns A `PackageResult` containing an `AgentMessageListResponse` or an error.
+   */
+  public async listAgentMessages(agentId: string, options?: ListAgentMessagesOptions): Promise<PackageResult<AgentMessageListResponse>> {
+    const idValidation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!idValidation.success) {
+      return { success: false, error: new ValidationError(idValidation.error || 'Invalid agent ID').message };
+    }
+
+    const query = new URLSearchParams();
+    if (options?.offset !== undefined) {
+      const validation = validateNonNegativeInteger(options.offset, 'Offset');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid offset').message };
+      }
+      query.append('offset', options.offset.toString());
+    }
+    if (options?.limit !== undefined) {
+      const validation = validateNonNegativeInteger(options.limit, 'Limit');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid limit').message };
+      }
+      query.append('limit', options.limit.toString());
+    }
+    if (options?.keyword !== undefined) {
+      const validation = validateNonEmptyString(options.keyword, 'Keyword');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid keyword').message };
+      }
+      query.append('keyword', options.keyword);
+    }
+
+    const path = `/agents/${agentId}/messages${query.toString() ? `?${query.toString()}` : ''}`;
+    return this.request<AgentMessageListResponse>(path, 'GET');
+  }
+
+  /**
+   * Retrieves a specific message for an agent by its ID.
+   * @param agentId - The unique identifier of the agent.
+   * @param messageId - The unique identifier of the message.
+   * @returns A `PackageResult` containing the `AgentMessage` or an error.
+   */
+  public async getAgentMessage(agentId: string, messageId: string): Promise<PackageResult<AgentMessage>> {
+    const agentIdValidation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!agentIdValidation.success) {
+      return { success: false, error: new ValidationError(agentIdValidation.error || 'Invalid agent ID').message };
+    }
+    const messageIdValidation = validateNonEmptyString(messageId, 'Message ID');
+    if (!messageIdValidation.success) {
+      return { success: false, error: new ValidationError(messageIdValidation.error || 'Invalid message ID').message };
+    }
+    return this.request<AgentMessage>(`/agents/${agentId}/messages/${messageId}`, 'GET');
+  }
+
+  /**
+   * Retrieves a list of events for a specific agent.
+   * @param agentId - The unique identifier of the agent.
+   * @param options - Optional query parameters for pagination and filtering.
+   * @returns A `PackageResult` containing an `AgentEventListResponse` or an error.
+   */
+  public async listAgentEvents(agentId: string, options?: ListAgentEventsOptions): Promise<PackageResult<AgentEventListResponse>> {
+    const idValidation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!idValidation.success) {
+      return { success: false, error: new ValidationError(idValidation.error || 'Invalid agent ID').message };
+    }
+
+    const query = new URLSearchParams();
+    if (options?.offset !== undefined) {
+      const validation = validateNonNegativeInteger(options.offset, 'Offset');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid offset').message };
+      }
+      query.append('offset', options.offset.toString());
+    }
+    if (options?.limit !== undefined) {
+      const validation = validateNonNegativeInteger(options.limit, 'Limit');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid limit').message };
+      }
+      query.append('limit', options.limit.toString());
+    }
+    if (options?.type !== undefined) {
+      const validation = validateNonEmptyString(options.type, 'Type');
+      if (!validation.success) {
+        return { success: false, error: new ValidationError(validation.error || 'Invalid type').message };
+      }
+      query.append('type', options.type);
+    }
+
+    const path = `/agents/${agentId}/events${query.toString() ? `?${query.toString()}` : ''}`;
+    return this.request<AgentEventListResponse>(path, 'GET');
+  }
+
+  /**
+   * Retrieves a specific event for an agent by its ID.
+   * @param agentId - The unique identifier of the agent.
+   * @param eventId - The unique identifier of the event.
+   * @returns A `PackageResult` containing the `AgentEvent` or an error.
+   */
+  public async getAgentEvent(agentId: string, eventId: string): Promise<PackageResult<AgentEvent>> {
+    const agentIdValidation = validateNonEmptyString(agentId, 'Agent ID');
+    if (!agentIdValidation.success) {
+      return { success: false, error: new ValidationError(agentIdValidation.error || 'Invalid agent ID').message };
+    }
+    const eventIdValidation = validateNonEmptyString(eventId, 'Event ID');
+    if (!eventIdValidation.success) {
+      return { success: false, error: new ValidationError(eventIdValidation.error || 'Invalid event ID').message };
+    }
+    return this.request<AgentEvent>(`/agents/${agentId}/events/${eventId}`, 'GET');
   }
 }

@@ -6,68 +6,125 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import { type PackageResult } from './types';
-
-// Define the shape of your application configuration
-export interface AppConfig {
-  agentName: string;
-  logLevel: 'debug' | 'info' | 'warn' | 'error';
-  agentId: string;
-  [key: string]: unknown; // Allow for flexible configuration extensions
-}
-
-const DEFAULT_CONFIG_PATH = 'config.json';
+import { ClientConfig, PackageResult } from './types';
+import { ValidationError, AgentCoordinatorError } from './errors';
 
 /**
- * Loads the application configuration from a JSON file.
- * @param configPath The path to the configuration file. Defaults to 'config.json'.
- * @returns A PackageResult containing the loaded configuration or an error.
+ * Validates a given client configuration object.
+ * Checks for the presence and valid format of required fields like `baseUrl` and `apiKey`.
+ * @param config - The client configuration object to validate.
+ * @returns A `PackageResult` indicating success or failure with an error message.
  */
-export async function loadConfig(configPath?: string): Promise<PackageResult<AppConfig>> {
-  const filePath = configPath ? path.resolve(configPath) : path.resolve(process.cwd(), DEFAULT_CONFIG_PATH);
-
+export function validateConfig(config: ClientConfig): PackageResult<true> {
+  if (!config) {
+    return { success: false, error: new ValidationError('Client configuration object is required.').message };
+  }
+  if (typeof config.baseUrl !== 'string' || config.baseUrl.trim() === '') {
+    return { success: false, error: new ValidationError('`baseUrl` is required and must be a non-empty string.').message };
+  }
   try {
-    const fileContent = await fs.readFile(filePath, { encoding: 'utf-8' });
-    const config = JSON.parse(fileContent) as AppConfig;
-
-    // Basic validation for required fields
-    if (!config.agentName) {
-      return { success: false, error: 'Configuration missing "agentName" field.' };
-    }
-    if (!config.agentId) {
-      return { success: false, error: 'Configuration missing "agentId" field.' };
-    }
-    if (!config.logLevel || !['debug', 'info', 'warn', 'error'].includes(config.logLevel)) {
-      config.logLevel = 'info'; // Default if missing or invalid
-    }
-
-    return { success: true, data: config };
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      return { success: false, error: `Failed to load or parse configuration from ${filePath}: ${error.message}` };
-    }
-    return { success: false, error: `An unknown error occurred while loading configuration from ${filePath}.` };
+    // eslint-disable-next-line no-new
+    new URL(config.baseUrl); // Validate URL format
+  } catch (e: unknown) {
+    return { success: false, error: new ValidationError(`\`baseUrl\` is not a valid URL: ${(e as Error).message}`).message };
   }
+  if (typeof config.apiKey !== 'string' || config.apiKey.trim() === '') {
+    return { success: false, error: new ValidationError('`apiKey` is required and must be a non-empty string.').message };
+  }
+  if (config.timeoutMs !== undefined && (typeof config.timeoutMs !== 'number' || config.timeoutMs < 0)) {
+    return { success: false, error: new ValidationError('`timeoutMs` must be a non-negative number if provided.').message };
+  }
+
+  return { success: true, data: true };
 }
 
 /**
- * Validates a given AppConfig object.
- * This can be used for runtime validation or before saving.
- * @param config The AppConfig object to validate.
- * @returns A PackageResult indicating validation success or failure.
+ * Applies default values to a client configuration.
+ * @param config - The client configuration object.
+ * @returns A `ClientConfig` object with default values applied where missing.
  */
-export function validateConfig(config: AppConfig): PackageResult<boolean> {
-  if (!config.agentName || typeof config.agentName !== 'string') {
-    return { success: false, error: 'Configuration requires a valid "agentName" string.' };
+export function applyConfigDefaults(config: ClientConfig): ClientConfig {
+  return {
+    ...config,
+    timeoutMs: config.timeoutMs !== undefined ? config.timeoutMs : 30000, // Default to 30 seconds
+  };
+}
+
+/**
+ * Initializes the client configuration.
+ * This function validates the provided configuration and applies default values.
+ * @param config - The raw client configuration.
+ * @returns A `PackageResult` containing the validated and defaulted configuration or an error.
+ */
+export function initializeConfig(config: ClientConfig): PackageResult<ClientConfig> {
+  const validationResult = validateConfig(config);
+  if (!validationResult.success) {
+    return { success: false, error: validationResult.error };
   }
-  if (!config.agentId || typeof config.agentId !== 'string') {
-    return { success: false, error: 'Configuration requires a valid "agentId" string.' };
+  const fullConfig = applyConfigDefaults(config);
+  return { success: true, data: fullConfig };
+}
+
+/**
+ * Retrieves an environment variable.
+ * @param key - The name of the environment variable.
+ * @returns The value of the environment variable, or `undefined` if not set.
+ */
+export function getEnvVariable(key: string): string | undefined {
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key];
   }
-  if (!config.logLevel || !['debug', 'info', 'warn', 'error'].includes(config.logLevel)) {
-    return { success: false, error: 'Configuration "logLevel" must be one of "debug", "info", "warn", "error".' };
+  return undefined;
+}
+
+/**
+ * Loads configuration from environment variables.
+ * @returns A `ClientConfig` object populated from environment variables, or an empty object if not found.
+ */
+export function loadConfigFromEnv(): Partial<ClientConfig> {
+  const config: Partial<ClientConfig> = {};
+  const baseUrl = getEnvVariable('AGENT_COORDINATOR_BASE_URL');
+  const apiKey = getEnvVariable('AGENT_COORDINATOR_API_KEY');
+  const timeout = getEnvVariable('AGENT_COORDINATOR_TIMEOUT_MS');
+
+  if (baseUrl) {
+    config.baseUrl = baseUrl;
   }
-  // Add more specific validation rules as needed
-  return { success: true, data: true };
+  if (apiKey) {
+    config.apiKey = apiKey;
+  }
+  if (timeout) {
+    const parsedTimeout = parseInt(timeout, 10);
+    if (!isNaN(parsedTimeout) && parsedTimeout >= 0) {
+      config.timeoutMs = parsedTimeout;
+    } else {
+      console.warn(`Invalid AGENT_COORDINATOR_TIMEOUT_MS environment variable: ${timeout}. Must be a non-negative number.`);
+    }
+  }
+
+  return config;
+}
+
+/**
+ * Creates a configuration object, prioritizing explicit config, then environment variables, then defaults.
+ * @param userConfig - Optional user-provided configuration.
+ * @returns A `PackageResult` with the final validated configuration or an error.
+ */
+export function createConfig(userConfig?: Partial<ClientConfig>): PackageResult<ClientConfig> {
+  const envConfig = loadConfigFromEnv();
+
+  const finalConfig: ClientConfig = {
+    baseUrl: userConfig?.baseUrl ?? envConfig.baseUrl ?? '',
+    apiKey: userConfig?.apiKey ?? envConfig.apiKey ?? '',
+    timeoutMs: userConfig?.timeoutMs ?? envConfig.timeoutMs,
+  };
+
+  if (finalConfig.baseUrl === '' || finalConfig.apiKey === '') {
+    return {
+      success: false,
+      error: new AgentCoordinatorError('Missing required configuration: `baseUrl` and `apiKey` must be provided either directly or via environment variables (AGENT_COORDINATOR_BASE_URL, AGENT_COORDINATOR_API_KEY).').message,
+    };
+  }
+
+  return initializeConfig(finalConfig);
 }
