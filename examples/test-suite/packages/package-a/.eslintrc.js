@@ -8,47 +8,73 @@ Redistribution or use in other products or commercial offerings is not permitted
 module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
-  plugins: [
-    '@typescript-eslint',
-    'prettier'
-  ],
-  extends: [
-    'eslint:recommended',
-    'plugin:@typescript-eslint/eslint-recommended',
-    'plugin:@typescript-eslint/recommended',
-    'plugin:prettier/recommended'
-  ],
   parserOptions: {
     ecmaVersion: 2020,
     sourceType: 'module',
-    project: './tsconfig.json',
+    project: './tsconfig.json', // Required for rules that need type information
   },
-  env: {
-    node: true,
-    jest: true
-  },
+  plugins: [
+    '@typescript-eslint',
+    'prettier',
+  ],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:@typescript-eslint/recommended-requiring-type-checking', // For strict type-aware rules
+    'plugin:prettier/recommended', // Integrates prettier with eslint
+  ],
   rules: {
-    // Custom rules and overrides
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-    '@typescript-eslint/explicit-module-boundary-types': 'off', // Can be too restrictive for utility functions
-    '@typescript-eslint/no-explicit-any': 'error', // Enforce strict typing
-    '@typescript-eslint/no-floating-promises': 'error', // Crucial for async/await
-    '@typescript-eslint/no-inferrable-types': ['warn', {
-      ignoreParameters: true,
-      ignoreProperties: true
-    }],
+    // Bernier LLC specific rules
     'prettier/prettier': 'error',
-    'no-unused-vars': 'off', // Disable base ESLint rule as TS version is used
-    'no-console': ['warn', { allow: ['warn', 'error'] }], // Allow console.warn and console.error
-    'prefer-const': 'error',
-    '@typescript-eslint/await-thenable': 'error', // Ensure await is used on thenable values
-    '@typescript-eslint/no-misused-promises': ['error', {
-      checksVoidReturn: false // Allow `void` functions to not be awaited if explicitly intended
-    }],
-    '@typescript-eslint/restrict-template-expressions': ['warn', {
-      allowAny: true // Allow string interpolation with any type for simplicity in some cases
-    }]
+    '@typescript-eslint/no-explicit-any': 'error', // Explicitly forbid 'any'
+    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    'no-unused-vars': 'off', // Disable base ESLint rule
+    '@typescript-eslint/no-floating-promises': 'error', // Ensure promises are handled
+    '@typescript-eslint/semi': ['error', 'always'], // Require semicolons
+    'semi': 'off', // Disable base ESLint semi rule
+    'prefer-const': 'error', // Enforce const for variables that are not reassigned
+    'no-var': 'error', // Disallow var
+    '@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
+    '@typescript-eslint/consistent-type-definitions': ['error', 'interface'], // Enforce interfaces for object type definitions
+    '@typescript-eslint/explicit-module-boundary-types': ['error', { allowArgumentsExplicitlyTypedAsAny: false }], // Enforce explicit return and parameter types for all exported functions
+    '@typescript-eslint/no-shadow': ['error'], // Disallow variable shadowing
+    'no-shadow': 'off', // Disable base ESLint rule
+    '@typescript-eslint/naming-convention': [
+      'error',
+      {
+        selector: 'interface',
+        format: ['PascalCase'],
+      },
+      {
+        selector: 'typeAlias',
+        format: ['PascalCase'],
+      },
+      {
+        selector: 'variableLike',
+        format: ['camelCase', 'UPPER_CASE', 'PascalCase'],
+        leadingUnderscore: 'allow',
+      },
+      {
+        selector: 'function',
+        format: ['camelCase', 'PascalCase'],
+      },
+      {
+        selector: 'enumMember',
+        format: ['PascalCase', 'UPPER_CASE'],
+      },
+      {
+        selector: ['classProperty', 'objectLiteralProperty', 'typeProperty', 'classMethod', 'parameterProperty'],
+        format: ['camelCase', 'PascalCase', 'UPPER_CASE', 'snake_case'],
+      },
+    ],
   },
-  ignorePatterns: ['dist/', 'node_modules/', 'coverage/']
+  ignorePatterns: [
+    "dist/",
+    "node_modules/",
+    "coverage/",
+    "*.js",
+    "*.d.ts",
+    "jest.config.js",
+    ".eslintrc.js"
+  ],
 };
-```
