@@ -6,12 +6,13 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-export * from './interfaces';
-export * from './errors';
-export * from './types';
-export * from './utils';
-export { AgentClient } from './client';
-export { AgentCoordinator } from './coordinator';
-export { AgentManager } from './manager';
-export { AgentServer } from './server';
+/**
+ * Standard result pattern for all package operations.
+ * @template T The type of the data returned on success. Defaults to `unknown`.
+ */
+export interface PackageResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 ```
