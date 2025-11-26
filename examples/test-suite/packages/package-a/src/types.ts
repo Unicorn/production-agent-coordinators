@@ -7,54 +7,46 @@ Redistribution or use in other products or commercial offerings is not permitted
 */
 
 /**
- * Standard result pattern for all package operations.
- * @template T The type of data returned on success. Defaults to `unknown`.
+ * Standard result pattern for package operations.
+ * @template T The type of the data returned on success.
  */
 export interface PackageResult<T = unknown> {
-  /** Indicates if the operation was successful. */
   success: boolean;
-  /** The data returned by the operation on success. Optional. */
   data?: T;
-  /** An error message if the operation failed. Optional. */
   error?: string;
 }
 
 /**
- * Configuration interface for an individual agent.
+ * Represents an entity with a unique identifier.
  */
-export interface AgentConfig {
-  /** Unique identifier for the agent. */
+export interface Identifiable {
   id: string;
-  /** Display name of the agent. */
-  name: string;
-  /** Maximum number of tasks the agent can handle concurrently. */
-  maxTasks: number;
-  /** Indicates if the agent is currently available for new tasks. */
-  available: boolean;
 }
 
 /**
- * Interface for a task to be processed by an agent.
+ * A union type representing common primitive JavaScript types.
  */
-export interface Task {
-  /** Unique identifier for the task. */
-  id: string;
-  /** Name or description of the task. */
-  name: string;
-  /** Current status of the task. */
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  /** The ID of the agent currently assigned to this task, if any. */
-  assignedAgentId?: string;
-}
+export type Primitive = string | number | boolean | symbol | null | undefined;
 
 /**
- * Configuration interface for the Agent Coordinator.
+ * Extracts the keys of an object type `T` as a union of string literals.
+ * @template T The object type to extract keys from.
  */
-export interface CoordinatorConfig {
-  /** Unique identifier for the coordinator. */
-  id: string;
-  /** Display name of the coordinator. */
-  name: string;
-  /** Maximum number of agents this coordinator can manage (for future use/scaling). */
-  maxAgents: number;
-}
+export type KeyOf<T> = keyof T;
+
+/**
+ * Makes all properties of an object type `T` optional and deeply partial.
+ * This means properties of nested objects will also be optional.
+ * @template T The object type to make deeply partial.
+ */
+export type DeepPartial<T> = T extends object ? {
+  [P in keyof T]?: DeepPartial<T[P]>;
+} : T;
+
+/**
+ * A branded type for enhancing type safety by differentiating between
+ * values of the same base type.
+ * @template T The base type.
+ * @template Brand A literal string or symbol used to brand the type.
+ */
+export type Branded<T, Brand extends string | symbol> = T & { readonly __brand__: Brand };

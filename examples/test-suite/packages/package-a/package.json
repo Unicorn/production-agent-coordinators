@@ -1,36 +1,39 @@
 {
   "name": "package-a",
-  "version": "1.0.0",
-  "description": "An example package for Bernier LLC with strict TypeScript and testing.",
+  "version": "0.1.0",
+  "description": "This is the foundation package with no external dependencies. It provides: Core utility functions, Basic TypeScript types and interfaces, Helper functions used by other packages, Constants and configuration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "type": "module",
   "author": "Bernier LLC",
   "license": "UNLICENSED",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "publishConfig": {
-"scripts": {
-        "build": "tsc",
-        "lint": "eslint \"src/**/*.ts\" --fix",
-        "test": "jest --coverage",
-        "prepublishOnly": "npm run build"
-    },
-    "dependencies": {},
-    "devDependencies": {
-        "@types/node": "^20.12.7",
-        "typescript": "^5.4.5",
-        "eslint": "^8.57.0",
-        "@typescript-eslint/eslint-plugin": "^7.6.0",
-        "@typescript-eslint/parser": "^7.6.0",
-        "jest": "^29.7.0",
-        "@types/jest": "^29.5.12",
-        "ts-jest": "^29.1.2"
-    },
-
-    "jest": "^29.7.0",
-    "prettier": "^3.2.5",
-    "ts-jest": "^29.1.2",
-    "typescript": "^5.4.5"
-  }
+    "access": "restricted"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --coverage",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "prepublishOnly": "npm run build && npm run test && npm run lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0"
+  },
+  "keywords": [
+    "bernier",
+    "foundation",
+    "utilities",
+    "types",
+    "helpers"
+  ]
 }
