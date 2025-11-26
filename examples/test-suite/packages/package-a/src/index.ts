@@ -6,7 +6,8 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-export { AgentCoordinatorClient } from './client';
+// Re-export core types for convenience
 export * from './types';
-export * from './errors';
-export { createConfig, loadConfigFromEnv } from './config';
+
+// Re-export primary functions
+export { readPlanFile } from './plan-reader';
