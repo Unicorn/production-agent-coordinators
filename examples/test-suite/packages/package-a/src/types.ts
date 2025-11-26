@@ -6,38 +6,25 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
+/**
+ * Standardized result interface for all package operations.
+ * @template T The type of data returned on success. Defaults to `unknown`.
+ */
 export interface PackageResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
 }
 
-export type AgentId = string;
-
-export enum AgentStatus {
-  Online = "ONLINE",
-  Offline = "OFFLINE",
-  Busy = "BUSY",
-  Error = "ERROR",
-}
-
-export interface AgentRegistrationOptions {
+/**
+ * Represents a generic agent managed by the coordinator.
+ */
+export interface Agent {
+  id: string;
   name: string;
-  description?: string;
+  status: 'online' | 'offline' | 'busy' | 'error';
+  lastSeen: Date;
   metadata?: Record<string, unknown>;
 }
 
-export interface AgentInfo {
-  id: AgentId;
-  name: string;
-  status: AgentStatus;
-  lastHeartbeat: Date;
-  registeredAt: Date;
-  description?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface AgentCoordinatorOptions {
-  heartbeatIntervalMs?: number;
-  offlineTimeoutMs?: number;
-}
+// Add any other common types required by the package here
