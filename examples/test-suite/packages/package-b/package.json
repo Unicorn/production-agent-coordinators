@@ -1,12 +1,12 @@
 {
-  "name": "package-a",
-  "version": "0.1.0",
-  "description": "Foundation package providing core utilities, types, interfaces, helper functions, and constants for the test suite.",
+  "name": "@examples/package-b",
+  "version": "1.0.0",
+  "description": "A small TypeScript utility package with common helper functions for testing the Gemini workflow.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
   "author": "Bernier LLC",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "files": [
     "dist",
     "README.md"
@@ -32,10 +32,7 @@
   },
   "keywords": [
     "bernier",
-    "foundation",
-    "utilities",
-    "types",
-    "helpers",
-    "constants"
+    "utility",
+    "typescript"
   ]
 }
