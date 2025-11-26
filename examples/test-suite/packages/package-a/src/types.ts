@@ -12,4 +12,27 @@ export interface PackageResult<T = unknown> {
   error?: string;
 }
 
-export type PlanFileContent = string;
+export interface Agent {
+  id: string;
+  status: 'idle' | 'busy' | 'offline';
+  capabilities: string[];
+  lastHeartbeat: number; // Unix timestamp
+}
+
+export interface Task {
+  id: string;
+  agentId: string | null; // Agent assigned to this task
+  status: 'pending' | 'assigned' | 'in-progress' | 'completed' | 'failed';
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+  result?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface CoordinatorEvent<T = unknown> {
+  type: string;
+  timestamp: number;
+  payload: T;
+}
