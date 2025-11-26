@@ -7,8 +7,9 @@ Redistribution or use in other products or commercial offerings is not permitted
 */
 
 /**
- * Standard result pattern for package operations.
- * @template T The type of the data returned on success.
+ * Standardized result type for all package operations.
+ * Provides a consistent way to return data or errors.
+ * @template T The type of the data returned on success. Defaults to `unknown`.
  */
 export interface PackageResult<T = unknown> {
   success: boolean;
@@ -17,36 +18,35 @@ export interface PackageResult<T = unknown> {
 }
 
 /**
- * Represents an entity with a unique identifier.
+ * Interface for entities that have a unique identifier.
  */
 export interface Identifiable {
   id: string;
 }
 
 /**
- * A union type representing common primitive JavaScript types.
+ * Union type for common primitive JavaScript values.
  */
 export type Primitive = string | number | boolean | symbol | null | undefined;
 
 /**
- * Extracts the keys of an object type `T` as a union of string literals.
- * @template T The object type to extract keys from.
+ * Extracts keys of an object type as a union of string literals.
+ * @template T The object type.
  */
 export type KeyOf<T> = keyof T;
 
 /**
- * Makes all properties of an object type `T` optional and deeply partial.
- * This means properties of nested objects will also be optional.
+ * Utility type to make all properties of an object (and nested objects) optional.
  * @template T The object type to make deeply partial.
  */
-export type DeepPartial<T> = T extends object ? {
-  [P in keyof T]?: DeepPartial<T[P]>;
-} : T;
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
 
 /**
- * A branded type for enhancing type safety by differentiating between
- * values of the same base type.
+ * Branded type for compile-time differentiation of otherwise structurally identical types.
+ * Helps prevent assigning values of one branded type to another.
  * @template T The base type.
- * @template Brand A literal string or symbol used to brand the type.
+ * @template Brand A unique string literal to identify the brand.
  */
-export type Branded<T, Brand extends string | symbol> = T & { readonly __brand__: Brand };
+export type Branded<T, Brand extends string> = T & { readonly __brand: Brand };
