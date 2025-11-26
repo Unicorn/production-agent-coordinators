@@ -80,6 +80,7 @@ export class IntegrationTestContext {
   private client: WorkflowClient | null = null;
   private workers: Worker[] = [];
   private workDirs: string[] = [];
+  private workflowTaskQueues: Map<string, string> = new Map(); // workflow name -> task queue
 
   /**
    * Setup Temporal client connection
@@ -121,6 +122,7 @@ export class IntegrationTestContext {
       }
     }
     this.workDirs = [];
+    this.workflowTaskQueues.clear();
 
     // Close connection
     if (this.connection) {
@@ -151,6 +153,7 @@ export class IntegrationTestContext {
     workflowCode: string;
     worker: Worker;
     workDir: string;
+    taskQueue: string;
   }> {
     // Compile workflow
     const compiler = new WorkflowCompiler({
@@ -235,7 +238,20 @@ export class IntegrationTestContext {
     });
 
     // Create and start worker with pre-bundled code
-    const taskQueue = workflow.settings.taskQueue || 'test-queue';
+    // IMPORTANT: Use a unique task queue per workflow registration to avoid worker isolation issues.
+    // When multiple workers share the same task queue, Temporal may route a workflow to a worker
+    // that doesn't have that workflow in its bundle, causing "no such function exported" errors.
+    // 
+    // Strategy:
+    // - If workflow explicitly specifies a special queue (e.g., 'test-queue-concurrent'), use it.
+    // - If workflow has 'test-queue' (the default) or no queue, generate a unique queue.
+    // - This ensures isolation while allowing tests that need shared queues to work correctly.
+    const explicitTaskQueue = workflow.settings.taskQueue;
+    const isSpecialQueue = explicitTaskQueue && explicitTaskQueue !== 'test-queue';
+    const taskQueue = isSpecialQueue
+      ? explicitTaskQueue
+      : `test-queue-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    
     const worker = await Worker.create({
       connection: nativeConnection,
       namespace: process.env.TEMPORAL_NAMESPACE || 'default',
@@ -252,11 +268,15 @@ export class IntegrationTestContext {
     });
 
     this.workers.push(worker);
+    
+    // Store task queue mapping for this workflow
+    this.workflowTaskQueues.set(workflow.name, taskQueue);
 
     return {
       workflowCode: result.workflowCode!,
       worker,
       workDir,
+      taskQueue,
     };
   }
 
@@ -275,9 +295,14 @@ export class IntegrationTestContext {
   ): Promise<T> {
     const client = this.getClient();
 
+    // Use provided task queue, or lookup from registered workflows, or fallback to default
+    const taskQueue = options?.taskQueue || 
+                      this.workflowTaskQueues.get(workflowName) || 
+                      'test-queue';
+
     // Build workflow start options
     const startOptions: any = {
-      taskQueue: options?.taskQueue || 'test-queue',
+      taskQueue,
       workflowId,
       args,
     };
