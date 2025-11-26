@@ -7,70 +7,56 @@ Redistribution or use in other products or commercial offerings is not permitted
 */
 
 /**
- * Standard result pattern for all package operations to indicate success or failure.
- * @template T The type of data returned on success. Defaults to `unknown`.
+ * Standard interface for operation results across the package.
+ * @template T - The type of data returned on success. Defaults to unknown.
  */
 export interface PackageResult<T = unknown> {
   /** Indicates whether the operation was successful. */
   success: boolean;
-  /** The data returned on success. Present only if `success` is `true`. */
+  /** The data returned by the operation on success, if any. */
   data?: T;
-  /** An error message explaining the failure. Present only if `success` is `false`. */
+  /** An error message explaining the failure, if any. */
   error?: string;
 }
 
-/** Defines the possible statuses for an Agent. */
-export type AgentStatus = 'online' | 'offline' | 'busy' | 'unavailable';
-
-/** Represents an individual agent managed by the system. */
+/**
+ * Represents an agent managed by the coordinator.
+ */
 export interface Agent {
+  /** Unique identifier for the agent. */
   id: string;
+  /** Name of the agent. */
   name: string;
-  status: AgentStatus;
-  lastHeartbeat: Date;
-  metadata?: Record<string, unknown>;
+  /** Current status of the agent. */
+  status: 'online' | 'offline' | 'busy';
+  /** List of capabilities the agent possesses. */
+  capabilities: string[];
 }
 
-/** Defines the possible statuses for a Coordinator. */
-export type CoordinatorStatus = 'active' | 'inactive' | 'error';
-
-/** Represents a coordinator that manages a set of agents. */
-export interface Coordinator {
+/**
+ * Represents a task to be coordinated and executed by an agent.
+ */
+export interface Task {
+  /** Unique identifier for the task. */
   id: string;
+  /** Name of the task. */
   name: string;
-  status: CoordinatorStatus;
-  agentIds: string[];
-  config: Record<string, unknown>;
-  createdAt: Date;
-  updatedAt: Date;
+  /** Detailed description of the task. */
+  description: string;
+  /** The ID of the agent currently assigned to the task, or null if unassigned. */
+  assignedAgentId: string | null;
+  /** Current status of the task. */
+  status: 'pending' | 'in-progress' | 'completed' | 'failed';
+  /** Priority level of the task. */
+  priority: 'low' | 'medium' | 'high';
 }
 
-/** Data required to create a new agent. */
-export interface NewAgentData {
-  name: string;
-  status?: AgentStatus;
-  metadata?: Record<string, unknown>;
-}
-
-/** Data to update an existing agent. All fields are optional. */
-export interface UpdateAgentData {
-  name?: string;
-  status?: AgentStatus;
-  lastHeartbeat?: Date;
-  metadata?: Record<string, unknown>;
-}
-
-/** Data required to create a new coordinator. */
-export interface NewCoordinatorData {
-  name: string;
-  agentIds?: string[];
-  config?: Record<string, unknown>;
-}
-
-/** Data to update an existing coordinator. All fields are optional. */
-export interface UpdateCoordinatorData {
-  name?: string;
-  status?: CoordinatorStatus;
-  agentIds?: string[];
-  config?: Record<string, unknown>;
+/**
+ * Configuration options for the ProductionAgentCoordinator.
+ */
+export interface CoordinatorConfig {
+  /** The file path to the plan file that guides the coordinator's operations. */
+  planFilePath: string;
+  /** The maximum number of tasks that can be processed concurrently. */
+  maxConcurrentTasks: number;
 }

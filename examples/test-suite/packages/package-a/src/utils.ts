@@ -6,31 +6,29 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
+import * as fs from 'fs/promises';
 import { PackageResult } from './types';
 
 /**
- * A simple utility function to add two numbers.
- * @param a The first number.
- * @param b The second number.
- * @returns A PackageResult containing the sum or an error.
+ * Reads a plan file from the given path.
+ *
+ * This function handles file system operations and provides a standard `PackageResult`
+ * for consistent error handling.
+ *
+ * @param filePath - The path to the plan file.
+ * @returns A `PackageResult` containing the file content as a string on success,
+ *          or an error message on failure (e.g., file not found, permission issues).
  */
-export function addNumbers(a: number, b: number): PackageResult<number> {
-  if (typeof a !== 'number' || typeof b !== 'number') {
-    return { success: false, error: 'Inputs must be numbers.' };
+export async function readPlanFile(filePath: string): Promise<PackageResult<string>> {
+  if (!filePath) {
+    return { success: false, error: 'File path cannot be empty.' };
   }
-  const sum: number = a + b;
-  return { success: true, data: sum };
-}
 
-/**
- * An asynchronous utility function that simulates a delay.
- * @param delayMs The delay in milliseconds.
- * @returns A promise that resolves to a PackageResult.
- */
-export async function simulateDelay(delayMs: number): Promise<PackageResult<string>> {
-  if (delayMs < 0) {
-    return { success: false, error: 'Delay must be a non-negative number.' };
+  try {
+    const content: string = await fs.readFile(filePath, { encoding: 'utf-8' });
+    return { success: true, data: content };
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return { success: false, error: `Failed to read plan file at '${filePath}': ${errorMessage}` };
   }
-  await new Promise<void>((resolve: (value: void | PromiseLike<void>) => void) => setTimeout(resolve, delayMs));
-  return { success: true, data: `Delayed for ${delayMs}ms` };
 }
