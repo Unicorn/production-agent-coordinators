@@ -80,6 +80,7 @@ export class IntegrationTestContext {
   private workers: Worker[] = [];
   private workDirs: string[] = [];
   private workflowTaskQueues: Map<string, string> = new Map(); // workflow name -> task queue
+  private startedWorkflows: Set<string> = new Set(); // Track workflow IDs for cleanup
 
   /**
    * Setup Temporal client connection
@@ -98,11 +99,54 @@ export class IntegrationTestContext {
 
   /**
    * Cleanup all resources
+   * Cancels all started workflows before shutting down workers
    */
   async cleanup(): Promise<void> {
+    // Cancel all started workflows first
+    if (this.client && this.startedWorkflows.size > 0) {
+      const cancelPromises = Array.from(this.startedWorkflows).map(async (workflowId) => {
+        try {
+          const handle = this.client!.getHandle(workflowId);
+          // Check if workflow is still running before attempting cancellation
+          try {
+            const description = await handle.describe();
+            // Only cancel if workflow is still running
+            if (description.status.name === 'RUNNING') {
+              await handle.cancel();
+              console.log(`✅ Cancelled workflow: ${workflowId}`);
+            }
+          } catch (error: any) {
+            // Workflow might already be completed or not found - that's okay
+            if (!error?.message?.includes('not found') && !error?.message?.includes('completed')) {
+              console.warn(`⚠️  Could not cancel workflow ${workflowId}:`, error?.message);
+            }
+          }
+        } catch (error: any) {
+          // Log but don't fail cleanup if cancellation fails
+          console.warn(`⚠️  Error cancelling workflow ${workflowId}:`, error?.message);
+        }
+      });
+
+      // Wait for all cancellations with a timeout
+      await Promise.allSettled(
+        cancelPromises.map(p => 
+          Promise.race([
+            p,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Cancellation timeout')), 5000)
+            )
+          ]).catch(() => {}) // Ignore timeout errors
+        )
+      );
+    }
+
     // Shutdown all workers
     for (const worker of this.workers) {
-      await worker.shutdown();
+      try {
+        await worker.shutdown();
+      } catch (error: any) {
+        console.warn('⚠️  Error shutting down worker:', error?.message);
+      }
     }
     this.workers = [];
 
@@ -122,6 +166,7 @@ export class IntegrationTestContext {
     }
     this.workDirs = [];
     this.workflowTaskQueues.clear();
+    this.startedWorkflows.clear();
 
     // Close connection
     if (this.connection) {
@@ -453,6 +498,7 @@ export class IntegrationTestContext {
 
   /**
    * Execute workflow and wait for result
+   * Automatically tracks workflow for cleanup
    */
   async executeWorkflow<T = any>(
     workflowName: string,
@@ -462,6 +508,7 @@ export class IntegrationTestContext {
       taskQueue?: string;
       timeout?: number; // in ms
       workflowExecutionTimeout?: string; // Temporal workflow execution timeout (e.g., '5s')
+      trackForCleanup?: boolean; // Whether to track this workflow for automatic cleanup (default: true)
     }
   ): Promise<T> {
     const client = this.getClient();
@@ -485,6 +532,11 @@ export class IntegrationTestContext {
 
     const handle = await client.start(workflowName, startOptions);
 
+    // Track workflow for cleanup (unless explicitly disabled)
+    if (options?.trackForCleanup !== false) {
+      this.startedWorkflows.add(workflowId);
+    }
+
     // Wait for result with timeout
     const timeoutMs = options?.timeout || 30000; // Default 30 seconds
     const resultPromise = handle.result();
@@ -492,7 +544,16 @@ export class IntegrationTestContext {
       setTimeout(() => reject(new Error('Workflow execution timeout')), timeoutMs)
     );
 
-    return Promise.race([resultPromise, timeoutPromise]) as Promise<T>;
+    try {
+      const result = await Promise.race([resultPromise, timeoutPromise]) as T;
+      // Remove from tracking if completed successfully
+      this.startedWorkflows.delete(workflowId);
+      return result;
+    } catch (error) {
+      // Keep in tracking if it failed (might still be running)
+      // Cleanup will handle cancellation
+      throw error;
+    }
   }
 
   /**
@@ -531,11 +592,37 @@ export class IntegrationTestContext {
 
   /**
    * Cancel workflow execution
+   * Also removes from tracking if it was being tracked
    */
   async cancelWorkflow(workflowId: string): Promise<void> {
     const client = this.getClient();
     const handle = client.getHandle(workflowId);
     await handle.cancel();
+    // Remove from tracking since we've explicitly cancelled it
+    this.startedWorkflows.delete(workflowId);
+  }
+
+  /**
+   * Manually track a workflow ID for cleanup
+   * Useful when workflows are started outside of executeWorkflow
+   */
+  trackWorkflow(workflowId: string): void {
+    this.startedWorkflows.add(workflowId);
+  }
+
+  /**
+   * Manually untrack a workflow ID
+   * Useful when a workflow is known to be completed
+   */
+  untrackWorkflow(workflowId: string): void {
+    this.startedWorkflows.delete(workflowId);
+  }
+
+  /**
+   * Get list of tracked workflow IDs
+   */
+  getTrackedWorkflows(): string[] {
+    return Array.from(this.startedWorkflows);
   }
 
   /**
