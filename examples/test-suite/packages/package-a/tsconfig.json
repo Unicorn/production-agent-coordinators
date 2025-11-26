@@ -1,15 +1,8 @@
-/*
-Copyright (c) 2025 Bernier LLC
-
-This file is licensed to the client under a limited-use license.
-The client may use and modify this code *only within the scope of the project it was delivered for*.
-Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
-*/
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "CommonJS",
-    "lib": ["ES2020"],
+    "module": "commonjs",
+    "lib": ["es2020", "dom"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -20,5 +13,6 @@ Redistribution or use in other products or commercial offerings is not permitted
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
 }
+```
