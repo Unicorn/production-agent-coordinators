@@ -7,8 +7,10 @@ Redistribution or use in other products or commercial offerings is not permitted
 */
 
 /**
- * Standard result pattern for package operations.
- * @template T The type of data returned on success. Defaults to unknown.
+ * Standard result interface for package operations.
+ * It indicates success or failure, providing data on success or an error message on failure.
+ *
+ * @template T The type of the data returned on success. Defaults to unknown.
  */
 export interface PackageResult<T = unknown> {
   success: boolean;
