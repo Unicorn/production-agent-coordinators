@@ -8,6 +8,11 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist', '.next'],
     setupFiles: ['./tests/setup.ts'],
+    // Use jsdom for UI component tests
+    environmentMatchGlobs: [
+      ['tests/ui/**', 'jsdom'],
+      ['tests/unit/**/*.test.tsx', 'jsdom'],
+    ],
   },
   resolve: {
     alias: {
