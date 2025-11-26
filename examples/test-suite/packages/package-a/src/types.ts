@@ -7,38 +7,70 @@ Redistribution or use in other products or commercial offerings is not permitted
 */
 
 /**
- * Standard result interface for package operations, ensuring consistent error handling.
- * @template T The type of data returned on success. Defaults to unknown.
+ * Standard result pattern for all package operations to indicate success or failure.
+ * @template T The type of data returned on success. Defaults to `unknown`.
  */
 export interface PackageResult<T = unknown> {
   /** Indicates whether the operation was successful. */
   success: boolean;
-  /** The data returned on successful operations. Optional. */
+  /** The data returned on success. Present only if `success` is `true`. */
   data?: T;
-  /** An error message returned on failed operations. Optional. */
+  /** An error message explaining the failure. Present only if `success` is `false`. */
   error?: string;
 }
 
-/**
- * Represents the configuration structure for an agent.
- */
-export interface AgentConfig {
-  /** Unique identifier for the agent. */
+/** Defines the possible statuses for an Agent. */
+export type AgentStatus = 'online' | 'offline' | 'busy' | 'unavailable';
+
+/** Represents an individual agent managed by the system. */
+export interface Agent {
   id: string;
-  /** Human-readable name of the agent. */
   name: string;
-  /** Flag indicating if the agent is enabled. */
-  enabled: boolean;
+  status: AgentStatus;
+  lastHeartbeat: Date;
+  metadata?: Record<string, unknown>;
 }
 
-/**
- * Represents the current status of an agent.
- */
-export interface AgentStatus {
-  /** Unique identifier for the agent. */
+/** Defines the possible statuses for a Coordinator. */
+export type CoordinatorStatus = 'active' | 'inactive' | 'error';
+
+/** Represents a coordinator that manages a set of agents. */
+export interface Coordinator {
   id: string;
-  /** Current operational status of the agent. */
-  status: 'online' | 'offline' | 'error' | 'initializing';
-  /** Timestamp of the last successful communication with the agent. */
-  lastPing: Date;
+  name: string;
+  status: CoordinatorStatus;
+  agentIds: string[];
+  config: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Data required to create a new agent. */
+export interface NewAgentData {
+  name: string;
+  status?: AgentStatus;
+  metadata?: Record<string, unknown>;
+}
+
+/** Data to update an existing agent. All fields are optional. */
+export interface UpdateAgentData {
+  name?: string;
+  status?: AgentStatus;
+  lastHeartbeat?: Date;
+  metadata?: Record<string, unknown>;
+}
+
+/** Data required to create a new coordinator. */
+export interface NewCoordinatorData {
+  name: string;
+  agentIds?: string[];
+  config?: Record<string, unknown>;
+}
+
+/** Data to update an existing coordinator. All fields are optional. */
+export interface UpdateCoordinatorData {
+  name?: string;
+  status?: CoordinatorStatus;
+  agentIds?: string[];
+  config?: Record<string, unknown>;
 }

@@ -7,33 +7,54 @@ Redistribution or use in other products or commercial offerings is not permitted
 */
 
 /**
- * Base custom error for the Bernier LLC package.
+ * Base custom error for coordinator-related operations.
  */
-export class BernierError extends Error {
-  /**
-   * Creates an instance of BernierError.
-   * @param message The error message.
-   * @param options Additional options for the error.
-   */
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'BernierError';
-    Object.setPrototypeOf(this, BernierError.prototype);
+export class CoordinatorError extends Error {
+  public readonly code: string;
+
+  constructor(message: string, code: string = 'COORDINATOR_ERROR') {
+    super(message);
+    this.name = 'CoordinatorError';
+    this.code = code;
+    // Set the prototype explicitly.
+    Object.setPrototypeOf(this, CoordinatorError.prototype);
   }
 }
 
 /**
- * Error specifically for validation failures.
+ * Custom error for agent-related operations.
  */
-export class ValidationError extends BernierError {
-  /**
-   * Creates an instance of ValidationError.
-   * @param message The error message.
-   * @param options Additional options for the error.
-   */
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
+export class AgentError extends Error {
+  public readonly code: string;
+
+  constructor(message: string, code: string = 'AGENT_ERROR') {
+    super(message);
+    this.name = 'AgentError';
+    this.code = code;
+    Object.setPrototypeOf(this, AgentError.prototype);
+  }
+}
+
+/**
+ * Custom error for validation failures (e.g., Zod schema validation).
+ * Extends CoordinatorError as validation often applies to coordinator or agent data.
+ */
+export class ValidationError extends CoordinatorError {
+  constructor(message: string) {
+    super(message, 'VALIDATION_ERROR');
     this.name = 'ValidationError';
     Object.setPrototypeOf(this, ValidationError.prototype);
+  }
+}
+
+/**
+ * Custom error for when a requested resource is not found.
+ * Extends CoordinatorError as it can apply to agents or coordinators.
+ */
+export class NotFoundError extends CoordinatorError {
+  constructor(message: string) {
+    super(message, 'NOT_FOUND');
+    this.name = 'NotFoundError';
+    Object.setPrototypeOf(this, NotFoundError.prototype);
   }
 }
