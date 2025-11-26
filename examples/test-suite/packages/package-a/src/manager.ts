@@ -202,4 +202,3 @@ export class AgentManager {
     return this.pendingConnections.get(connectionId);
   }
 }
-```

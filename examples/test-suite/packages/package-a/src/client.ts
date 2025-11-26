@@ -270,4 +270,3 @@ export class AgentClient {
     return await this.sendMessage(pingMessage);
   }
 }
-```

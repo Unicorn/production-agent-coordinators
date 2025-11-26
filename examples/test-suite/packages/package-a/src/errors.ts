@@ -89,4 +89,3 @@ export class TimeoutError extends BernierError {
     Object.setPrototypeOf(this, TimeoutError.prototype);
   }
 }
-```
