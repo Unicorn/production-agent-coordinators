@@ -31,4 +31,3 @@ export async function processString(input: string): Promise<PackageResult<string
     return { success: false, error: errorMessage };
   }
 }
-```
