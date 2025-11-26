@@ -406,5 +406,87 @@ export interface PhaseExecutionResult {
   error?: string;
 }
 
+// ========================================================================
+// Per-File Failure Tracking Types (for loop detection)
+// ========================================================================
+
+/**
+ * Tracks failure history for a single file.
+ * Used to detect when Gemini is stuck modifying the same file repeatedly.
+ */
+export interface FileFailureEntry {
+  /** Number of times this file has been modified with errors */
+  modificationCount: number;
+  /** History of error messages for this file */
+  errors: string[];
+  /** Whether meta-correction message has been sent to AI */
+  metaCorrectionSent: boolean;
+  /** Number of attempts after meta-correction was sent */
+  metaCorrectionAttempts: number;
+  /** Hash of last error for comparison (to detect repeated errors) */
+  lastErrorHash: string;
+}
+
+/**
+ * Tracks failure history across all files in a workflow.
+ * Maps file path to failure entry.
+ */
+export type FileFailureTracker = Record<string, FileFailureEntry>;
+
+/**
+ * Result of checking a file failure.
+ * Determines whether to continue, send meta-correction, or terminate.
+ */
+export type FileFailureAction = 'continue' | 'meta_correct' | 'terminate';
+
+// ========================================================================
+// Package Audit Context Types (for pre-flight audit results)
+// ========================================================================
+
+/**
+ * Context from pre-flight audit that tells the AI what already exists.
+ * Used to prevent regenerating files that are already complete.
+ */
+export interface PackageAuditContext {
+  /** Percentage of package completion (0-100) */
+  completionPercentage: number;
+  /** List of files that already exist and should NOT be regenerated */
+  existingFiles: string[];
+  /** List of files/components that are missing and need to be created */
+  missingFiles: string[];
+  /** Suggested next steps for completing the package */
+  nextSteps: string[];
+  /** Overall status of the package */
+  status: 'complete' | 'incomplete';
+}
+
+// ========================================================================
+// Gemini Turn-Based Agent Types
+// ========================================================================
+
+/**
+ * Re-export Gemini workflow types for external use
+ */
+export type {
+  GeminiTurnBasedAgentInput,
+  GeminiTurnBasedAgentResult,
+  HumanInterventionSignal
+} from '../workflows/gemini-turn-based-agent.workflow.js';
+
+/**
+ * Re-export Gemini activity types for external use
+ */
+export type {
+  AgentCommand,
+  FileOperation as GeminiFileOperation,
+  DetermineNextActionInput,
+  ApplyCodeChangesInput,
+  ApplyCodeChangesOutput,
+  RunTestsOutput,
+  RunLintCheckOutput,
+  ValidationOutput,
+  NotifyHumanInput
+} from '../activities/gemini-agent.activities.js';
+
 // Coordinator types
 export * from './coordinator.types.js'

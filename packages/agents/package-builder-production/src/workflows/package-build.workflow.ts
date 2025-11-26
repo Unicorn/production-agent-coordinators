@@ -1,11 +1,13 @@
 import { proxyActivities, executeChild } from '@temporalio/workflow';
-import type { PackageBuildInput, PackageBuildResult, PackageBuildReport } from '../types/index';
+import type { PackageBuildInput, PackageBuildResult, PackageBuildReport, PackageAuditContext } from '../types/index';
 import type * as activities from '../activities/build.activities';
 import type * as agentActivities from '../activities/agent.activities';
 import type * as reportActivities from '../activities/report.activities';
-import type * as agentRegistryActivities from '../activities/agent-registry.activities';
-import { CoordinatorWorkflow } from './coordinator.workflow.js';
-import type { Problem, CoordinatorAction } from '../types/coordinator.types';
+// NOTE: Keeping Claude turn-based workflow available for reference
+// import { TurnBasedCodingAgentWorkflow, type TurnBasedCodingAgentInput } from './turn-based-coding-agent.workflow.js';
+
+// Using Gemini turn-based workflow as the active generation method
+import { GeminiTurnBasedAgentWorkflow, type GeminiTurnBasedAgentInput } from './gemini-turn-based-agent.workflow.js';
 
 // MCP activities (registered by orchestrator worker)
 interface MCPActivities {
@@ -25,9 +27,7 @@ const { writePackageBuildReport } = proxyActivities<typeof reportActivities>({
   startToCloseTimeout: '1 minute'
 });
 
-const { loadAgentRegistry } = proxyActivities<typeof agentRegistryActivities>({
-  startToCloseTimeout: '1 minute'
-});
+// loadAgentRegistry no longer needed - coordinator workflow removed
 
 const { updateMCPPackageStatus } = proxyActivities<MCPActivities>({
   startToCloseTimeout: '1 minute'
@@ -63,6 +63,9 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     // ========================================================================
     // PRE-FLIGHT VALIDATION: Check package state before proceeding
     // ========================================================================
+
+    // Store audit context for passing to Gemini (if applicable)
+    let packageAuditContext: PackageAuditContext | undefined;
 
     console.log(`[PreFlight] Validating package state for ${input.packageName}...`);
 
@@ -146,8 +149,25 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
           // Continue with implementation based on audit findings
           console.log(`[PreFlight] ⚠️  Package incomplete (${audit.completionPercentage}%), will attempt fixes`);
           console.log(`[PreFlight] 📝 Next steps:`, audit.nextSteps);
-          // For now, continue with normal flow
-          // TODO: In future, spawn agents for specific gaps from audit.nextSteps
+
+          // Store audit context to pass to Gemini workflow
+          // Parse findings to extract existing/missing files
+          const existingFiles = audit.findings
+            .filter(f => f.startsWith('✅'))
+            .map(f => f.replace('✅ ', '').replace(' exists', '').trim());
+          const missingFiles = audit.findings
+            .filter(f => f.startsWith('❌'))
+            .map(f => f.replace('❌ ', '').replace(' missing', '').trim());
+
+          packageAuditContext = {
+            completionPercentage: audit.completionPercentage,
+            existingFiles,
+            missingFiles,
+            nextSteps: audit.nextSteps || [],
+            // We're in the 'else' branch so status is not 'complete'
+            status: 'incomplete'
+          };
+          console.log(`[PreFlight] 📦 Audit context prepared for Gemini (${existingFiles.length} existing, ${missingFiles.length} missing)`);
         }
       }
     } else {
@@ -166,204 +186,63 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     // Activity 1: Verify dependencies are published
     await verifyDependencies(input.dependencies);
 
-    // Activity 2: Scaffold package using package-development-agent
-    const agentRegistry = await loadAgentRegistry(
-      '/Users/mattbernier/projects/tools/.claude/agents'
-    );
+    // Activity 2: Scaffold package using Gemini turn-based coding agent (loop-based with dynamic commands)
+    console.log(`[Scaffold] Using Gemini turn-based generation (AI-driven command loop with git commits)`);
 
-    const scaffoldProblem: Problem = {
-      type: 'PACKAGE_SCAFFOLDING',
-      error: {
-        message: `Scaffold package ${input.packageName} from plan`,
-        stderr: '',
-        stdout: `Plan: ${input.planPath}\nPackage path: ${input.packagePath}`
+    const geminiInput: GeminiTurnBasedAgentInput = {
+      packageName: input.packageName,
+      packagePath: input.packagePath,
+      planPath: input.planPath,
+      workspaceRoot: input.workspaceRoot,
+      category: input.category,
+      gitUser: {
+        name: 'Gemini Package Builder Agent',
+        email: 'builder@bernier.llc'
       },
-      context: {
-        packageName: input.packageName,
-        packagePath: input.packagePath,
-        planPath: input.planPath,
-        phase: 'scaffold',
-        attemptNumber: 1
-      }
+      // Pass audit context if package is partially complete (saves tokens by not regenerating existing files)
+      initialContext: packageAuditContext
     };
 
-    const scaffoldAction: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
-      taskQueue: 'engine',
-      workflowId: `coordinator-scaffold-${input.packageName}`,
-      args: [{
-        problem: scaffoldProblem,
-        agentRegistry,
-        maxAttempts: 3,
-        workspaceRoot: input.workspaceRoot
-      }]
+    const scaffoldResult = await executeChild(GeminiTurnBasedAgentWorkflow, {
+      taskQueue: 'turn-based-coding',
+      workflowId: `gemini-turn-based-${input.packageName}-${Date.now()}`,
+      args: [geminiInput]
     });
 
-    // Handle coordinator decision
-    // For scaffolding, RETRY means "files created successfully, operation complete"
-    // RESOLVED also means success
-    // ESCALATE means scaffolding failed
-    if (scaffoldAction.decision === 'ESCALATE') {
-      report.error = `Scaffolding escalated: ${scaffoldAction.escalation!.reason}`;
-      throw new Error(`Scaffolding escalated: ${scaffoldAction.escalation!.reason}`);
-    } else if (scaffoldAction.decision === 'RETRY' || scaffoldAction.decision === 'RESOLVED') {
-      console.log(`[Scaffold] Package scaffolded successfully (${scaffoldAction.decision})`);
-    } else {
-      // Unexpected decision
-      report.error = `Scaffolding failed with unexpected decision: ${scaffoldAction.decision}`;
-      throw new Error(`Scaffolding failed: ${scaffoldAction.reasoning}`);
+    // Handle Gemini turn-based generation result
+    // Each code change already committed to git during generation
+    if (!scaffoldResult.success) {
+      report.error = `Gemini turn-based generation failed: ${scaffoldResult.error || 'Unknown error'}`;
+      throw new Error(`Gemini turn-based generation failed: ${scaffoldResult.error}`);
     }
 
-    // Commit scaffolded package
-    const commitResult = await commitChanges({
-      workspaceRoot: input.workspaceRoot,
-      packagePath: input.packagePath,
-      message: `chore: scaffold ${input.packageName}
+    console.log(`[Scaffold] Package generated successfully across ${scaffoldResult.totalIterations} iterations`);
+    console.log(`[Scaffold] Files modified: ${scaffoldResult.filesModified.length}`);
+    console.log(`[Scaffold] Action history: ${scaffoldResult.actionHistory.length} actions`);
 
-Generated package structure from plan file.
-
-[Automated commit by PackageBuildWorkflow]`,
-      gitUser: {
-        name: 'Package Builder',
-        email: 'builder@bernier.llc'
-      }
-    });
-
-    if (commitResult.success && commitResult.commitHash) {
-      console.log(`[Git] Scaffolding committed: ${commitResult.commitHash}`);
-    } else {
-      console.warn(`[Git] Failed to commit scaffolding: ${commitResult.stderr || 'Unknown error'}`);
-    }
-
-    // Activity 3: Run build with coordinator retry loop
-    let buildResult = await runBuild({
+    // Activity 3: Run build (turn-based generation already validated build during BUILD_VALIDATION phase)
+    const buildResult = await runBuild({
       workspaceRoot: input.workspaceRoot,
       packagePath: input.packagePath
     });
     report.buildMetrics.buildTime = buildResult.duration;
 
-    // Coordinator loop for build failures
-    let coordinatorAttempts = 0;
-    const maxCoordinatorAttempts = 3;
-
-    while (!buildResult.success && coordinatorAttempts < maxCoordinatorAttempts) {
-      // Load agent registry
-      const agentRegistry = await loadAgentRegistry(
-        '/Users/mattbernier/projects/tools/.claude/agents'
-      );
-
-      // Create problem description
-      const problem: Problem = {
-        type: 'BUILD_FAILURE',
-        error: {
-          message: buildResult.stderr || 'Build failed',
-          stderr: buildResult.stderr,
-          stdout: buildResult.stdout
-        },
-        context: {
-          packageName: input.packageName,
-          packagePath: input.packagePath,
-          planPath: input.planPath,
-          phase: 'build',
-          attemptNumber: coordinatorAttempts + 1
-        }
-      };
-
-      // Spawn coordinator child workflow
-      const action: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
-        taskQueue: 'engine',
-        workflowId: `coordinator-build-${input.packageName}-${Date.now()}`,
-        args: [{
-          problem,
-          agentRegistry,
-          maxAttempts: maxCoordinatorAttempts,
-          workspaceRoot: input.workspaceRoot
-        }]
-      });
-
-      // Handle coordinator decision
-      if (action.decision === 'RETRY') {
-        console.log(`[Build] Retrying build after coordinator fixes`);
-        // Retry build with agent modifications
-        buildResult = await runBuild({
-          workspaceRoot: input.workspaceRoot,
-          packagePath: input.packagePath
-        });
-        coordinatorAttempts++;
-      } else if (action.decision === 'ESCALATE') {
-        report.error = `Build escalated: ${action.escalation!.reason}`;
-        throw new Error(`Build escalated: ${action.escalation!.reason}`);
-      } else {
-        report.error = `Build failed after coordination: ${action.reasoning}`;
-        throw new Error(`Build failed after coordination: ${action.reasoning}`);
-      }
-    }
-
     if (!buildResult.success) {
-      report.error = `Build failed after ${coordinatorAttempts} coordinator attempts`;
-      throw new Error(`Build failed after ${coordinatorAttempts} coordinator attempts`);
+      report.error = `Build failed: ${buildResult.stderr}`;
+      throw new Error(`Build failed: ${buildResult.stderr}`);
     }
 
-    // Activity 3: Run tests with coordinator retry loop
-    let testResult = await runTests({
+    // Activity 4: Run tests (turn-based generation already validated tests during BUILD_VALIDATION phase)
+    const testResult = await runTests({
       workspaceRoot: input.workspaceRoot,
       packagePath: input.packagePath
     });
     report.buildMetrics.testTime = testResult.duration;
     report.quality.testCoverage = testResult.coverage;
 
-    coordinatorAttempts = 0;
-
-    while (!testResult.success && coordinatorAttempts < maxCoordinatorAttempts) {
-      const agentRegistry = await loadAgentRegistry(
-        '/Users/mattbernier/projects/tools/.claude/agents'
-      );
-
-      const problem: Problem = {
-        type: 'TEST_FAILURE',
-        error: {
-          message: testResult.stderr || 'Tests failed',
-          stderr: testResult.stderr,
-          stdout: testResult.stdout
-        },
-        context: {
-          packageName: input.packageName,
-          packagePath: input.packagePath,
-          planPath: input.planPath,
-          phase: 'test',
-          attemptNumber: coordinatorAttempts + 1
-        }
-      };
-
-      const action: CoordinatorAction = await executeChild(CoordinatorWorkflow, {
-        taskQueue: 'engine',
-        workflowId: `coordinator-test-${input.packageName}-${Date.now()}`,
-        args: [{
-          problem,
-          agentRegistry,
-          maxAttempts: maxCoordinatorAttempts,
-          workspaceRoot: input.workspaceRoot
-        }]
-      });
-
-      if (action.decision === 'RETRY') {
-        console.log(`[Test] Retrying tests after coordinator fixes`);
-        testResult = await runTests({
-          workspaceRoot: input.workspaceRoot,
-          packagePath: input.packagePath
-        });
-        coordinatorAttempts++;
-      } else if (action.decision === 'ESCALATE') {
-        report.error = `Tests escalated: ${action.escalation!.reason}`;
-        throw new Error(`Tests escalated: ${action.escalation!.reason}`);
-      } else {
-        report.error = `Tests failed after coordination: ${action.reasoning}`;
-        throw new Error(`Tests failed after coordination: ${action.reasoning}`);
-      }
-    }
-
     if (!testResult.success) {
-      report.error = `Tests failed after ${coordinatorAttempts} coordinator attempts`;
-      throw new Error(`Tests failed after ${coordinatorAttempts} coordinator attempts`);
+      report.error = `Tests failed: ${testResult.stderr}`;
+      throw new Error(`Tests failed: ${testResult.stderr}`);
     }
 
     // Commit successful build and tests
@@ -386,7 +265,7 @@ Coverage: ${testResult.coverage}%
       console.log(`[Git] Tests committed: ${testCommitResult.commitHash}`);
     }
 
-    // Activity 4: Run quality checks
+    // Activity 5: Run quality checks
     let qualityResult = await runQualityChecks({
       workspaceRoot: input.workspaceRoot,
       packagePath: input.packagePath
@@ -428,7 +307,7 @@ Coverage: ${testResult.coverage}%
 
     report.quality.passed = true;
 
-    // Activity 5: Publish package
+    // Activity 6: Publish package
     const publishResult = await publishPackage({
       packageName: input.packageName,
       packagePath: input.packagePath,
