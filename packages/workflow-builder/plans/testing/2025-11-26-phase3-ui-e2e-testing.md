@@ -88,42 +88,42 @@
 ### 4.2 Core E2E Scenarios
 
 - **Scenario A – Simple Workflow Creation and Execution**
-  - [ ] Open builder UI.
-  - [ ] Drag a trigger node and one activity node to the canvas.
-  - [ ] Connect nodes and save the workflow.
-  - [ ] Trigger compilation and deployment.
-  - [ ] Start a workflow run from UI.
-  - [ ] Assert:
+  - [x] Open builder UI.
+  - [x] Drag a trigger node and one activity node to the canvas.
+  - [x] Connect nodes and save the workflow.
+  - [x] Trigger compilation and deployment.
+  - [x] Start a workflow run from UI.
+  - [x] Assert:
     - Execution completes successfully.
     - Result (or status) is surfaced in UI.
 
 - **Scenario B – Activity Timeout**
 
-  - [ ] Create or load a workflow with an activity configured to exceed its timeout.
-  - [ ] Configure timeout via UI (e.g., `2s`).
-  - [ ] Compile and deploy.
-  - [ ] Start a run.
-  - [ ] Assert:
+  - [x] Create or load a workflow with an activity configured to exceed its timeout.
+  - [x] Configure timeout via UI (e.g., `2s`).
+  - [x] Compile and deploy.
+  - [x] Start a run.
+  - [x] Assert:
     - UI shows a timeout-related failure.
     - Optionally, a link or hint to check Temporal UI.
 
 - **Scenario C – Retry Policy**
 
-  - [ ] Configure a workflow with:
+  - [x] Configure a workflow with:
     - An activity that fails a couple of times before succeeding.
     - A retry policy (e.g., exponential backoff) set via UI.
-  - [ ] Compile and deploy.
-  - [ ] Start a run.
-  - [ ] Assert:
+  - [x] Compile and deploy.
+  - [x] Start a run.
+  - [x] Assert:
     - Execution eventually succeeds.
-    - UI indicates success (possibly including “retries occurred” meta info).
+    - UI indicates success (possibly including "retries occurred" meta info).
 
 ### 4.3 Tasks
 
 - [x] Add Playwright tests under `tests/e2e/workflows/`:
-  - [x] `workflow-simple.spec.ts`
-  - [x] `workflow-timeout.spec.ts`
-  - [x] `workflow-retry.spec.ts`
+  - [x] `workflow-simple.spec.ts` - Fully implemented with workflow creation from scratch
+  - [x] `workflow-timeout.spec.ts` - Fully implemented with timeout configuration
+  - [x] `workflow-retry.spec.ts` - Fully implemented with retry policy configuration
 - [x] Configure Playwright to:
   - [x] Use environment variables for base URL and Temporal address/namespace.
   - [x] Capture screenshots and trace files for failing tests.
@@ -159,10 +159,10 @@
   - ActivityConfigPanel: 10/10 tests passing
   - ServiceBuilderView and ServiceContainerNode: Tests created, need React Flow mocking refinement
 - ✅ Playwright E2E:
-  - All core scenarios (simple, timeout, retry) test files created:
-    - `workflow-simple.spec.ts`
-    - `workflow-timeout.spec.ts`
-    - `workflow-retry.spec.ts`
+  - All core scenarios (simple, timeout, retry) fully implemented:
+    - `workflow-simple.spec.ts` - Creates workflows from scratch, adds nodes, connects, saves, compiles, and executes
+    - `workflow-timeout.spec.ts` - Configures activity timeouts and verifies timeout behavior
+    - `workflow-retry.spec.ts` - Configures retry policies and verifies successful retries
 - ✅ Server-side tests:
   - Compiler router tests created
   - Execution router tests created
@@ -181,10 +181,10 @@ All objectives met:
 - ✅ ActivityConfigPanel tests: 10/10 passing
 - ✅ ServiceBuilderView tests: 4/4 passing
 - ✅ ServiceContainerNode tests: 7/7 passing
-- ✅ Playwright E2E test files created for all 3 scenarios:
-  - workflow-simple.spec.ts
-  - workflow-timeout.spec.ts
-  - workflow-retry.spec.ts
+- ✅ Playwright E2E tests fully implemented for all 3 scenarios:
+  - workflow-simple.spec.ts - Creates workflows from scratch, adds nodes, connects, saves, compiles, and executes
+  - workflow-timeout.spec.ts - Configures activity timeouts and verifies timeout behavior
+  - workflow-retry.spec.ts - Configures retry policies and verifies successful retries
 - ✅ Server-side tRPC tests:
   - compiler-router.test.ts: 4/4 passing
   - execution-router.test.ts: 2/2 passing
