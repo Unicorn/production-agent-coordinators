@@ -126,10 +126,10 @@ describe('End-to-End Compiler and Execution Integration', () => {
         },
       }));
 
-      // Register all workflows with the same worker
-      for (const workflow of workflows) {
-        await context.compileAndRegister(workflow);
-      }
+      // Register all workflows in a single worker bundle (needed for shared task queue)
+      await context.compileAndRegisterMultiple(workflows, {
+        taskQueue: 'test-queue-concurrent',
+      });
 
       // Wait for worker to be ready
       await context.waitForWorkerReady();

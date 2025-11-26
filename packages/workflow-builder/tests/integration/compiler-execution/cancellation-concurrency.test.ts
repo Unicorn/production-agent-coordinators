@@ -179,10 +179,10 @@ describe('Cancellation and Concurrency', () => {
         concurrentWorkflow4,
       ];
 
-      // Register all workflows (each creates its own worker on test-queue-concurrent)
-      for (const workflow of workflows) {
-        await context.compileAndRegister(workflow);
-      }
+      // Register all workflows in a single worker bundle (needed for shared task queue)
+      await context.compileAndRegisterMultiple(workflows, {
+        taskQueue: 'test-queue-concurrent',
+      });
 
       await context.waitForWorkerReady(10000);
 
@@ -266,12 +266,12 @@ describe('Cancellation and Concurrency', () => {
     }, 60000);
 
     it('should not have race conditions in IntegrationTestContext', async () => {
-      // Register multiple workflows
+      // Register multiple workflows in a single worker bundle
       const workflows = [concurrentWorkflow0, concurrentWorkflow1, concurrentWorkflow2];
       
-      for (const workflow of workflows) {
-        await context.compileAndRegister(workflow);
-      }
+      await context.compileAndRegisterMultiple(workflows, {
+        taskQueue: 'test-queue-concurrent',
+      });
 
       await context.waitForWorkerReady();
 

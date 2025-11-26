@@ -9,7 +9,6 @@ import { WorkflowCompiler } from '@/lib/compiler';
 import type { WorkflowDefinition } from '@/lib/compiler/types';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 
 /**
  * Check if debug mode is enabled
@@ -281,6 +280,178 @@ export class IntegrationTestContext {
   }
 
   /**
+   * Compile and register multiple workflows in a single worker bundle
+   * This is needed for concurrency tests where all workflows should share the same task queue
+   */
+  async compileAndRegisterMultiple(
+    workflows: WorkflowDefinition[],
+    options?: { 
+      activities?: Record<string, any>;
+      taskQueue?: string; // If not provided, uses first workflow's taskQueue or generates unique
+    }
+  ): Promise<{
+    workflowCodes: Map<string, string>; // workflow name -> code
+    worker: Worker;
+    workDir: string;
+    taskQueue: string;
+  }> {
+    if (workflows.length === 0) {
+      throw new Error('At least one workflow is required');
+    }
+
+    const compiler = new WorkflowCompiler({
+      includeComments: true,
+      strictMode: true,
+    });
+
+    // Compile all workflows
+    const compiledWorkflows = workflows.map(workflow => {
+      const result = compiler.compile(workflow);
+      if (!result.success) {
+        throw new Error(
+          `Compilation failed for ${workflow.name}: ${result.errors?.map(e => e.message).join(', ')}`
+        );
+      }
+      return { workflow, result };
+    });
+
+    // Create temporary directory
+    const projectRoot = path.join(__dirname, '../../..');
+    const testsOutputDir = path.join(projectRoot, '.test-workflows');
+    fs.mkdirSync(testsOutputDir, { recursive: true });
+
+    const workDir = path.join(
+      testsOutputDir,
+      `test-multi-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    );
+    fs.mkdirSync(workDir, { recursive: true });
+    this.workDirs.push(workDir);
+
+    const workflowsDir = path.join(workDir, 'workflows');
+    fs.mkdirSync(workflowsDir, { recursive: true });
+
+    // Combine all workflow functions into a single file
+    const allImports = new Set<string>();
+    const workflowFunctions: string[] = [];
+    const workflowCodes = new Map<string, string>();
+
+    for (const { workflow, result } of compiledWorkflows) {
+      const code = result.workflowCode!;
+      workflowCodes.set(workflow.name, code);
+
+      // Extract imports (lines starting with 'import')
+      const importLines = code.split('\n').filter(line => line.trim().startsWith('import'));
+      importLines.forEach(imp => allImports.add(imp));
+
+      // Extract workflow function (everything after imports and comments)
+      // Find the export async function line and everything after it
+      const functionStart = code.indexOf('export async function');
+      if (functionStart !== -1) {
+        const functionCode = code.substring(functionStart);
+        workflowFunctions.push(functionCode);
+      }
+    }
+
+    // Combine all activities into a single file
+    const allActivityCodes: string[] = [];
+    const activityImports = new Set<string>();
+
+    for (const { result } of compiledWorkflows) {
+      const activitiesCode = result.activitiesCode;
+      if (!activitiesCode) continue;
+      
+      // Extract imports from activities
+      const importLines = activitiesCode.split('\n').filter(line => line.trim().startsWith('import'));
+      importLines.forEach(imp => activityImports.add(imp));
+
+      // Extract activity functions (everything after imports)
+      const functionStart = activitiesCode.indexOf('export async function');
+      if (functionStart !== -1) {
+        const functionCode = activitiesCode.substring(functionStart);
+        allActivityCodes.push(functionCode);
+      }
+    }
+
+    // Write combined workflow file
+    const workflowFile = path.join(workflowsDir, 'index.ts');
+    const combinedWorkflowCode = [
+      Array.from(allImports).join('\n'),
+      '',
+      ...workflowFunctions,
+    ].join('\n\n');
+    fs.writeFileSync(workflowFile, combinedWorkflowCode);
+
+    // Write combined activities file
+    const activitiesFile = path.join(workflowsDir, 'activities.ts');
+    const combinedActivitiesCode = [
+      Array.from(activityImports).join('\n'),
+      '',
+      ...allActivityCodes,
+    ].join('\n\n');
+    fs.writeFileSync(activitiesFile, combinedActivitiesCode);
+
+    // Use package.json and tsconfig from first workflow (they should be similar)
+    const packageJsonFile = path.join(workDir, 'package.json');
+    const tsConfigFile = path.join(workDir, 'tsconfig.json');
+    const firstResult = compiledWorkflows[0]?.result;
+    if (!firstResult?.packageJson || !firstResult?.tsConfig) {
+      throw new Error('First workflow compilation missing package.json or tsconfig.json');
+    }
+    fs.writeFileSync(packageJsonFile, firstResult.packageJson);
+    fs.writeFileSync(tsConfigFile, firstResult.tsConfig);
+
+    // Determine task queue
+    const taskQueue = options?.taskQueue || 
+                      workflows[0]?.settings?.taskQueue || 
+                      `test-queue-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+    // Create native connection
+    const nativeConnection = await NativeConnection.connect({
+      address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+    });
+
+    // Merge activities
+    const activities = {
+      ...testActivities,
+      ...(options?.activities || {}),
+    };
+
+    // Bundle workflow code
+    const workflowBundle = await bundleWorkflowCode({
+      workflowsPath: workflowsDir,
+    });
+
+    // Create and start worker
+    const worker = await Worker.create({
+      connection: nativeConnection,
+      namespace: process.env.TEMPORAL_NAMESPACE || 'default',
+      taskQueue,
+      workflowBundle,
+      activities,
+      maxConcurrentActivityTaskExecutions: 10,
+      maxConcurrentWorkflowTaskExecutions: 10,
+    });
+
+    worker.run().catch(error => {
+      console.error('Worker error:', error);
+    });
+
+    this.workers.push(worker);
+
+    // Store task queue mapping for all workflows
+    workflows.forEach(workflow => {
+      this.workflowTaskQueues.set(workflow.name, taskQueue);
+    });
+
+    return {
+      workflowCodes,
+      worker,
+      workDir,
+      taskQueue,
+    };
+  }
+
+  /**
    * Execute workflow and wait for result
    */
   async executeWorkflow<T = any>(
@@ -433,7 +604,9 @@ function extractExportedFunctions(code: string): string[] {
   const regex = /export\s+async\s+function\s+(\w+)\s*\(/g;
   let match;
   while ((match = regex.exec(code)) !== null) {
-    functions.push(match[1]);
+    if (match[1]) {
+      functions.push(match[1]);
+    }
   }
   return functions;
 }
