@@ -6,46 +6,96 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-import { addNumbers, simulateDelay } from './utils';
-import { PackageResult } from './types';
-import { BernierError, ValidationError } from './errors';
+import { AgentConfig, AgentStatus, PackageResult } from './types';
 
-export {
-  PackageResult,
-  BernierError,
-  ValidationError,
-  addNumbers,
-  simulateDelay
+/**
+ * Validates an AgentConfig object.
+ * @param config The agent configuration to validate.
+ * @returns A PackageResult indicating success or failure with an error message.
+ */
+const validateConfig = (config: AgentConfig): PackageResult<void> => {
+  if (!config.id || config.id.trim() === '') {
+    return { success: false, error: 'Agent ID cannot be empty.' };
+  }
+  if (!config.name || config.name.trim() === '') {
+    return { success: false, error: 'Agent name cannot be empty.' };
+  }
+  return { success: true };
 };
 
 /**
- * Initializes the Bernier LLC production agent coordinator.
- * @param config Optional configuration object.
- * @returns A promise that resolves to a PackageResult indicating success or failure.
+ * Initializes a new agent with the given configuration.
+ * Simulates an asynchronous operation.
+ * @param config The configuration for the agent to initialize.
+ * @returns A Promise resolving to a PackageResult containing the initialized AgentStatus or an error.
  */
-export async function initializeAgentCoordinator(
-  config?: Record<string, unknown>
-): Promise<PackageResult<string>> {
-  console.log('Initializing Bernier LLC agent coordinator with config:', config);
+export async function initializeAgent(config: AgentConfig): Promise<PackageResult<AgentStatus>> {
+  const validationResult: PackageResult<void> = validateConfig(config);
+  if (!validationResult.success) {
+    return { success: false, error: validationResult.error };
+  }
 
   try {
-    const delayResult: PackageResult<string> = await simulateDelay(100);
-    if (!delayResult.success) {
-      throw new BernierError(`Failed to simulate delay during initialization: ${delayResult.error}`);
-    }
+    // Simulate async initialization
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 100);
+    });
 
-    const sumResult: PackageResult<number> = addNumbers(5, 7);
-    if (!sumResult.success) {
-      throw new ValidationError(`Failed to add numbers during initialization: ${sumResult.error}`);
-    }
-    console.log('Sum:', sumResult.data);
-
-    return { success: true, data: 'Bernier LLC agent coordinator initialized successfully.' };
+    const status: AgentStatus = {
+      id: config.id,
+      status: 'online',
+      lastPing: new Date(),
+    };
+    return { success: true, data: status };
   } catch (error: unknown) {
-    let errorMessage: string = 'An unknown error occurred during initialization.';
-    if (error instanceof BernierError || error instanceof Error) {
-      errorMessage = error.message;
-    }
-    return { success: false, error: `Initialization failed: ${errorMessage}` };
+    const errorMessage: string = error instanceof Error ? error.message : String(error);
+    return { success: false, error: `Failed to initialize agent: ${errorMessage}` };
   }
+}
+
+/**
+ * Retrieves the current status of a specific agent.
+ * Simulates an asynchronous operation.
+ * @param agentId The unique identifier of the agent.
+ * @returns A Promise resolving to a PackageResult containing the AgentStatus or an error.
+ */
+export async function getAgentStatus(agentId: string): Promise<PackageResult<AgentStatus>> {
+  if (!agentId || agentId.trim() === '') {
+    return { success: false, error: 'Agent ID cannot be empty.' };
+  }
+
+  try {
+    // Simulate async fetch
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 50);
+    });
+    const mockStatus: AgentStatus = {
+      id: agentId,
+      status: 'online',
+      lastPing: new Date(),
+    };
+    return { success: true, data: mockStatus };
+  } catch (error: unknown) {
+    const errorMessage: string = error instanceof Error ? error.message : String(error);
+    return { success: false, error: `Failed to get status for agent ${agentId}: ${errorMessage}` };
+  }
+}
+
+/**
+ * Creates a new agent configuration object. This is a synchronous operation.
+ * @param id The unique ID for the agent.
+ * @param name The name of the agent.
+ * @param enabled Whether the agent should be enabled.
+ * @returns A PackageResult containing the created AgentConfig or an error.
+ */
+export function createAgentConfig(id: string, name: string, enabled: boolean): PackageResult<AgentConfig> {
+  if (!id || id.trim() === '') {
+    return { success: false, error: 'ID is required to create agent config.' };
+  }
+  if (!name || name.trim() === '') {
+    return { success: false, error: 'Name is required to create agent config.' };
+  }
+
+  const config: AgentConfig = { id, name, enabled };
+  return { success: true, data: config };
 }
