@@ -20,7 +20,8 @@ export const ActivityProxyPattern: Pattern = {
 
   generate: (node: WorkflowNode, context: GeneratorContext): CodeBlock => {
     const activityName = node.data.activityName || node.data.componentName || toCamelCase(node.id);
-    const timeout = node.data.timeout || '5 minutes';
+    const nodeTimeout = node.data.timeout || '5 minutes';
+    const retryPolicy = node.data.retryPolicy;
     const config = node.data.config || {};
 
     // Generate result variable name
@@ -31,7 +32,7 @@ export const ActivityProxyPattern: Pattern = {
     const indentLevel = context.currentIndent;
     const indentStr = indent(indentLevel);
 
-    // Check if this is the first activity - if so, generate proxy setup
+    // Check if this is the first activity - if so, generate all proxy setups
     const activityNodes = context.nodes.filter(n => n.type === 'activity' || n.type === 'agent');
     const isFirstActivity = activityNodes[0]?.id === node.id;
 
@@ -39,41 +40,73 @@ export const ActivityProxyPattern: Pattern = {
     const imports: string[] = [];
     const declarations: string[] = [];
 
-    // Generate proxy setup for first activity
+    // Generate all proxy setups for first activity
+    // Temporal requires separate proxyActivities calls for different timeout/retry configurations
     if (isFirstActivity) {
       imports.push(`import { proxyActivities } from '@temporalio/workflow';`);
       imports.push(`import type * as activities from './activities';`);
 
-      // Collect all activity names
-      const allActivityNames = activityNodes.map(n =>
-        n.data.activityName || n.data.componentName || toCamelCase(n.id)
-      );
+      // Group activities by timeout and retry policy
+      const activityGroups = groupActivitiesByConfig(activityNodes);
+      
+      // Generate a proxy for each group
+      for (const [groupKey, group] of activityGroups.entries()) {
+        const groupActivities = group.map(n =>
+          n.data.activityName || n.data.componentName || toCamelCase(n.id)
+        );
+        
+        const timeout = group[0].data.timeout || '5 minutes';
+        const retry = group[0].data.retryPolicy;
+        
+        // Generate proxy variable name based on timeout
+        const proxyVarName = generateProxyVarName(timeout, retry);
+        
+        // Store proxy mapping in context for later use
+        if (!context.proxyMap) {
+          context.proxyMap = new Map();
+        }
+        group.forEach(n => {
+          const key = `${n.data.timeout || 'default'}_${JSON.stringify(retry || {})}`;
+          context.proxyMap!.set(n.id, proxyVarName);
+        });
 
-      declarations.push(
-        `// Activity proxies\nconst { ${allActivityNames.join(', ')} } = proxyActivities<typeof activities>({\n` +
-        `  startToCloseTimeout: '${timeout}',\n` +
-        `  retry: {\n` +
-        `    initialInterval: '1s',\n` +
-        `    backoffCoefficient: 2,\n` +
-        `    maximumAttempts: 3,\n` +
-        `  },\n` +
-        `});`
-      );
+        // Build retry config
+        let retryConfig = '';
+        if (retry && retry.strategy !== 'none') {
+          const retryOptions = buildRetryOptions(retry, '    ');
+          retryConfig = `,\n  retry: ${retryOptions}`;
+        } else {
+          // Default retry policy - but for timeout tests, we might want no retries
+          // However, Temporal best practice is to have some retries, so keep default
+          retryConfig = `,\n  retry: {\n    initialInterval: '1s',\n    backoffCoefficient: 2,\n    maximumAttempts: 3,\n  }`;
+        }
+
+        // Don't destructure - keep the proxy object so we can use it with dot notation
+        declarations.push(
+          `// Activity proxies (timeout: ${timeout})\nconst ${proxyVarName} = proxyActivities<typeof activities>({\n` +
+          `  startToCloseTimeout: '${timeout}'${retryConfig}\n` +
+          `});`
+        );
+      }
     }
 
     // Generate activity invocation
     code.push(`${indentStr}// Execute ${node.type}: ${node.data.label || node.id}`);
 
-    // Handle retry policy if specified on this node
-    const retryPolicy = node.data.retryPolicy;
-    if (retryPolicy && retryPolicy.strategy !== 'none') {
-      code.push(`${indentStr}// Custom retry policy: ${retryPolicy.strategy}`);
-    }
-
     // Build input parameter
     const inputParam = buildInputParameter(node, context);
 
-    code.push(`${indentStr}const ${resultVar} = await ${activityName}(${inputParam});`);
+    // Get the proxy variable name for this activity
+    const proxyVarName = context.proxyMap?.get(node.id);
+    
+    // Use the proxy object directly (not destructured) to access the activity
+    // Format: proxyVarName.activityName(input)
+    if (proxyVarName) {
+      code.push(`${indentStr}const ${resultVar} = await ${proxyVarName}.${activityName}(${inputParam});`);
+    } else {
+      // Fallback to default (shouldn't happen if grouping worked)
+      code.push(`${indentStr}const ${resultVar} = await ${activityName}(${inputParam});`);
+    }
 
     if (node.type === 'agent') {
       code.push(`${indentStr}// Agent response stored in ${resultVar}`);
@@ -92,8 +125,9 @@ export const ActivityProxyPattern: Pattern = {
 
 /**
  * Build input parameter for activity call
+ * Exported for unit testing of input-mapping behavior.
  */
-function buildInputParameter(node: WorkflowNode, context: GeneratorContext): string {
+export function buildInputParameter(node: WorkflowNode, context: GeneratorContext): string {
   const config = node.data.config || {};
 
   // Check if there's explicit input mapping
@@ -123,6 +157,157 @@ function buildInputParameter(node: WorkflowNode, context: GeneratorContext): str
 
   // Default to 'input'
   return 'input';
+}
+
+/**
+ * Build retry options object for activity call
+ * Exported for unit testing of retry configuration generation.
+ */
+export function buildRetryOptions(
+  retryPolicy: {
+    strategy: 'keep-trying' | 'fail-after-x' | 'exponential-backoff' | 'none';
+    maxAttempts?: number;
+    initialInterval?: string;
+    maxInterval?: string;
+    backoffCoefficient?: number;
+  },
+  indentStr: string
+): string {
+  const lines: string[] = [];
+  lines.push('{');
+
+  switch (retryPolicy.strategy) {
+    case 'keep-trying':
+      lines.push(`${indentStr}maximumAttempts: Infinity,`);
+      if (retryPolicy.initialInterval) {
+        lines.push(`${indentStr}initialInterval: '${retryPolicy.initialInterval}',`);
+      } else {
+        lines.push(`${indentStr}initialInterval: '1s',`);
+      }
+      if (retryPolicy.maxInterval) {
+        lines.push(`${indentStr}maximumInterval: '${retryPolicy.maxInterval}',`);
+      } else {
+        lines.push(`${indentStr}maximumInterval: '1h',`);
+      }
+      if (retryPolicy.backoffCoefficient) {
+        lines.push(`${indentStr}backoffCoefficient: ${retryPolicy.backoffCoefficient},`);
+      } else {
+        lines.push(`${indentStr}backoffCoefficient: 2.0,`);
+      }
+      break;
+
+    case 'fail-after-x':
+      if (retryPolicy.maxAttempts) {
+        lines.push(`${indentStr}maximumAttempts: ${retryPolicy.maxAttempts},`);
+      } else {
+        lines.push(`${indentStr}maximumAttempts: 3,`);
+      }
+      if (retryPolicy.initialInterval) {
+        lines.push(`${indentStr}initialInterval: '${retryPolicy.initialInterval}',`);
+      } else {
+        lines.push(`${indentStr}initialInterval: '1s',`);
+      }
+      if (retryPolicy.maxInterval) {
+        lines.push(`${indentStr}maximumInterval: '${retryPolicy.maxInterval}',`);
+      }
+      if (retryPolicy.backoffCoefficient) {
+        lines.push(`${indentStr}backoffCoefficient: ${retryPolicy.backoffCoefficient},`);
+      }
+      break;
+
+    case 'exponential-backoff':
+      if (retryPolicy.maxAttempts) {
+        lines.push(`${indentStr}maximumAttempts: ${retryPolicy.maxAttempts},`);
+      } else {
+        lines.push(`${indentStr}maximumAttempts: 5,`);
+      }
+      if (retryPolicy.initialInterval) {
+        lines.push(`${indentStr}initialInterval: '${retryPolicy.initialInterval}',`);
+      } else {
+        lines.push(`${indentStr}initialInterval: '1s',`);
+      }
+      if (retryPolicy.maxInterval) {
+        lines.push(`${indentStr}maximumInterval: '${retryPolicy.maxInterval}',`);
+      } else {
+        lines.push(`${indentStr}maximumInterval: '1h',`);
+      }
+      if (retryPolicy.backoffCoefficient) {
+        lines.push(`${indentStr}backoffCoefficient: ${retryPolicy.backoffCoefficient},`);
+      } else {
+        lines.push(`${indentStr}backoffCoefficient: 2.0,`);
+      }
+      break;
+
+    case 'none':
+    default:
+      lines.push(`${indentStr}maximumAttempts: 1,`);
+      break;
+  }
+
+  lines.push(`${indentStr}}`);
+  return lines.join('\n');
+}
+
+/**
+ * Group activities by their timeout and retry configuration
+ * Activities with the same config will share a proxy.
+ * Exported for unit testing of grouping behavior.
+ */
+export function groupActivitiesByConfig(activityNodes: WorkflowNode[]): Map<string, WorkflowNode[]> {
+  const groups = new Map<string, WorkflowNode[]>();
+
+  for (const node of activityNodes) {
+    const timeout = node.data.timeout || '5 minutes';
+    const retry = node.data.retryPolicy || {};
+    
+    // Create a stable key for grouping - normalize retry policy
+    const retryKey = retry.strategy ? JSON.stringify({
+      strategy: retry.strategy,
+      maxAttempts: retry.maxAttempts,
+      initialInterval: retry.initialInterval,
+      maxInterval: retry.maxInterval,
+      backoffCoefficient: retry.backoffCoefficient,
+    }) : '{}';
+    
+    const groupKey = `${timeout}_${retryKey}`;
+
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, []);
+    }
+    groups.get(groupKey)!.push(node);
+  }
+
+  return groups;
+}
+
+/**
+ * Generate a proxy variable name based on timeout and retry config
+ * Must be a valid JavaScript identifier.
+ * Exported for unit testing of naming behavior.
+ */
+export function generateProxyVarName(timeout: string, retry?: any): string {
+  // Sanitize timeout: "2s" -> "2s", "5 minutes" -> "5minutes", "30s" -> "30s"
+  const timeoutPart = timeout.replace(/[^a-zA-Z0-9]/g, '');
+  
+  // Sanitize retry strategy: "exponential-backoff" -> "ExponentialBackoff"
+  let retryPart = '';
+  if (retry && retry.strategy && retry.strategy !== 'none') {
+    const strategy = retry.strategy
+      .split(/[-_]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join('');
+    retryPart = `Retry${strategy}`;
+  }
+  
+  // Generate valid identifier: activities2s, activities5minutesRetryExponentialBackoff, etc.
+  const baseName = `activities${timeoutPart}${retryPart}`;
+  
+  // Ensure it starts with a letter (not a number)
+  if (/^[0-9]/.test(baseName)) {
+    return `activitiesTimeout${timeoutPart}${retryPart}`;
+  }
+  
+  return baseName;
 }
 
 export default ActivityProxyPattern;

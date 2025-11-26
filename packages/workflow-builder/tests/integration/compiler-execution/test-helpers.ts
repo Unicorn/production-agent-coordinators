@@ -11,6 +11,23 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+/**
+ * Check if debug mode is enabled
+ */
+const isDebugMode = (): boolean => {
+  return process.env.WORKFLOW_BUILDER_TEST_DEBUG === '1' || process.env.WORKFLOW_BUILDER_TEST_DEBUG === 'true';
+};
+
+/**
+ * Get artifacts directory for debug output
+ */
+function getArtifactsDir(): string {
+  const projectRoot = path.join(__dirname, '../../..');
+  const artifactsDir = path.join(projectRoot, 'tests', '_artifacts');
+  fs.mkdirSync(artifactsDir, { recursive: true });
+  return artifactsDir;
+}
+
 // Test activity implementations
 export const testActivities = {
   // Simple success activity
@@ -89,10 +106,18 @@ export class IntegrationTestContext {
     }
     this.workers = [];
 
-    // Clean up temporary directories
-    for (const dir of this.workDirs) {
-      if (fs.existsSync(dir)) {
-        fs.rmSync(dir, { recursive: true, force: true });
+    // Clean up temporary directories (unless in debug mode)
+    if (!isDebugMode()) {
+      for (const dir of this.workDirs) {
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
+      }
+    } else {
+      // In debug mode, log preserved directories
+      console.log('🔍 Debug mode: Preserving test workflow directories:');
+      for (const dir of this.workDirs) {
+        console.log(`  - ${dir}`);
       }
     }
     this.workDirs = [];
@@ -176,6 +201,22 @@ export class IntegrationTestContext {
     fs.writeFileSync(packageJsonFile, result.packageJson!);
     fs.writeFileSync(tsConfigFile, result.tsConfig!);
 
+    // Debug mode: Dump workflow code to artifacts directory
+    if (isDebugMode()) {
+      const artifactsDir = getArtifactsDir();
+      const workflowName = workflow.name;
+      const artifactFile = path.join(artifactsDir, `${workflowName}-workflows-index.ts`);
+      fs.writeFileSync(artifactFile, result.workflowCode!);
+      
+      // Extract exported function names from workflow code
+      const exportedFunctions = extractExportedFunctions(result.workflowCode!);
+      
+      console.log(`🔍 Debug: Workflow "${workflowName}" (ID: ${workflow.id})`);
+      console.log(`  📁 Workflow code: ${artifactFile}`);
+      console.log(`  📁 Work directory: ${workDir}`);
+      console.log(`  📦 Exported functions: ${exportedFunctions.join(', ')}`);
+    }
+
     // Create native connection for worker
     const nativeConnection = await NativeConnection.connect({
       address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
@@ -229,15 +270,24 @@ export class IntegrationTestContext {
     options?: {
       taskQueue?: string;
       timeout?: number; // in ms
+      workflowExecutionTimeout?: string; // Temporal workflow execution timeout (e.g., '5s')
     }
   ): Promise<T> {
     const client = this.getClient();
 
-    const handle = await client.start(workflowName, {
+    // Build workflow start options
+    const startOptions: any = {
       taskQueue: options?.taskQueue || 'test-queue',
       workflowId,
       args,
-    });
+    };
+
+    // Add workflow execution timeout if specified
+    if (options?.workflowExecutionTimeout) {
+      startOptions.workflowExecutionTimeout = options.workflowExecutionTimeout;
+    }
+
+    const handle = await client.start(workflowName, startOptions);
 
     // Wait for result with timeout
     const timeoutMs = options?.timeout || 30000; // Default 30 seconds
@@ -347,4 +397,63 @@ export async function retryWithBackoff<T>(
   }
 
   throw lastError || new Error('All retry attempts failed');
+}
+
+/**
+ * Extract exported function names from workflow code
+ */
+function extractExportedFunctions(code: string): string[] {
+  const functions: string[] = [];
+  // Match: export async function FunctionName(...)
+  const regex = /export\s+async\s+function\s+(\w+)\s*\(/g;
+  let match;
+  while ((match = regex.exec(code)) !== null) {
+    functions.push(match[1]);
+  }
+  return functions;
+}
+
+/**
+ * Write history summary to artifacts directory (debug mode)
+ */
+export async function writeHistorySummary(
+  workflowId: string,
+  history: any,
+  testName: string
+): Promise<void> {
+  if (!isDebugMode()) {
+    return;
+  }
+
+  const artifactsDir = getArtifactsDir();
+  const summaryFile = path.join(artifactsDir, `${testName}-${workflowId}-history.json`);
+  
+  // Extract first N events with key information
+  const events = (history.events || []).slice(0, 20).map((event: any) => {
+    const eventType = event.eventType;
+    const attrs = event[`${eventType}EventAttributes`] || {};
+    
+    return {
+      eventId: event.eventId,
+      eventType,
+      timestamp: event.eventTime,
+      // Include timeout/failure attributes if present
+      timeoutInfo: attrs.timeoutInfo || null,
+      failure: attrs.failure ? {
+        message: attrs.failure.message,
+        failureType: attrs.failure.failureType,
+      } : null,
+    };
+  });
+
+  const summary = {
+    workflowId,
+    testName,
+    totalEvents: history.events?.length || 0,
+    firstEvents: events,
+    timestamp: new Date().toISOString(),
+  };
+
+  fs.writeFileSync(summaryFile, JSON.stringify(summary, null, 2));
+  console.log(`🔍 Debug: History summary written to ${summaryFile}`);
 }

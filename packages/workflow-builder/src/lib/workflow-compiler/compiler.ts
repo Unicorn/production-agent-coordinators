@@ -52,7 +52,10 @@ function compileNodeBasedWorkflow(
     strictMode = true,
   } = options;
 
-  const workflowCode = compileWorkflowFromNodes(definition, { includeComments });
+  const workflowCode = compileWorkflowFromNodes(definition, { 
+    includeComments,
+    workflowName: definition.name,
+  });
   const activitiesCode = generateActivitiesFromNodes(definition, includeComments);
   const workerCode = generateWorkerCodeFromNodes(definition, packageName, includeComments);
 

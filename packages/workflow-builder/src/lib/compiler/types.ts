@@ -107,6 +107,7 @@ export interface GeneratorContext {
   edgeMap: Map<string, WorkflowEdge[]>;
   visitedNodes: Set<string>;
   resultVars: Map<string, string>;
+  proxyMap?: Map<string, string>; // Maps node ID to proxy variable name
   currentIndent: number;
 }
 

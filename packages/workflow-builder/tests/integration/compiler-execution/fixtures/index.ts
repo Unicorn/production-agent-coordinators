@@ -12,3 +12,17 @@ export {
   cyclicWorkflow,
   disconnectedWorkflow,
 } from './invalid-workflow';
+export {
+  timeoutRetryWorkflow,
+  alwaysTimeoutWorkflow,
+  multiTimeoutWorkflow,
+  noRetryWorkflow,
+  keepTryingWorkflow,
+  maxIntervalWorkflow,
+  cancelWorkflow,
+  concurrentWorkflow0,
+  concurrentWorkflow1,
+  concurrentWorkflow2,
+  concurrentWorkflow3,
+  concurrentWorkflow4,
+} from './additional-workflows';

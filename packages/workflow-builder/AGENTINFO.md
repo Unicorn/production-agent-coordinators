@@ -127,11 +127,8 @@ npx supabase db push
 # Start dev server
 yarn dev
 
-# Start Temporal
-temporal server start-dev
-
-# Start dynamic worker
-yarn worker:dev
+# Start Temporal stack used by tests and local runs
+yarn infra:up
 ```
 
 ### Environment Variables
@@ -178,6 +175,56 @@ TEMPORAL_ADDRESS=localhost:7233
 - Check worker is running
 - Look at Temporal UI
 - Check worker logs
+- For compiler / Temporal integration issues, run:
+  - Unit tests: `cd packages/workflow-builder && yarn test:unit`
+  - Integration tests (requires `yarn infra:up`): `yarn test:integration`
+  - E2E UI tests (requires `yarn infra:up` + dev server): `yarn test:e2e`
+
+---
+
+## Testing Requirements (Workflow Builder)
+
+### General
+
+- Prefer **real systems** (Temporal, Supabase, tRPC) over mocks.
+- If a mock is introduced:
+  - It must have a **verification test** that compares its behavior to the real system for the supported scenarios.
+  - The rationale for using the mock must be documented in the test file.
+
+### Layers
+
+- **Model & Helpers** (pure TS):
+  - Comprehensive unit tests for:
+    - Timeout parsing and normalization.
+    - Retry policy parsing and normalization.
+    - `WorkflowDefinition` validation.
+- **Compiler & Generators**:
+  - Snapshot + invariant tests to ensure:
+    - Workflow function is exported as `export async function ${workflow.name}`.
+    - All referenced activities/agents are exported.
+    - Timeouts and retry policies are wired correctly into `proxyActivities`.
+- **Temporal Integration**:
+  - Tests under `tests/integration/compiler-execution/**` must:
+    - Run against the `yarn infra:up` Temporal instance (`localhost:7233`, `default` namespace).
+    - Cover:
+      - Simple workflows.
+      - Timeouts (activity + workflow).
+      - Retries and backoff strategies.
+      - Cancellations and concurrent workflows.
+- **UI & UX**:
+  - React component tests for:
+    - Component palette grouping and drag behavior.
+    - Service builder / inside-outside visualization.
+  - Playwright tests for:
+    - Building and running a workflow from the UI.
+    - Configuring and observing timeouts and retries end-to-end.
+
+### Debugging Support
+
+- Use `WORKFLOW_BUILDER_TEST_DEBUG=1` when running integration tests to:
+  - Preserve generated `workflows/index.ts` for failing cases.
+  - Log exported workflow function names.
+  - Write small JSON artifacts summarizing workflow histories.
 
 ---
 

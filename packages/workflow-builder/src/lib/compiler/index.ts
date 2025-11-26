@@ -200,6 +200,7 @@ export class WorkflowCompiler {
       edgeMap,
       visitedNodes: new Set(),
       resultVars: new Map(),
+      proxyMap: new Map(),
       currentIndent: 0,
     };
   }

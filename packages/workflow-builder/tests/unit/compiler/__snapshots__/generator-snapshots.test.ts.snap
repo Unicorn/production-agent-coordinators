@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Generator Snapshots > Snapshot Tests > retry workflow code snapshot 1`] = `
+{
+  "activityFunctionName": "flakyActivity",
+  "hasBackoffCoefficient": true,
+  "hasMaxAttempts": true,
+  "hasRetryConfig": true,
+  "hasWorkflowFunction": true,
+}
+`;
+
+exports[`Generator Snapshots > Snapshot Tests > simple workflow code snapshot 1`] = `
+{
+  "activityFunctionName": "sayHello",
+  "hasActivityCall": true,
+  "hasProxyActivities": true,
+  "hasReturn": false,
+  "hasWorkflowFunction": true,
+}
+`;
+
+exports[`Generator Snapshots > Snapshot Tests > timeout workflow code snapshot 1`] = `
+{
+  "activityFunctionName": "slowActivity",
+  "hasTimeoutConfig": true,
+  "hasWorkflowFunction": true,
+  "timeoutValue": "2s",
+}
+`;

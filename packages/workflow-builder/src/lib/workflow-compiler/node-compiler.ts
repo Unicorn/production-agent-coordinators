@@ -38,13 +38,17 @@ export function compileWorkflowFromNodes(
   const stateVariables = generateStateVariableDeclarations(definition);
   const workflowCode = generateWorkflowCode(startNode, nodeMap, edges, includeComments);
 
+  // Use workflowName directly - Temporal expects function name to match workflow type name
+  // The workflowName should be the exact name from workflow.name (e.g., "TestSimpleWorkflow")
+  const functionName = workflowName;
+
   return `${imports}
 
 ${includeComments ? `/**
  * ${workflowName}
  * Generated Temporal workflow from node-based definition
  */` : ''}
-export async function ${toCamelCase(workflowName)}Workflow(input: any): Promise<any> {
+export async function ${functionName}(input: any): Promise<any> {
 ${stateVariables}
 
 ${workflowCode}
@@ -237,23 +241,40 @@ ${indentStr}// Workflow started`;
       const activityName = node.data.componentName || toCamelCase(node.id);
       resultVars.set(node.id, resultVar);
       
-      // Generate retry policy if configured
-      const retryPolicy = node.data.retryPolicy;
-      let retryPolicyCode = '';
+      // Build activity options
+      const activityOptions: string[] = [];
       
-      if (retryPolicy && retryPolicy.strategy !== 'none') {
-        retryPolicyCode = generateRetryPolicyCode(retryPolicy, indentStr);
+      // Add timeout if specified
+      const nodeTimeout = node.data.timeout;
+      if (nodeTimeout) {
+        activityOptions.push(`startToCloseTimeout: '${nodeTimeout}'`);
       }
       
-      if (retryPolicyCode) {
+      // Generate retry policy if configured
+      const retryPolicy = node.data.retryPolicy;
+      if (retryPolicy && retryPolicy.strategy !== 'none') {
+        const retryPolicyCode = generateRetryPolicyCode(retryPolicy, indentStr);
+        if (retryPolicyCode) {
+          activityOptions.push(`retry: ${retryPolicyCode.replace(/^  /gm, '    ')}`);
+        }
+      }
+      
+      // Build input parameter
+      const incomingEdges = Array.from(resultVars.keys()).filter(id => {
+        // Find edges that connect to this node
+        return true; // Simplified - would need edge context
+      });
+      const inputParam = 'input'; // Simplified - would need proper input mapping
+      
+      if (activityOptions.length > 0) {
         return `${indentStr}${comment}
-${indentStr}const ${resultVar} = await ${activityName}(input, {
-${retryPolicyCode}
+${indentStr}const ${resultVar} = await ${activityName}(${inputParam}, {
+${indentStr}  ${activityOptions.join(`,\n${indentStr}  `)},
 ${indentStr}});`;
       }
       
       return `${indentStr}${comment}
-${indentStr}const ${resultVar} = await ${activityName}(input);`;
+${indentStr}const ${resultVar} = await ${activityName}(${inputParam});`;
     
     case 'child-workflow':
       const workflowType = config.workflowType || node.data.componentName || 'ChildWorkflow';
