@@ -1,41 +1,33 @@
-# Package B - Business Logic Package
+# Package A - Foundation Package
 
 ## Overview
 
-Intermediate package providing business logic, data models, and services that build on package-a utilities.
+Foundation package providing core utilities, types, and helper functions for the test suite.
 
 ## Package Information
 
-- **Name**: package-b
+- **Name**: package-a
 - **Version**: 0.1.0
-- **Dependencies**:
-  - package-a (foundation utilities)
+- **Dependencies**: None (foundation layer)
 
 ## Description
 
-This package builds on package-a to provide:
+This is the foundation package with no external dependencies. It provides:
 
-- Business logic implementations
-- Data models and entities
-- Service layer abstractions
-- Domain-specific utilities
+- Core utility functions
+- Basic TypeScript types and interfaces
+- Helper functions used by other packages
+- Constants and configuration
 
 ## Structure
 
 ```
-package-b/
+package-a/
 ├── src/
 │   ├── index.ts          # Main exports
-│   ├── models/
-│   │   ├── User.ts       # User model
-│   │   ├── Product.ts    # Product model
-│   │   └── Order.ts      # Order model
-│   ├── services/
-│   │   ├── UserService.ts
-│   │   ├── ProductService.ts
-│   │   └── OrderService.ts
-│   └── validators/
-│       └── validators.ts  # Input validation
+│   ├── utils.ts          # Utility functions
+│   ├── types.ts          # TypeScript types
+│   └── constants.ts      # Shared constants
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -43,63 +35,51 @@ package-b/
 
 ## Features
 
-### 1. Data Models
+### 1. Utility Functions
 
-Uses package-a types and utilities to define:
-- User entity with validation
-- Product catalog models
-- Order processing models
-- Relationship mappings
+- String manipulation helpers
+- Array processing utilities
+- Object transformation functions
+- Date/time helpers
 
-### 2. Service Layer
+### 2. Type Definitions
 
-Business services that leverage package-a utilities:
-- UserService for user management
-- ProductService for catalog operations
-- OrderService for order processing
-- Transaction management
+- Base interfaces
+- Common types
+- Generic type utilities
+- Branded types for type safety
 
-### 3. Validation
+### 3. Constants
 
-Input validation using package-a helpers:
-- Schema validation
-- Business rule enforcement
-- Data integrity checks
-- Error handling with package-a error types
+- Application constants
+- Configuration defaults
+- Error messages
+- Status codes
 
 ## Dependencies
 
-### package-a
-
-Required for:
-- Base type definitions
-- Utility functions for data transformation
-- Constants and configuration
-- Error types and handlers
+None - this is a foundation package.
 
 ## Build Process
 
-1. Ensure package-a is built first (dependency requirement)
-2. TypeScript compilation with package-a types
-3. Type declaration generation
-4. ESM output to dist/
+1. TypeScript compilation
+2. Type declaration generation
+3. ESM output to dist/
 
 ## Testing
 
-- Unit tests for all models and services
-- Integration tests with package-a utilities
-- Mock tests for external dependencies
-- Type tests for model definitions
+- Unit tests for all utility functions
+- Type tests for type definitions
+- Integration tests for combined functionality
 
 ## Success Criteria
 
 - All TypeScript types compile without errors
 - All unit tests pass
-- Integration with package-a works correctly
-- Code coverage > 75%
+- Code coverage > 80%
 - No linting errors
 - Generated type declarations are valid
 
 ## Notes
 
-This package demonstrates how business logic can be built on top of foundational utilities. It should only depend on package-a and avoid circular dependencies with package-c.
+This package is intentionally kept simple as it serves as the foundation for the entire test suite. It should have minimal external dependencies and focus on providing stable, well-tested utilities.
