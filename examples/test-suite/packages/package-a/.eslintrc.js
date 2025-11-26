@@ -11,70 +11,93 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2020,
     sourceType: 'module',
-    project: './tsconfig.json', // Required for rules that need type information
+    project: './tsconfig.json',
   },
   plugins: [
     '@typescript-eslint',
     'prettier',
+    'promise',
+    'import',
   ],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:@typescript-eslint/recommended-requiring-type-checking', // For strict type-aware rules
-    'plugin:prettier/recommended', // Integrates prettier with eslint
+    'plugin:@typescript-eslint/recommended-requiring-type-checking',
+    'plugin:prettier/recommended',
+    'plugin:promise/recommended',
+    'plugin:import/typescript',
   ],
   rules: {
-    // Bernier LLC specific rules
-    'prettier/prettier': 'error',
-    '@typescript-eslint/no-explicit-any': 'error', // Explicitly forbid 'any'
+    // Bernier LLC specific rules for strictness and quality
+    'no-unused-vars': 'off', // Turn off base rule, use TS version
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-    'no-unused-vars': 'off', // Disable base ESLint rule
-    '@typescript-eslint/no-floating-promises': 'error', // Ensure promises are handled
-    '@typescript-eslint/semi': ['error', 'always'], // Require semicolons
-    'semi': 'off', // Disable base ESLint semi rule
-    'prefer-const': 'error', // Enforce const for variables that are not reassigned
-    'no-var': 'error', // Disallow var
+    '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],
+    '@typescript-eslint/no-explicit-any': 'error',
+    '@typescript-eslint/no-unsafe-assignment': 'error',
+    '@typescript-eslint/no-unsafe-member-access': 'error',
+    '@typescript-eslint/no-unsafe-return': 'error',
+    '@typescript-eslint/no-unsafe-call': 'error',
+    '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
     '@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
-    '@typescript-eslint/consistent-type-definitions': ['error', 'interface'], // Enforce interfaces for object type definitions
-    '@typescript-eslint/explicit-module-boundary-types': ['error', { allowArgumentsExplicitlyTypedAsAny: false }], // Enforce explicit return and parameter types for all exported functions
-    '@typescript-eslint/no-shadow': ['error'], // Disallow variable shadowing
-    'no-shadow': 'off', // Disable base ESLint rule
-    '@typescript-eslint/naming-convention': [
+    '@typescript-eslint/prefer-nullish-coalescing': 'error',
+    '@typescript-eslint/prefer-optional-chain': 'error',
+    '@typescript-eslint/strict-boolean-expressions': ['error', {
+      allowNullableBoolean: true,
+      allowNullableString: true,
+      allowNullableNumber: true,
+      allowAny: false,
+    }],
+    // Ensure all promises are handled
+    'promise/always-return': 'off', // Sometimes a promise doesn't need to return another promise
+    'promise/catch-or-return': 'error', // Must catch or return
+    'promise/no-return-wrap': 'error',
+    'promise/param-names': 'error',
+    'promise/no-nesting': 'warn',
+    'promise/no-promise-in-callback': 'warn',
+    'promise/no-callback-in-promise': 'warn',
+    'promise/avoid-new': 'off', // New promises are acceptable if handled correctly
+    'promise/no-native': 'off', // We use native Promises
+    'promise/prefer-await-to-then': 'error', // Prefer async/await over .then()
+    'promise/valid-params': 'error',
+    'promise/no-multiple-resolved': 'error',
+    'promise/prefer-await-to-callbacks': 'error',
+
+    // Prettier specific rules
+    'prettier/prettier': [
       'error',
       {
-        selector: 'interface',
-        format: ['PascalCase'],
-      },
-      {
-        selector: 'typeAlias',
-        format: ['PascalCase'],
-      },
-      {
-        selector: 'variableLike',
-        format: ['camelCase', 'UPPER_CASE', 'PascalCase'],
-        leadingUnderscore: 'allow',
-      },
-      {
-        selector: 'function',
-        format: ['camelCase', 'PascalCase'],
-      },
-      {
-        selector: 'enumMember',
-        format: ['PascalCase', 'UPPER_CASE'],
-      },
-      {
-        selector: ['classProperty', 'objectLiteralProperty', 'typeProperty', 'classMethod', 'parameterProperty'],
-        format: ['camelCase', 'PascalCase', 'UPPER_CASE', 'snake_case'],
+        semi: true,
+        singleQuote: true,
+        printWidth: 120,
+        trailingComma: 'all',
       },
     ],
+    'indent': 'off', // Prettier handles this
+    'quotes': 'off', // Prettier handles this
+    'semi': 'off',   // Prettier handles this
+
+    // Import sorting
+    'import/order': ['error', {
+      'groups': ['builtin', 'external', 'internal', ['parent', 'sibling', 'index']],
+      'newlines-between': 'always',
+      'alphabetize': { 'order': 'asc', 'caseInsensitive': true },
+    }],
+    'import/no-duplicates': 'error',
+    'import/no-unresolved': 'error',
+    'import/named': 'error',
+  },
+  settings: {
+    'import/resolver': {
+      typescript: {
+        project: './tsconfig.json',
+      },
+    },
   },
   ignorePatterns: [
-    "dist/",
-    "node_modules/",
-    "coverage/",
-    "*.js",
-    "*.d.ts",
-    "jest.config.js",
-    ".eslintrc.js"
+    'dist/',
+    'node_modules/',
+    'jest.config.ts', // Usually handled separately or not linted
+    '*.js', // Lint only TS files
+    '*.d.ts', // Declaration files are generated
   ],
 };
