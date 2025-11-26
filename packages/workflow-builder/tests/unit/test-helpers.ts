@@ -4,20 +4,34 @@
  * Utilities for testing tRPC routers
  */
 
+import { vi } from 'vitest';
 import type { TRPCContext } from '../../src/server/api/trpc';
 
 export function createMockContext(overrides?: Partial<TRPCContext>): TRPCContext {
   return {
     supabase: {
       from: vi.fn(),
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: {
+            user: {
+              id: 'auth-user-123',
+              email: 'test@example.com',
+            },
+          },
+          error: null,
+        }),
+      },
     } as any,
-    user: {
-      id: 'user-123',
+    user: null, // Will be set by protectedProcedure
+    authUser: {
+      id: 'auth-user-123',
       email: 'test@example.com',
-    },
+    } as any,
     getUserRecord: vi.fn().mockResolvedValue({
       id: 'user-123',
       email: 'test@example.com',
+      auth_user_id: 'auth-user-123',
     }),
     ...overrides,
   };

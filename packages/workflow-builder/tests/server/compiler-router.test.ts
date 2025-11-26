@@ -7,19 +7,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockContext } from '../unit/test-helpers';
 import { appRouter } from '@/server/api/root';
 import { simpleWorkflow } from '../integration/compiler-execution/fixtures';
+import type { TRPCContext } from '@/server/api/trpc';
 
 describe('Compiler Router', () => {
-  const mockContext = createMockContext();
+  let mockContext: TRPCContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockContext = createMockContext();
   });
 
   describe('compiler.compile', () => {
     it('should validate workflowId input', async () => {
       const caller = appRouter.createCaller(mockContext);
 
-      // Missing workflowId should fail validation
+      // Empty workflowId should fail validation (Zod validation)
       await expect(
         caller.compiler.compile({
           workflowId: '',
@@ -109,7 +111,7 @@ describe('Compiler Router', () => {
     });
 
     it('should enforce authorization (user must own workflow)', async () => {
-      // Mock Supabase to return workflow owned by different user
+      // Mock Supabase to return no workflow (simulating unauthorized access)
       const unauthorizedContext = createMockContext({
         supabase: {
           from: vi.fn(() => ({
@@ -118,12 +120,18 @@ describe('Compiler Router', () => {
                 eq: vi.fn(() => ({
                   single: vi.fn().mockResolvedValue({
                     data: null,
-                    error: { message: 'Not found' },
+                    error: { message: 'Not found', code: 'PGRST116' },
                   }),
                 })),
               })),
             })),
           })),
+          auth: {
+            getUser: vi.fn().mockResolvedValue({
+              data: { user: { id: 'auth-user-123', email: 'test@example.com' } },
+              error: null,
+            }),
+          },
         } as any,
       });
 
