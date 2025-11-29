@@ -1,3 +1,18 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { fileURLToPath } from 'url';
+import yaml from 'yaml';
+import Handlebars from 'handlebars';
+import Anthropic from '@anthropic-ai/sdk';
+
+const execPromise = promisify(exec);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 /**
  * Temporal Activities for Agent Coordinator
  *
@@ -17,6 +32,126 @@ import { Container, Coordinator, ConsoleLogger } from '@coordinator/coordinator'
 import { LocalFileStorage } from '@coordinator/storage';
 import { HelloSpecFactory } from '@coordinator/specs-hello';
 import { MockAgentFactory } from '@coordinator/agents-mock';
+
+/**
+ * Helper activity to set up a clean workspace
+ */
+export async function setupWorkspace(basePath: string): Promise<string> {
+    const runId = randomUUID();
+    const dir = path.join(basePath, `build-${runId}`);
+    await fs.mkdir(dir, { recursive: true });
+    console.log(`[Activity] Created workspace: ${dir}`);
+    return dir;
+}
+
+/**
+ * Logs an audit entry to audit_trace.jsonl in the working directory.
+ */
+export async function logAuditEntry(workingDir: string, entry: Partial<OptimizationLogEntry>) {
+  const logPath = path.join(workingDir, 'audit_trace.jsonl');
+  const line = JSON.stringify({ ...entry, timestamp: new Date().toISOString() }) + '\n';
+  await fs.appendFile(logPath, line);
+  console.log(`[Activity] Logged audit entry for step: ${entry.step_name}`);
+}
+
+/**
+ * Executes the Gemini CLI in headless mode.
+ */
+export async function executeGeminiAgent({ instruction, workingDir, contextContent }: GeminiAgentInput): Promise<GeminiAgentResult> {
+  console.log(`[Activity] Executing Gemini Agent in ${workingDir} with instruction: ${instruction.substring(0, 100)}...`);
+
+  // 1. Inject Context (The "Fresh Brain" Strategy)
+  if (contextContent) {
+    await fs.writeFile(path.join(workingDir, 'GEMINI.md'), contextContent);
+    console.log(`[Activity] Wrote GEMINI.md to ${workingDir}`);
+  }
+
+  // 2. Construct the CLI Command
+  // --yolo: Auto-executes file creation/shell commands (Dangerous but necessary for agents)
+  // --output-format json: Returns structured data we can parse
+  // --context: Explicitly point to the context file we just wrote
+  const command = `gemini --prompt "${instruction.replace(/"/g, '\\"')}" --context GEMINI.md --output-format json --yolo`;
+
+  try {
+    const { stdout, stderr } = await execPromise(command, { cwd: workingDir });
+
+    // 3. Parse the JSON output from the CLI
+    // Note: Sometimes CLIs output "thinking" text before JSON.
+    // In production, use a regex to extract the JSON block.
+    try {
+        const result = JSON.parse(stdout);
+        return {
+            success: true,
+            agentResponse: result,
+            stderr: stderr // Capture warnings
+        };
+    } catch (parseError) {
+        console.warn(`[Activity] Failed to parse JSON from Gemini CLI stdout. Raw output: ${stdout.substring(0, 500)}...`);
+        // Fallback if raw text returned
+        return { success: true, rawOutput: stdout, stderr };
+    }
+
+  } catch (error: any) {
+    const errorMsg = error.stderr || error.message;
+    console.error(`[Activity] Gemini CLI failed: ${errorMsg}`);
+    throw new Error(`Gemini CLI failed: ${errorMsg}`);
+  }
+}
+
+/**
+ * Runs the BernierLLC compliance checks.
+ * @param workingDir The directory where the package is built.
+ */
+export async function runComplianceChecks(workingDir: string): Promise<ComplianceCheckResult> {
+  console.log(`[Activity] Running compliance checks in: ${workingDir}`);
+  const commands = [
+    'npm install', // Ensure all dependencies from scaffolding are present
+    'npm run build', // Check TypeScript compilation and .d.ts generation
+    'npm run lint',  // Check code quality with zero issues
+    'npm test'     // Check test pass and coverage
+  ];
+
+  const results: string[] = [];
+  const errors: ComplianceCheckResult['errors'] = [];
+  
+  for (const cmd of commands) {
+    results.push(`--- RUNNING: ${cmd} ---`);
+    console.log(`[Activity] Executing: ${cmd} in ${workingDir}`);
+    try {
+      const { stdout, stderr } = await execPromise(cmd, { cwd: workingDir });
+      results.push(`SUCCESS: ${cmd}`);
+      results.push(`STDOUT:\n${stdout}`);
+      if (stderr) {
+        results.push(`STDERR (Warnings?):\n${stderr}`);
+      }
+    } catch (error: any) {
+      // Failure! Capture the entire error log and return.
+      const errorDetails = `STDOUT: ${error.stdout}\nSTDERR: ${error.stderr || error.message}`;
+      const errorMessage = `FAILURE DETECTED at command: ${cmd}`;
+
+      errors.push({
+        type: cmd.includes('install') ? 'npm install failure' :
+              cmd.includes('build') ? 'build error' :
+              cmd.includes('lint') ? 'lint error' :
+              cmd.includes('test') ? 'test failure' : 'unknown command failure',
+        message: errorMessage,
+        details: errorDetails
+      });
+
+      const fullErrorLog = [
+        errorMessage,
+        errorDetails,
+        `FULL LOG:\n${results.join('\n')}`
+      ].join('\n');
+      
+      console.error(`[Activity] Compliance check failed: ${errorMessage}`);
+      return { success: false, output: fullErrorLog, commandsRun: commands, errors };
+    }
+  }
+  
+  console.log(`[Activity] All compliance checks passed in: ${workingDir}`);
+  return { success: true, output: results.join('\n'), commandsRun: commands };
+}
 
 /**
  * Initialize a workflow with the given goal ID and configuration
@@ -255,16 +390,6 @@ export async function processAgentResponse(
 /**
  * Coordinator Activities - Implemented directly
  */
-import Anthropic from '@anthropic-ai/sdk';
-import Handlebars from 'handlebars';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import yaml from 'yaml';
-import { fileURLToPath } from 'url';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 
 // Build Activity Types
 export type PackageCategory = 'validator' | 'core' | 'utility' | 'service' | 'ui' | 'suite';
@@ -334,6 +459,52 @@ export interface PackageNode {
   buildStatus: 'pending' | 'building' | 'completed' | 'failed';
 }
 
+export interface OptimizationLogEntry {
+  workflow_run_id: string;          // Unique Temporal Workflow ID
+  step_name: string;                // e.g., 'scaffold', 'implement_v1', 'fix_attempt_1', 'initial_verification'
+  timestamp: string;                // UTC timestamp of completion (ISO 8601)
+  prompt_token_count?: number;      // Estimated tokens in the instruction + GEMINI.md context.
+  completion_token_count?: number;  // Estimated tokens in the agent's output.
+  total_token_cost?: number;        // prompt_token_count + completion_token_count.
+  context_file_hash?: string;       // SHA-256 hash of the full GEMINI.md content used for this step.
+  validation_status?: 'pass' | 'fail' | 'N/A'; // Outcome of the step.
+  validation_error_type?: string;   // e.g., 'TSC_ERROR', 'ESLINT_ERROR', 'JEST_FAILURE'.
+  error_log_size_chars?: number;    // Character count of the error log fed back to the agent (for rework steps).
+  rework_cost_factor?: number;      // Efficiency metric: Tokens spent for the fix vs. the size of the problem.
+  files_touched?: string[];         // List of files created/modified by the agent in this step.
+  error_full?: string | null;              // Full error log (truncated if very large for storage).
+  commands_attempted?: string[];    // Commands run during validation for this step.
+}
+
+// The input for our activity
+export interface GeminiAgentInput {
+  instruction: string;      // The prompt (e.g., "Build the files...")
+  workingDir: string;       // Where the CLI should run
+  contextContent?: string;  // The content for GEMINI.md (your spec)
+}
+
+// The output from the Gemini CLI execution
+export interface GeminiAgentResult {
+  success: boolean;
+  agentResponse?: any;      // Parsed JSON output from Gemini CLI
+  rawOutput?: string;       // Raw stdout if JSON parsing fails or not available
+  stderr?: string;          // Stderr from the CLI process
+  // Token counts would go here if provided by the CLI
+  // prompt_tokens?: number;
+  // completion_tokens?: number;
+}
+
+export interface ComplianceCheckResult {
+  success: boolean;
+  output: string; // Combined stdout/stderr from all commands
+  commandsRun: string[]; // List of commands that were attempted
+  errors?: {
+    type: string; // e.g., 'npm install failure', 'build error', 'lint error', 'test failure'
+    message: string;
+    details?: string;
+  }[];
+}
+
 // Coordinator types
 type ProblemType = 'BUILD_FAILURE' | 'TEST_FAILURE' | 'QUALITY_FAILURE' | 'ENVIRONMENT_ERROR';
 
@@ -392,12 +563,9 @@ interface AgentExecutionResult {
   output: string;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 /**
  * Strip markdown code blocks from text
- * Handles both ```json ... ``` and ``` ... ``` formats
+ * Handles both JSON and plain text code block formats
  */
 function stripMarkdownCodeBlocks(text: string): string {
   // Remove ```json ... ``` or ``` ... ``` wrappers
@@ -412,7 +580,7 @@ function stripMarkdownCodeBlocks(text: string): string {
 export async function loadAgentRegistry(agentDir?: string): Promise<AgentRegistry> {
   const dir = agentDir || path.join(process.env.HOME || '~', '.claude/agents');
 
-  let customAgents: AgentRegistryEntry[] = [];
+  const customAgents: AgentRegistryEntry[] = [];
 
   try {
     await fs.access(dir);
@@ -767,7 +935,7 @@ export async function runBuild(input: {
   const fullPath = path.join(input.workspaceRoot, input.packagePath);
 
   try {
-    const { stdout, stderr } = await execAsync('yarn build', { cwd: fullPath });
+    const { stdout, stderr } = await execPromise('yarn build', { cwd: fullPath });
 
     return {
       success: true,
@@ -793,7 +961,7 @@ export async function runTests(input: {
   const fullPath = path.join(input.workspaceRoot, input.packagePath);
 
   try {
-    const { stdout, stderr } = await execAsync(
+    const { stdout, stderr } = await execPromise(
       'yarn test --run --coverage',
       { cwd: fullPath }
     );
@@ -828,7 +996,7 @@ export async function runQualityChecks(input: {
   const fullPath = path.join(input.workspaceRoot, input.packagePath);
 
   try {
-    const { stdout } = await execAsync(
+    const { stdout } = await execPromise(
       './manager validate-requirements',
       { cwd: fullPath }
     );
@@ -893,7 +1061,7 @@ export async function publishPackage(input: {
   };
 
   try {
-    const { stdout } = await execAsync(
+    const { stdout } = await execPromise(
       'npm publish --access restricted',
       { cwd: fullPath, env }
     );
@@ -937,21 +1105,21 @@ export async function commitChanges(input: GitCommitInput): Promise<GitCommitRes
   try {
     // Configure git user if provided
     if (input.gitUser) {
-      await execAsync(
+      await execPromise(
         `git config user.name "${input.gitUser.name}"`,
         { cwd: fullPath }
       );
-      await execAsync(
+      await execPromise(
         `git config user.email "${input.gitUser.email}"`,
         { cwd: fullPath }
       );
     }
 
     // Stage all changes
-    await execAsync('git add -A', { cwd: fullPath });
+    await execPromise('git add -A', { cwd: fullPath });
 
     // Check if there are changes to commit
-    const { stdout: statusOut } = await execAsync(
+    const { stdout: statusOut } = await execPromise(
       'git status --porcelain',
       { cwd: fullPath }
     );
@@ -965,13 +1133,13 @@ export async function commitChanges(input: GitCommitInput): Promise<GitCommitRes
     }
 
     // Commit with message
-    const { stdout } = await execAsync(
+    const { stdout } = await execPromise(
       `git commit -m "${input.message.replace(/"/g, '\\"')}"`,
       { cwd: fullPath }
     );
 
     // Get commit hash
-    const { stdout: hashOut } = await execAsync(
+    const { stdout: hashOut } = await execPromise(
       'git rev-parse HEAD',
       { cwd: fullPath }
     );
@@ -1017,7 +1185,7 @@ export async function pushChanges(input: GitPushInput): Promise<GitPushResult> {
 
   try {
     // Check if we have commits to push
-    const { stdout: statusOut } = await execAsync(
+    const { stdout: statusOut } = await execPromise(
       `git status -sb`,
       { cwd: fullPath }
     );
@@ -1025,7 +1193,7 @@ export async function pushChanges(input: GitPushInput): Promise<GitPushResult> {
     console.log(`[GitPush] Status: ${statusOut.trim()}`);
 
     // Push to remote
-    const { stdout, stderr } = await execAsync(
+    const { stdout, stderr } = await execPromise(
       `git push ${forceFlag} ${remote} ${branch}`.trim(),
       { cwd: fullPath }
     );

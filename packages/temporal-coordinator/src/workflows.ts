@@ -8,7 +8,9 @@
  * no Math.random(). Use activities for all non-deterministic operations.
  */
 
-import { proxyActivities } from '@temporalio/workflow';
+declare const workflow: typeof import('@temporalio/workflow'); // Temporary global declaration for TypeScript
+
+import { proxyActivities, ApplicationFailure } from '@temporalio/workflow';
 import type * as activities from './activities';
 import type { EngineState, AgentResponse } from '@coordinator/contracts';
 
@@ -19,13 +21,17 @@ const {
   executeAgentStep,
   processAgentResponse,
   storeArtifact,
+  setupWorkspace,        // New activity
+  executeGeminiAgent,    // New activity
+  runComplianceChecks,   // New activity
+  logAuditEntry,         // New activity
 } = proxyActivities<typeof activities>({
-  startToCloseTimeout: '5 minutes',
+  startToCloseTimeout: '10 minutes', // Increased timeout for agent activities
   retry: {
     initialInterval: '1s',
     backoffCoefficient: 2,
-    maximumInterval: '30s',
-    maximumAttempts: 3,
+    maximumInterval: '60s', // Increased maximum interval
+    maximumAttempts: 1,     // Workflow will handle retries explicitly
   },
 });
 
@@ -119,7 +125,7 @@ export async function helloWorkflow(
           [stepId]: {
             ...step,
             status: 'IN_PROGRESS',
-            updatedAt: Date.now(), // Workflow time is deterministic in Temporal
+            updatedAt: (workflow as any).now(), // Workflow time is deterministic in Temporal
           },
         },
       };
@@ -147,7 +153,7 @@ export async function helloWorkflow(
           goalId,
           workflowId: 'temporal-workflow',
           stepId,
-          runId: `run-${Date.now()}`,
+          runId: `run-${(workflow as any).now()}`,
           agentRole: 'agent',
           status: 'FAIL',
           errors: [
@@ -192,6 +198,146 @@ export async function multiStepWorkflow(
   // This is a placeholder for more complex workflow patterns
   // For now, it just delegates to helloWorkflow
   return helloWorkflow(config);
+}
+
+/**
+ * Orchestrates the Gemini CLI for agent-driven package building,
+ * including scaffolding, implementation, compliance checks, and an auditing/repair loop.
+ */
+export async function AuditedBuildWorkflow(specFileContent: string, requirementsFileContent: string): Promise<string> {
+  const workflowId = (workflow as any).info.workflowId; // Get workflow ID for logging
+
+  // 1. Setup Workspace
+  const workingDir = await setupWorkspace('/tmp/gemini-builds');
+  console.log(`[Workflow] Workspace set up at: ${workingDir}`);
+
+  // 2. Context Injection: Combine both documents for the Agent's brain.
+  const masterContext = `
+# AGENT DIRECTIVE: CORE PACKAGE IMPLEMENTATION
+
+> **ROLE**: Senior TypeScript Engineer & BernierLLC Quality Specialist.
+> **OBJECTIVE**: Create the '@bernierllc/contentful-types' Core Package. Your goal is to pass all validation checks on the first attempt, achieving 90% test coverage minimum.
+
+## 🛑 BernierLLC STRICT PUBLISHING CONSTRAINTS
+${requirementsFileContent} 
+
+---
+
+## 📦 PACKAGE SPECIFICATION (Input)
+${specFileContent}
+
+---
+
+## 🛡️ VERIFICATION PROTOCOL
+The code you write will immediately be tested against:
+* \`npm install\`
+* \`npm run build\` (Must succeed and generate \`.d.ts\` files)
+* \`npm run lint\` (Must pass with zero issues)
+* \`npm test\` (Must pass and meet 90% coverage)
+
+If you fail these, you fail the job.
+`;
+
+  // Initial log entry for workflow start
+  await logAuditEntry(workingDir, {
+    workflow_run_id: workflowId,
+    step_name: 'workflow_start',
+    context_file_hash: 'TODO: Calculate hash of masterContext', // TODO: Implement SHA-256 hash
+    validation_status: 'N/A',
+  });
+  
+  // 3. Scaffolding Phase
+  await executeGeminiAgent({
+    workingDir,
+    contextContent: masterContext,
+    instruction: `
+      Read the BernierLLC requirements. Create all configuration files (package.json, tsconfig.json, jest.config.js, .eslintrc.js) and the README.md structure.
+      Ensure package.json includes scripts for build, test, and lint as per requirements.
+    `
+  });
+  await logAuditEntry(workingDir, {
+    workflow_run_id: workflowId,
+    step_name: 'scaffolding_complete',
+    validation_status: 'N/A',
+  });
+  
+  // 4. Implementation Phase
+  await executeGeminiAgent({
+    workingDir,
+    contextContent: masterContext, // Re-use the master context
+    instruction: `
+      Read the 'PACKAGE SPEC' section in GEMINI.md. Generate all source code files and initial tests, ensuring 90% coverage and full compliance with all BernierLLC constraints.
+    `
+  });
+  await logAuditEntry(workingDir, {
+    workflow_run_id: workflowId,
+    step_name: 'implementation_complete',
+    validation_status: 'N/A',
+  });
+
+  // 5. The Audited Verification Loop
+  let attempts = 0;
+  const MAX_REPAIR_ATTEMPTS = 3;
+  let isGreen = false;
+
+  while (attempts < MAX_REPAIR_ATTEMPTS && !isGreen) {
+    attempts++;
+    console.log(`[Workflow] Running compliance checks, Attempt ${attempts}/${MAX_REPAIR_ATTEMPTS}`);
+    
+    // A. Run Compliance Checks
+    const validation = await runComplianceChecks(workingDir);
+    
+    const auditEntry = {
+        workflow_run_id: workflowId,
+        step_name: attempts === 1 ? 'initial_verification' : `repair_attempt_${attempts}`,
+        success: validation.success,
+        validation_status: validation.success ? 'pass' : 'fail' as 'pass' | 'fail',
+        commands_attempted: validation.commandsRun,
+        error_type: validation.success ? 'N/A' : (validation.errors?.[0]?.type || 'UNKNOWN_ERROR'),
+        error_full: validation.success ? null : validation.output,
+        // TODO: Add token counts when executeGeminiAgent provides them
+    };
+
+    // B. Log the result
+    await logAuditEntry(workingDir, auditEntry);
+
+    if (validation.success) {
+      isGreen = true;
+      console.log(`[Workflow] Compliance checks passed on attempt ${attempts}.`);
+      break;
+    }
+
+    // C. If Red, orchestrate the Fix
+    console.log(`[Workflow] Validation failed (Attempt ${attempts}). Requesting fix...`);
+
+    const fixPrompt = `
+      The build/validation failed with the following errors. 
+      Analyze the errors carefully. Fix the code files to resolve these issues.
+      
+      --- FAILURE LOG ---
+      ${validation.output}
+      -------------------
+      
+      Return ONLY the fixed code actions. Do not explain.
+    `;
+
+    await executeGeminiAgent({
+      workingDir,
+      contextContent: masterContext, // Provide full context for the agent to fix
+      instruction: fixPrompt
+    });
+  }
+
+  if (!isGreen) {
+    throw new ApplicationFailure(`
+      Failed to meet publishing requirements after ${MAX_REPAIR_ATTEMPTS} attempts.
+      Manual review required. Check audit_trace.jsonl in ${workingDir} for details.
+    `, 'BuildFailure', true // Non-retryable from workflow perspective
+    );
+  }
+
+  console.log(`[Workflow] Core Package Verified Green at ${workingDir}. Audit trail generated.`);
+  return `Core Package Verified Green in ${workingDir}. Audit trail in audit_trace.jsonl.`;
 }
 
 /**
