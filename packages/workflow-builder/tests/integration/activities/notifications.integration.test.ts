@@ -28,7 +28,7 @@ describe('Notification Activities - Integration', () => {
     // Note: These tests require a real Slack webhook URL or a webhook testing service
     // For CI/CD, use a webhook testing service like webhook.site or httpbin.org
     
-    it.skip('should send notification to real Slack webhook', async () => {
+    it('should send notification to real Slack webhook', async () => {
       // Skip in CI unless webhook URL is provided via environment variable
       const webhookUrl = process.env.TEST_SLACK_WEBHOOK_URL;
       if (!webhookUrl) {
@@ -146,7 +146,7 @@ describe('Notification Activities - Integration', () => {
       expect(result.slackNotified).toBe(false);
     });
 
-    it.skip('should send error alert to Slack when configured', async () => {
+    it('should send error alert to Slack when configured', async () => {
       const webhookUrl = process.env.TEST_SLACK_WEBHOOK_URL;
       if (!webhookUrl) {
         console.log('Skipping: TEST_SLACK_WEBHOOK_URL not set');

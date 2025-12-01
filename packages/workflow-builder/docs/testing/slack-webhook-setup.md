@@ -27,7 +27,7 @@ This guide explains how to set up a Slack webhook URL for testing notification a
 
 1. Scroll down to **"Webhook URLs for Your Workspace"**
 2. Click **"Add New Webhook to Workspace"**
-3. Select the channel where you want test notifications to appear (e.g., `#testing` or `#workflow-builder`)
+3. Select the channel where you want test notifications to appear (e.g., `#package-builder-workflow`)
 4. Click **"Allow"**
 5. **Copy the webhook URL** - it will look like:
    ```

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "gen:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/database.ts",
     "sync:components": "tsx src/scripts/sync-components.ts",
+    "register:activities": "tsx scripts/register-activities.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",

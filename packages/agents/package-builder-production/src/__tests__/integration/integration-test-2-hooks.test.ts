@@ -33,6 +33,11 @@ describe('Integration Test 2: Hook Execution Verification', () => {
     } catch {}
   });
 
+  afterAll(async () => {
+    // Final cleanup - ensure no lingering processes
+    await new Promise(resolve => setTimeout(resolve, 100));
+  });
+
   it('should create log files when hooks are configured', async () => {
     // Create .claude directory structure
     const claudeDir = path.join(testWorkspace, '.claude');

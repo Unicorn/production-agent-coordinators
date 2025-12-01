@@ -25,6 +25,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'node:url';
 import type { ClaudeAuditedBuildWorkflowResult } from './claude-workflows';
+import { cleanupTestResources } from './test-cleanup-utils';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -200,13 +201,56 @@ async function main(): Promise<void> {
   console.log('\n🔌 Connecting to Temporal...');
   const temporalAddress = process.env.TEMPORAL_ADDRESS || 'localhost:7233';
 
+  let connection: Connection | null = null;
+  let client: Client | null = null;
+  const workspacePaths: string[] = [];
+
+  // Setup cleanup handler
+  const cleanup = async () => {
+    if (client && workflowId) {
+      try {
+        await cleanupTestResources(client, {
+          workflowIds: [workflowId],
+          workspacePaths,
+          cancelWorkflows: true,
+          removeWorkspaces: true,
+          killProcesses: false, // Don't kill processes automatically
+        });
+      } catch (error) {
+        console.error('⚠️  Error during cleanup:', error);
+      }
+    }
+    if (connection) {
+      await connection.close();
+    }
+  };
+
+  // Register cleanup handlers
+  process.on('SIGINT', async () => {
+    console.log('\n\n⚠️  Interrupted - cleaning up...');
+    await cleanup();
+    process.exit(1);
+  });
+
+  process.on('SIGTERM', async () => {
+    console.log('\n\n⚠️  Terminated - cleaning up...');
+    await cleanup();
+    process.exit(1);
+  });
+
+  process.on('uncaughtException', async (error) => {
+    console.error('\n\n❌ Uncaught exception - cleaning up...', error);
+    await cleanup();
+    process.exit(1);
+  });
+
   try {
-    const connection = await Connection.connect({
+    connection = await Connection.connect({
       address: temporalAddress,
     });
     console.log(`✅ Connected to Temporal at ${temporalAddress}`);
 
-    const client = new Client({
+    client = new Client({
       connection,
       namespace: process.env.TEMPORAL_NAMESPACE || 'default',
     });
@@ -252,8 +296,35 @@ async function main(): Promise<void> {
     console.log(`   (Check Temporal UI at http://localhost:8233)`);
     console.log(`   (This may take several minutes)\n`);
 
-    // Wait for result
-    const result = await handle.result() as ClaudeAuditedBuildWorkflowResult;
+    // Wait for result with timeout
+    const resultPromise = handle.result();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Workflow execution timeout (30 minutes)')), 30 * 60 * 1000)
+    );
+
+    let result: ClaudeAuditedBuildWorkflowResult;
+    try {
+      result = await Promise.race([resultPromise, timeoutPromise]) as ClaudeAuditedBuildWorkflowResult;
+    } catch (error: any) {
+      if (error.message.includes('timeout')) {
+        console.error('\n❌ Workflow execution timed out after 30 minutes');
+        console.error('   Cancelling workflow and cleaning up...');
+        await handle.cancel();
+        await cleanup();
+        process.exit(1);
+      }
+      throw error;
+    }
+
+    // Track workspace for cleanup
+    if (result.workspacePath) {
+      try {
+        await fs.access(result.workspacePath);
+        workspacePaths.push(result.workspacePath);
+      } catch {
+        // Workspace doesn't exist, skip cleanup
+      }
+    }
 
     console.log('\n✅ Workflow completed successfully!');
     console.log('═'.repeat(60));
@@ -302,6 +373,21 @@ async function main(): Promise<void> {
 
     console.log('\n✅ Integration test completed successfully!');
 
+    // Cleanup on success (optional - comment out to keep workspace for inspection)
+    if (process.env.KEEP_WORKSPACE !== 'true') {
+      console.log('\n🧹 Cleaning up test resources...');
+      await cleanupTestResources(client, {
+        workflowIds: [workflowId],
+        workspacePaths,
+        cancelWorkflows: false, // Already completed
+        removeWorkspaces: true,
+        killProcesses: false,
+      });
+    } else {
+      console.log('\nℹ️  Keeping workspace (KEEP_WORKSPACE=true)');
+      console.log(`   Workspace: ${result.workspacePath}`);
+    }
+
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('UNAVAILABLE') || error.message.includes('connect')) {
@@ -316,6 +402,26 @@ async function main(): Promise<void> {
       }
     } else {
       console.error('\n❌ Unknown error:', error);
+    }
+
+    // Cleanup on error
+    if (client && workflowId) {
+      console.log('\n🧹 Cleaning up after error...');
+      try {
+        await cleanupTestResources(client, {
+          workflowIds: [workflowId],
+          workspacePaths,
+          cancelWorkflows: true,
+          removeWorkspaces: true,
+          killProcesses: false,
+        });
+      } catch (cleanupError) {
+        console.error('⚠️  Error during cleanup:', cleanupError);
+      }
+    }
+
+    if (connection) {
+      await connection.close();
     }
     process.exit(1);
   }

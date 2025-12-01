@@ -4,10 +4,16 @@
  * Tests that credential checks work correctly in various scenarios
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { checkCredentials, formatCredentialsError } from '../../activities/credentials.activities.js';
 
 describe('Integration Test 1: Credential Checks', () => {
+  // Cleanup after all tests
+  afterAll(async () => {
+    // No specific cleanup needed for credential checks
+    // But we ensure no lingering processes
+    await new Promise(resolve => setTimeout(resolve, 100));
+  });
   it('should check all credentials when requested', async () => {
     const status = await checkCredentials({
       checkGitHub: true,
