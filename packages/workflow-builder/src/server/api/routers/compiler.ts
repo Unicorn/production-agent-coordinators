@@ -8,6 +8,9 @@ import { createTRPCRouter, protectedProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { WorkflowCompiler } from '@/lib/compiler';
 import type { WorkflowDefinition } from '@/lib/compiler/types';
+import { batchWriteFiles, runBuildCommand, gitStatus, sendErrorAlert } from '@/lib/activities';
+import path from 'path';
+import os from 'os';
 
 /**
  * Zod schema for workflow node
@@ -136,15 +139,20 @@ export const compilerRouter = createTRPCRouter({
       strictMode: z.boolean().default(true),
       optimizationLevel: z.enum(['none', 'basic', 'aggressive']).default('basic'),
       saveToDatabase: z.boolean().default(true),
+      // Phase 1.8: File system integration
+      writeToDisk: z.boolean().default(false),
+      outputPath: z.string().optional(), // If not provided, uses temp directory
+      validateCode: z.boolean().default(false), // Run build command after writing
+      commitToGit: z.boolean().default(false), // Commit generated code to git
     }))
     .mutation(async ({ ctx, input }) => {
       // Fetch workflow from database
-      const { data: workflowData, error: workflowError } = await ctx.supabase
+        const { data: workflowData, error: workflowError } = await ((ctx.supabase as any)
         .from('workflows')
         .select('*')
         .eq('id', input.workflowId)
-        .eq('created_by', ctx.user.id)
-        .single();
+        .eq('created_by', (ctx.user as any).id)
+        .single());
 
       if (workflowError || !workflowData) {
         throw new TRPCError({
@@ -177,13 +185,122 @@ export const compilerRouter = createTRPCRouter({
 
       // Save compiled code to database if requested
       if (input.saveToDatabase && result.workflowCode) {
-        await ctx.supabase
+        await ((ctx.supabase as any)
           .from('workflows')
           .update({
             compiled_typescript: result.workflowCode,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', input.workflowId);
+          .eq('id', input.workflowId));
+      }
+
+      // Phase 1.8: Write generated code to disk if requested
+      let writtenFiles: string[] = [];
+      let outputDirectory: string | undefined;
+      let validationResult: { success: boolean; errors?: any[] } | undefined;
+      
+      if (input.writeToDisk && result.workflowCode) {
+        // Determine output directory
+        outputDirectory = input.outputPath || path.join(
+          os.tmpdir(),
+          'workflow-builder',
+          'compiled',
+          input.workflowId
+        );
+
+        // Prepare files to write
+        const fileOperations = [
+          { path: 'src/workflow.ts', content: result.workflowCode, operation: 'create' as const },
+          { path: 'src/activities.ts', content: result.activitiesCode || '', operation: 'create' as const },
+          { path: 'src/worker.ts', content: result.workerCode || '', operation: 'create' as const },
+        ];
+
+        // Add package.json and tsconfig.json if available
+        if (result.packageJson) {
+          fileOperations.push({
+            path: 'package.json',
+            content: result.packageJson,
+            operation: 'create' as const,
+          });
+        }
+
+        if (result.tsConfig) {
+          fileOperations.push({
+            path: 'tsconfig.json',
+            content: result.tsConfig,
+            operation: 'create' as const,
+          });
+        }
+
+        // Write files using batchWriteFiles activity
+        const writeResult = await batchWriteFiles({
+          operations: fileOperations,
+          baseDir: outputDirectory,
+          atomic: true,
+        });
+
+        if (!writeResult.success) {
+          // Log error but don't fail the compilation
+          const errorMessage = typeof writeResult.error === 'string' ? writeResult.error : 'Unknown error';
+          console.error('Failed to write files to disk:', errorMessage);
+          await sendErrorAlert({
+            executionId: input.workflowId,
+            error: `Failed to write compiled code to disk: ${errorMessage}`,
+            severity: 'medium',
+            context: {
+              workflowId: input.workflowId,
+              stepName: 'file-write',
+            },
+          });
+        } else if (outputDirectory) {
+          // Extract written file paths from the result
+          writtenFiles = fileOperations.map(op => path.join(outputDirectory!, op.path));
+        }
+
+        // Phase 1.8: Validate generated code if requested
+        if (input.validateCode && outputDirectory && writeResult.success) {
+          const buildResult = await runBuildCommand({
+            command: 'npm',
+            subcommand: 'run',
+            args: ['build'],
+            workingDir: outputDirectory,
+            timeout: 60000, // 60 seconds
+          });
+
+          const buildErrors = buildResult.buildErrors || [];
+          validationResult = {
+            success: buildResult.success,
+            errors: buildErrors,
+          };
+
+          if (!buildResult.success) {
+            // Send error alert for validation failures
+            const errorMessage = typeof buildResult.error === 'string' ? buildResult.error : 'Generated code validation failed';
+            await sendErrorAlert({
+              executionId: input.workflowId,
+              error: errorMessage,
+              severity: 'high',
+              context: {
+                workflowId: input.workflowId,
+                stepName: 'code-validation',
+                buildErrors: buildErrors,
+              },
+            });
+          }
+        }
+
+        // Phase 1.8: Git integration (check status, optionally commit)
+        if (input.commitToGit && outputDirectory) {
+          const status = await gitStatus({
+            workspacePath: outputDirectory,
+          });
+
+          if (status.hasChanges && !status.isClean) {
+            // Note: We don't have a gitCommit activity yet, so we'll just report the status
+            // In the future, we could add gitCommit activity and use it here
+            console.log(`Git status: ${status.stagedFiles.length} staged, ${status.unstagedFiles.length} unstaged, ${status.untrackedFiles.length} untracked`);
+          }
+        }
       }
 
       return {
@@ -196,6 +313,12 @@ export const compilerRouter = createTRPCRouter({
         errors: result.errors || [],
         warnings: result.warnings || [],
         metadata: result.metadata,
+        // Phase 1.8: File system integration results
+        ...(input.writeToDisk && {
+          writtenFiles,
+          outputDirectory,
+          validationResult,
+        }),
       };
     }),
 
@@ -218,7 +341,7 @@ export const compilerRouter = createTRPCRouter({
       });
 
       // Compile workflow
-      const result = compiler.compile(input.workflow);
+      const result = compiler.compile(input.workflow as any);
 
       return {
         success: result.success,
@@ -241,12 +364,12 @@ export const compilerRouter = createTRPCRouter({
       workflowId: z.string(),
     }))
     .query(async ({ ctx, input }) => {
-      const { data: workflow, error } = await ctx.supabase
+      const { data: workflow, error } = await ((ctx.supabase as any)
         .from('workflows')
         .select('id, name, compiled_typescript, updated_at')
         .eq('id', input.workflowId)
-        .eq('created_by', ctx.user.id)
-        .single();
+        .eq('created_by', (ctx.user as any).id)
+        .single());
 
       if (error || !workflow) {
         throw new TRPCError({
@@ -255,7 +378,8 @@ export const compilerRouter = createTRPCRouter({
         });
       }
 
-      if (!workflow.compiled_typescript) {
+      const workflowData = workflow as any;
+      if (!workflowData.compiled_typescript) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Workflow has not been compiled yet',
@@ -263,10 +387,10 @@ export const compilerRouter = createTRPCRouter({
       }
 
       return {
-        id: workflow.id,
-        name: workflow.name,
-        compiledCode: workflow.compiled_typescript,
-        compiledAt: workflow.updated_at,
+        id: workflowData.id,
+        name: workflowData.name,
+        compiledCode: workflowData.compiled_typescript,
+        compiledAt: workflowData.updated_at,
       };
     }),
 
@@ -283,12 +407,12 @@ export const compilerRouter = createTRPCRouter({
 
       if (input.workflowId) {
         // Fetch from database
-        const { data: workflowData, error: workflowError } = await ctx.supabase
-          .from('workflows')
-          .select('*')
-          .eq('id', input.workflowId)
-          .eq('created_by', ctx.user.id)
-          .single();
+        const { data: workflowData, error: workflowError } = await ((ctx.supabase as any)
+        .from('workflows')
+        .select('*')
+        .eq('id', input.workflowId)
+        .eq('created_by', (ctx.user as any).id)
+        .single());
 
         if (workflowError || !workflowData) {
           throw new TRPCError({
@@ -297,9 +421,9 @@ export const compilerRouter = createTRPCRouter({
           });
         }
 
-        workflowDef = convertToWorkflowDefinition(workflowData);
+        workflowDef = convertToWorkflowDefinition(workflowData) as any;
       } else if (input.workflow) {
-        workflowDef = input.workflow;
+        workflowDef = input.workflow as any;
       } else {
         throw new TRPCError({
           code: 'BAD_REQUEST',
@@ -332,12 +456,12 @@ export const compilerRouter = createTRPCRouter({
     }))
     .query(async ({ ctx, input }) => {
       // Fetch workflow from database
-      const { data: workflowData, error: workflowError } = await ctx.supabase
+        const { data: workflowData, error: workflowError } = await ((ctx.supabase as any)
         .from('workflows')
         .select('*')
         .eq('id', input.workflowId)
-        .eq('created_by', ctx.user.id)
-        .single();
+        .eq('created_by', (ctx.user as any).id)
+        .single());
 
       if (workflowError || !workflowData) {
         throw new TRPCError({
