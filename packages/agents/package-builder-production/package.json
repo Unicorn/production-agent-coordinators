@@ -16,7 +16,8 @@
     "test:integration:phase4": "vitest run integration/phase4-e2e.test.ts",
     "test:integration:phase4:watch": "vitest integration/phase4-e2e.test.ts",
     "start:worker": "node dist/worker.js",
-    "optimization-dashboard": "tsx src/scripts/optimization-dashboard.ts"
+    "optimization-dashboard": "tsx src/scripts/optimization-dashboard.ts",
+    "optimization-runner": "tsx src/scripts/optimization-runner.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

@@ -253,23 +253,30 @@ describe('Git Activities - Integration', () => {
     });
 
     it('should create tag at specific commit', async () => {
+      // Get the initial commit hash before creating second commit
+      const initialCommitHash = execSync('git rev-parse HEAD', { cwd: gitRepoDir, encoding: 'utf-8' }).trim();
+      
       // Create second commit
       await fs.writeFile(path.join(gitRepoDir, 'file2.txt'), 'content2');
       execSync('git add file2.txt', { cwd: gitRepoDir });
       execSync('git commit -m "Second commit"', { cwd: gitRepoDir });
-      const commitHash = execSync('git rev-parse HEAD~1', { cwd: gitRepoDir, encoding: 'utf-8' }).trim();
+      
+      // Verify we now have 2 commits
+      const currentHead = execSync('git rev-parse HEAD', { cwd: gitRepoDir, encoding: 'utf-8' }).trim();
+      const previousCommit = execSync('git rev-parse HEAD~1', { cwd: gitRepoDir, encoding: 'utf-8' }).trim();
+      expect(previousCommit).toBe(initialCommitHash);
 
       const result = await createTag({
         workspacePath: gitRepoDir,
         tagName: 'v0.9.0',
-        commitHash,
+        commitHash: previousCommit,
       });
 
       expect(result.success).toBe(true);
 
       // Verify tag points to correct commit
       const tagCommit = execSync('git rev-parse v0.9.0', { cwd: gitRepoDir, encoding: 'utf-8' }).trim();
-      expect(tagCommit).toBe(commitHash);
+      expect(tagCommit).toBe(previousCommit);
     });
 
     it('should handle duplicate tag creation', async () => {

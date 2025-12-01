@@ -480,18 +480,24 @@ export async function createTag(
   }
 
   // Build git tag command
+  // Git tag syntax: git tag [-a] [-m message] <tagname> [<commit>]
+  // The commit hash must come at the END, after the tag name
   const args: string[] = ['tag'];
 
   if (annotated) {
     // For annotated tags, always provide a message (use tagName as default if none provided)
     const tagMessage = message || `Tag ${tagName}`;
-    args.push('-a', tagName, '-m', tagMessage);
+    args.push('-a');
+    args.push('-m', tagMessage);
+    args.push(tagName);
+    if (commitHash) {
+      args.push(commitHash);
+    }
   } else {
     args.push(tagName);
-  }
-
-  if (commitHash) {
-    args.push(commitHash);
+    if (commitHash) {
+      args.push(commitHash);
+    }
   }
 
   const result = await executeGitCommand(workspacePath, args);
