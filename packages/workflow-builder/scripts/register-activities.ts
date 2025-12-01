@@ -18,6 +18,11 @@ import { createClient } from '@supabase/supabase-js';
 import { createActivityRegistry } from '../src/lib/activities/activity-registry';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
@@ -898,9 +903,7 @@ async function registerAllActivities() {
 }
 
 // Run if executed directly
-if (require.main === module) {
-  registerAllActivities();
-}
+registerAllActivities();
 
 export { registerAllActivities, activities };
 
