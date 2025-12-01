@@ -36,8 +36,9 @@ for pattern in "${PATTERNS[@]}"; do
   
   # List running workflows
   RUNNING=$(temporal workflow list --query "WorkflowId LIKE '${pattern}%'" --status RUNNING 2>/dev/null | grep -c "${pattern}" || echo "0")
+  RUNNING=$(echo "$RUNNING" | tr -d '\n' | head -c 1)  # Get first digit only
   
-  if [ "$RUNNING" -gt 0 ]; then
+  if [ -n "$RUNNING" ] && [ "$RUNNING" -gt 0 ] 2>/dev/null; then
     echo -e "${YELLOW}Found ${RUNNING} running workflows matching ${pattern}${NC}"
     
     # Cancel each workflow
