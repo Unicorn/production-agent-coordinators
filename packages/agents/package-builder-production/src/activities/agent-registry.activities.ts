@@ -6,7 +6,7 @@ import type { AgentRegistry, AgentRegistryEntry, ProblemType } from '../types/co
 export async function loadAgentRegistry(agentDir?: string): Promise<AgentRegistry> {
   const dir = agentDir || path.join(process.env.HOME || '~', '.claude/agents')
 
-  let customAgents: AgentRegistryEntry[] = []
+  const customAgents: AgentRegistryEntry[] = []
 
   try {
     await fs.access(dir)

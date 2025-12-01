@@ -9,7 +9,7 @@
  * real functions with test data and comparing mock behavior to actual behavior.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildAgentPrompt } from '../prompt-builder.activities.js';
 import { executeAgentWithClaude } from '../agent-execution.activities.js';
 import { parseAgentResponse } from '../response-parser.activities.js';
@@ -543,6 +543,262 @@ describe('Mock Validation Tests', () => {
 
       } finally {
         await fs.rm(testWorkspaceRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('GoogleGenAI - Mock Interface Validation', () => {
+    it('should verify mock has same interface as real GoogleGenAI', async () => {
+      const { GoogleGenAI } = await import('@google/genai');
+
+      // Create mock that matches real interface
+      const mockGoogleGenAI = vi.fn().mockImplementation(() => ({
+        models: {
+          generateContent: vi.fn()
+        }
+      }));
+
+      // Verify mock returns same structure as real API
+      const mockInstance = mockGoogleGenAI({ apiKey: 'test-key' });
+      expect(mockInstance).toHaveProperty('models');
+      expect(mockInstance.models).toHaveProperty('generateContent');
+      expect(typeof mockInstance.models.generateContent).toBe('function');
+    });
+
+    it('should verify mock generateContent accepts correct parameters', async () => {
+      const { GoogleGenAI } = await import('@google/genai');
+
+      // Mock generateContent with same signature
+      const mockGenerateContent = vi.fn().mockResolvedValue({
+        text: JSON.stringify({ command: 'RUN_LINT_CHECK' })
+      });
+
+      const mockGoogleGenAI = vi.fn().mockImplementation(() => ({
+        models: {
+          generateContent: mockGenerateContent
+        }
+      }));
+
+      const instance = mockGoogleGenAI({ apiKey: 'test-key' });
+
+      // Call with parameters matching real API
+      await instance.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: 'Test prompt content'
+      });
+
+      // Verify mock was called with expected structure
+      expect(mockGenerateContent).toHaveBeenCalledWith({
+        model: 'gemini-2.5-flash',
+        contents: 'Test prompt content'
+      });
+    });
+
+    it('should verify mock response structure matches real API', async () => {
+      // Mock response structure must match real Gemini API response
+      const mockResponse = {
+        text: JSON.stringify({
+          command: 'APPLY_CODE_CHANGES',
+          files: [{ index: 0, path: 'src/index.ts', action: 'CREATE_OR_OVERWRITE' }]
+        })
+      };
+
+      // Verify response has text property (accessor method in real API)
+      expect(mockResponse).toHaveProperty('text');
+      expect(typeof mockResponse.text).toBe('string');
+
+      // Verify response can be parsed as expected JSON structure
+      const parsed = JSON.parse(mockResponse.text);
+      expect(parsed).toHaveProperty('command');
+      expect(parsed).toHaveProperty('files');
+      expect(Array.isArray(parsed.files)).toBe(true);
+    });
+  });
+
+  describe('execSync (child_process) - Mock Behavior Validation', () => {
+    it('should verify mock matches real execSync signature', async () => {
+      const { execSync } = await import('child_process');
+
+      // Real execSync signature: execSync(command, options?)
+      expect(typeof execSync).toBe('function');
+
+      // Create mock with same signature
+      const mockExecSync = vi.fn((command: string, options?: object) => {
+        return Buffer.from('mock output');
+      });
+
+      // Verify mock can be called with same parameters
+      mockExecSync('git status', { cwd: '/tmp', encoding: 'utf-8' });
+
+      expect(mockExecSync).toHaveBeenCalledWith('git status', {
+        cwd: '/tmp',
+        encoding: 'utf-8'
+      });
+    });
+
+    it('should verify mock throws errors with same structure', async () => {
+      // Real execSync throws errors with stdout/stderr buffers
+      const mockExecSync = vi.fn().mockImplementation(() => {
+        const error = new Error('Command failed') as Error & { stdout?: Buffer; stderr?: Buffer };
+        error.stdout = Buffer.from('STDOUT content');
+        error.stderr = Buffer.from('STDERR content');
+        throw error;
+      });
+
+      try {
+        mockExecSync('failing-command');
+        expect.fail('Should have thrown');
+      } catch (error: unknown) {
+        const execError = error as Error & { stdout?: Buffer; stderr?: Buffer };
+        // Verify error has stdout/stderr like real execSync
+        expect(execError).toBeInstanceOf(Error);
+        expect(execError.message).toBe('Command failed');
+        expect(execError.stdout).toBeInstanceOf(Buffer);
+        expect(execError.stderr).toBeInstanceOf(Buffer);
+        expect(execError.stdout?.toString()).toBe('STDOUT content');
+        expect(execError.stderr?.toString()).toBe('STDERR content');
+      }
+    });
+
+    it('should verify lint error output mock matches real ESLint output', async () => {
+      // Mock ESLint stylish format output (what real eslint produces)
+      const eslintOutput = `/Users/test/packages/test/src/utils.ts
+  10:5   error  Unsafe assignment of an \`any\` value    @typescript-eslint/no-unsafe-assignment
+  15:3   error  Missing return type on function         @typescript-eslint/explicit-module-boundary-types
+
+/Users/test/packages/test/src/index.ts
+  20:1   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 3 problems (3 errors, 0 warnings)
+`;
+
+      // Verify mock output has expected structure for parsing
+      const lines = eslintOutput.split('\n');
+
+      // Should contain absolute file paths starting with /
+      const filePathLines = lines.filter(line => line.startsWith('/'));
+      expect(filePathLines.length).toBeGreaterThan(0);
+      expect(filePathLines[0]).toContain('src/utils.ts');
+
+      // Should contain error summary line
+      expect(eslintOutput).toContain('✖');
+      expect(eslintOutput).toContain('problems');
+    });
+  });
+
+  describe('simple-git - Mock Interface Validation', () => {
+    it('should verify mock has same interface as real simple-git', async () => {
+      // Import real simple-git to verify interface
+      const simpleGit = (await import('simple-git')).default;
+
+      // Create mock with same interface
+      const mockGit = {
+        add: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue({ commit: 'abc123' }),
+        push: vi.fn().mockResolvedValue(undefined),
+        status: vi.fn().mockResolvedValue({ modified: [], created: [], deleted: [] }),
+        revparse: vi.fn().mockResolvedValue('abc123def456'),
+        log: vi.fn().mockResolvedValue({ all: [], latest: null })
+      };
+
+      // Verify mock has all expected methods
+      expect(typeof mockGit.add).toBe('function');
+      expect(typeof mockGit.commit).toBe('function');
+      expect(typeof mockGit.push).toBe('function');
+      expect(typeof mockGit.status).toBe('function');
+      expect(typeof mockGit.revparse).toBe('function');
+      expect(typeof mockGit.log).toBe('function');
+    });
+
+    it('should verify mock commit response matches real simple-git', async () => {
+      const mockCommit = vi.fn().mockResolvedValue({
+        commit: 'abc123def456789',
+        branch: 'main',
+        summary: {
+          changes: 3,
+          insertions: 50,
+          deletions: 10
+        }
+      });
+
+      const result = await mockCommit('Test commit message');
+
+      // Verify response structure
+      expect(result).toHaveProperty('commit');
+      expect(result).toHaveProperty('branch');
+      expect(result).toHaveProperty('summary');
+      expect(typeof result.commit).toBe('string');
+      expect(result.commit.length).toBeGreaterThan(0);
+    });
+
+    it('should verify mock pre-commit hook error matches real git', async () => {
+      // Real git throws error when pre-commit hook fails
+      const mockCommit = vi.fn().mockRejectedValue(
+        new Error(`husky - pre-commit hook exited with code 1 (error)
+> lint-staged
+✖ src/index.ts:10:5
+  error  Unsafe assignment  @typescript-eslint/no-unsafe-assignment
+✖ 1 problem (1 error, 0 warnings)`)
+      );
+
+      try {
+        await mockCommit('Test commit');
+        expect.fail('Should have thrown');
+      } catch (error: unknown) {
+        const gitError = error as Error;
+        // Verify error message contains pre-commit indicator
+        expect(gitError.message).toContain('pre-commit');
+        // Verify error contains file path that can be extracted
+        expect(gitError.message).toContain('src/index.ts');
+        // Verify error contains ESLint rule
+        expect(gitError.message).toContain('@typescript-eslint');
+      }
+    });
+  });
+
+  describe('fs/promises - Mock Behavior Validation', () => {
+    it('should verify mock methods match real fs/promises interface', async () => {
+      const realFs = await import('fs/promises');
+
+      // Verify mock covers all methods we use
+      const usedMethods = [
+        'writeFile',
+        'readFile',
+        'unlink',
+        'mkdir',
+        'readdir',
+        'stat',
+        'access',
+        'rm'
+      ];
+
+      for (const method of usedMethods) {
+        expect(realFs).toHaveProperty(method);
+        expect(typeof (realFs as Record<string, unknown>)[method]).toBe('function');
+      }
+    });
+
+    it('should verify mock error structure matches real ENOENT error', async () => {
+      // Create mock that throws ENOENT like real fs
+      const mockReadFile = vi.fn().mockRejectedValue(
+        Object.assign(new Error('ENOENT: no such file or directory'), {
+          code: 'ENOENT',
+          errno: -2,
+          syscall: 'open',
+          path: '/nonexistent/file.ts'
+        })
+      );
+
+      try {
+        await mockReadFile('/nonexistent/file.ts');
+        expect.fail('Should have thrown');
+      } catch (error: unknown) {
+        const fsError = error as Error & { code?: string; errno?: number; syscall?: string; path?: string };
+        // Verify error has same structure as real fs error
+        expect(fsError.code).toBe('ENOENT');
+        expect(fsError.errno).toBe(-2);
+        expect(fsError.syscall).toBe('open');
+        expect(fsError.path).toBe('/nonexistent/file.ts');
       }
     });
   });

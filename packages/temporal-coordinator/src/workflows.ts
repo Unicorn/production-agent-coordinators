@@ -8,9 +8,7 @@
  * no Math.random(). Use activities for all non-deterministic operations.
  */
 
-declare const workflow: typeof import('@temporalio/workflow'); // Temporary global declaration for TypeScript
-
-import { proxyActivities, ApplicationFailure } from '@temporalio/workflow';
+import { proxyActivities, ApplicationFailure, workflowInfo } from '@temporalio/workflow';
 import type * as activities from './activities';
 import type { EngineState, AgentResponse } from '@coordinator/contracts';
 
@@ -125,7 +123,7 @@ export async function helloWorkflow(
           [stepId]: {
             ...step,
             status: 'IN_PROGRESS',
-            updatedAt: (workflow as any).now(), // Workflow time is deterministic in Temporal
+            updatedAt: Date.now(), // Temporal intercepts Date.now() making it deterministic
           },
         },
       };
@@ -153,7 +151,7 @@ export async function helloWorkflow(
           goalId,
           workflowId: 'temporal-workflow',
           stepId,
-          runId: `run-${(workflow as any).now()}`,
+          runId: `run-${Date.now()}`,
           agentRole: 'agent',
           status: 'FAIL',
           errors: [
@@ -205,7 +203,7 @@ export async function multiStepWorkflow(
  * including scaffolding, implementation, compliance checks, and an auditing/repair loop.
  */
 export async function AuditedBuildWorkflow(specFileContent: string, requirementsFileContent: string): Promise<string> {
-  const workflowId = (workflow as any).info.workflowId; // Get workflow ID for logging
+  const workflowId = workflowInfo().workflowId; // Get workflow ID for logging
 
   // 1. Setup Workspace
   const workingDir = await setupWorkspace('/tmp/gemini-builds');
@@ -347,3 +345,13 @@ If you fail these, you fail the job.
 export { PackageBuildWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/package-build.workflow.js'
 export { CoordinatorWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/coordinator.workflow.js'
 export { AgentExecutorWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/agent-executor.workflow.js'
+
+/**
+ * Claude CLI Workflows
+ * Re-export from claude-workflows module
+ */
+export {
+  ClaudeAuditedBuildWorkflow,
+  ClaudeSimpleBuildWorkflow,
+  ClaudePremiumBuildWorkflow,
+} from './claude-workflows.js'

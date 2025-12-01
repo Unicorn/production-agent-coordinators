@@ -6,7 +6,7 @@ import type {
   IStorage,
   ILogger,
 } from "@coordinator/contracts";
-import { Container } from "./container";
+import { Container } from "./container.js";
 
 /**
  * Coordinator - High-level orchestration layer

@@ -1,0 +1,65 @@
+## Testing Standards – Workflow Builder
+
+### Global Principles
+
+- **Reality first**: Prefer real Temporal, real compilation, and real network flows wherever reasonable.
+- **Mocks require proof**:
+  - Any mock must have a **verification test** that checks its behavior against the real dependency for the cases we rely on.
+  - Mocks are scoped to individual test suites; avoid global “magic” mocks.
+- **Deterministic & observable**:
+  - Tests should be deterministic given a running `yarn infra:up` stack.
+  - On failure, logs and artifacts must make the root cause clear.
+
+### Layers to Cover
+
+1. **Model & Helpers**
+   - Pure TypeScript logic – no IO.
+   - 100% coverage goal for critical helpers (timeout parsing, retry policies, workflow validation).
+2. **Compiler & Generators**
+   - Snapshot + invariant tests for generated TypeScript.
+   - Assert:
+     - Exported workflow function name equals `workflow.name`.
+     - All activities referenced in nodes are exported.
+     - Timeouts and retries are wired into `proxyActivities` correctly.
+3. **Temporal Integration**
+   - Real Temporal instance from `yarn infra:up`.
+   - Integration tests for:
+     - Simple workflows.
+     - Timeouts (activity + workflow).
+     - Retries and backoff strategies.
+     - Cancellations and concurrent workflows.
+4. **UI & UX**
+   - React component tests for core UI elements (palette, builder canvas, service containers).
+   - Playwright E2E flows for:
+     - Building and running a workflow.
+     - Configuring timeouts and retries end-to-end.
+
+### Temporal Usage
+
+- **Canonical instance**: Use `yarn infra:up` (root `package.json`) as the local Temporal stack.
+- **Connection defaults**:
+  - `TEMPORAL_ADDRESS=localhost:7233`
+  - `TEMPORAL_NAMESPACE=default`
+- **Test commands**:
+  - `yarn infra:up` (once).
+  - Then run integration and E2E suites from `packages/workflow-builder`.
+
+### Test Suite Structure (Workflow Builder)
+
+- `test:unit`:
+  - Model + helper + generator tests.
+  - Must not require Temporal or Docker.
+- `test:integration`:
+  - Temporal integration tests (`tests/integration/compiler-execution/**`).
+  - Require `yarn infra:up`.
+- `test:e2e`:
+  - UI E2E via Playwright.
+  - Require `yarn infra:up` + dev server.
+
+### Failure Diagnostics
+
+- Enable `WORKFLOW_BUILDER_TEST_DEBUG=1` in CI or local when deep debugging:
+  - Preserve generated `workflows/index.ts` for failing tests.
+  - Log exported workflow function names.
+  - Write minimal JSON artifacts (workflow name, ID, key history event types).
+

@@ -255,7 +255,7 @@ ${indentStr}// Workflow started`;
       if (retryPolicy && retryPolicy.strategy !== 'none') {
         const retryPolicyCode = generateRetryPolicyCode(retryPolicy, indentStr);
         if (retryPolicyCode) {
-          activityOptions.push(`retry: ${retryPolicyCode.replace(/^  /gm, '    ')}`);
+          activityOptions.push(`retry: ${retryPolicyCode.replace(/^ {2}/gm, '    ')}`);
         }
       }
       

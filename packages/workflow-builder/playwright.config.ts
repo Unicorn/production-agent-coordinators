@@ -18,6 +18,8 @@ export default defineConfig({
   testDir: './tests/e2e',
   /* Run tests in files in parallel */
   fullyParallel: false,
+  /* Maximum number of test failures before stopping */
+  maxFailures: process.env.CI ? 10 : undefined,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
@@ -49,15 +51,16 @@ export default defineConfig({
   /* Configure projects for major browsers */
   projects: [
     // Setup project - runs first to authenticate and save session
-    // Runs in HEADED mode to avoid headless auth issues
+    // Uses browser-based login to ensure Supabase cookies are set correctly
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        headless: false, // Run setup in headed mode to avoid auth issues
+        // Run in headless mode for CI, but can be overridden for debugging
+        headless: process.env.CI ? true : false,
       },
-      timeout: 60000, // Increase timeout for setup (60 seconds)
+      timeout: 120000, // 2 minutes for setup (includes user creation + login)
     },
     
     // Authenticated tests - use saved session from setup
@@ -83,12 +86,16 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  // Disabled - assume dev server is already running
-  // To enable: uncomment and ensure no dev server is running
-  // webServer: {
-  //   command: 'yarn dev',
-  //   url: 'http://localhost:3010',
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 120 * 1000,
-  // },
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3010',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
+
+  /* Global setup and teardown */
+  globalSetup: undefined, // No global setup needed
+  globalTeardown: './tests/e2e/helpers/teardown.ts',
 });

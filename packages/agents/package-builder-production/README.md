@@ -1,247 +1,293 @@
 # Production Package Builder Agent
 
-This is the production implementation of the Package Builder agent with real build, test, and publish capabilities.
+AI-powered package generation using Temporal workflows with Gemini 2.0 Flash.
+
+## Quick Start
+
+### Prerequisites
+
+1. **Environment Variables** - Create a `.env` file in the monorepo root:
+
+```bash
+# Required for Gemini-based package generation
+GEMINI_API_KEY=your-gemini-api-key
+
+# Required for publishing (optional for generation only)
+NPM_TOKEN=npm_xxxxx
+
+# Where packages will be generated (your tools monorepo)
+WORKSPACE_ROOT=/Users/mattbernier/projects/tools
+
+# Temporal settings (defaults shown)
+TEMPORAL_ADDRESS=localhost:7233
+TEMPORAL_NAMESPACE=default
+```
+
+2. **Build the project**:
+
+```bash
+# From monorepo root
+yarn install
+yarn build
+```
+
+---
+
+## Running the Workflow
+
+### Step 1: Start Temporal Infrastructure
+
+```bash
+# From monorepo root - starts Temporal, PostgreSQL, Redis, and Temporal UI
+yarn infra:up
+
+# Verify Temporal is running (wait ~30 seconds for healthy status)
+docker ps | grep temporal
+
+# View logs if needed
+yarn infra:logs
+```
+
+**Temporal UI**: http://localhost:8080
+
+### Step 2: Start the Worker
+
+```bash
+# From monorepo root
+cd packages/agents/package-builder-production
+
+# Build first (if not already built)
+yarn build
+
+# Start the worker (runs both 'engine' and 'turn-based-coding' queues)
+yarn start:worker
+```
+
+You should see:
+```
+🔨 Package Builder Workers starting (multi-queue mode)...
+
+✅ Engine Worker ready
+   Task Queue: engine
+   Max Concurrent Activities: 5
+   Max Concurrent Workflow Tasks: 10
+✅ Turn-Based Coding Worker ready
+   Task Queue: turn-based-coding
+   Max Concurrent Activities: 1 (Gemini API rate limit control)
+   Max Concurrent Workflow Tasks: 1
+
+   Namespace: default
+   Ready to execute all workflow types
+```
+
+### Step 3: Start a Package Build Workflow
+
+```bash
+# From monorepo root
+yarn build:package /path/to/your/plan.md
+
+# Example with full path:
+yarn build:package ~/projects/tools/plans/packages/core/data-validator.md
+```
+
+**Alternative - Run directly with tsx:**
+```bash
+npx tsx production/scripts/build-package.ts /path/to/plan.md
+```
+
+---
+
+## Plan File Format
+
+The workflow reads a markdown plan file to understand what package to build. Example:
+
+```markdown
+# @bernierllc/my-package
+
+**Package:** `@bernierllc/my-package`
+**Type:** utility
+**Status:** Planning
 
 ## Overview
 
-Unlike the stub implementation in the upstream framework, this agent:
-- Actually runs `npm install` / `yarn install`
-- Runs real test suites
-- Publishes packages to npm registry
-- Uses real credentials and configurations
+A brief description of what this package does.
 
-## Implementation
+## Requirements
 
-```typescript
-import type { Agent } from '@coordinator/contracts';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+### Core Features
+- Feature 1
+- Feature 2
 
-const execAsync = promisify(exec);
+## Dependencies
 
-export class ProductionSuiteBuilderAgent implements Agent {
-  name = 'package-builder-production';
-  capabilities = ['build-package', 'test-package', 'publish-package'];
+- `@bernierllc/logger`: For logging (if needed)
 
-  async execute(instruction: string): Promise<string> {
-    // Parse instruction
-    const match = instruction.match(/^(\w+)-package: (.+)$/);
-    if (!match) {
-      throw new Error(\`Invalid instruction: \${instruction}\`);
-    }
+## Package Structure
 
-    const [, action, packageName] = match;
+\`\`\`
+@bernierllc/my-package/
+├── src/
+│   ├── index.ts
+│   └── types.ts
+├── tests/
+│   └── index.test.ts
+├── package.json
+└── README.md
+\`\`\`
 
-    switch (action) {
-      case 'build':
-        return this.buildPackage(packageName);
-      case 'test':
-        return this.testPackage(packageName);
-      case 'publish':
-        return this.publishPackage(packageName);
-      default:
-        throw new Error(\`Unknown action: \${action}\`);
-    }
-  }
+## API Design
 
-  private async buildPackage(packageName: string): Promise<string> {
-    try {
-      // Real implementation would:
-      // 1. Clone/checkout the package
-      // 2. Run npm install
-      // 3. Run build commands
-      // 4. Return build output
-
-      const { stdout, stderr } = await execAsync(\`yarn workspace \${packageName} build\`);
-      return \`Built \${packageName}\\n\${stdout}\`;
-    } catch (error) {
-      throw new Error(\`Failed to build \${packageName}: \${error}\`);
-    }
-  }
-
-  private async testPackage(packageName: string): Promise<string> {
-    try {
-      const { stdout } = await execAsync(\`yarn workspace \${packageName} test\`);
-      return \`Tests passed for \${packageName}\\n\${stdout}\`;
-    } catch (error) {
-      throw new Error(\`Tests failed for \${packageName}: \${error}\`);
-    }
-  }
-
-  private async publishPackage(packageName: string): Promise<string> {
-    try {
-      const { stdout } = await execAsync(\`yarn workspace \${packageName} publish\`);
-      return \`Published \${packageName}\\n\${stdout}\`;
-    } catch (error) {
-      throw new Error(\`Failed to publish \${packageName}: \${error}\`);
-    }
-  }
-}
+\`\`\`typescript
+export function myFunction(): void;
+\`\`\`
 ```
 
-## Configuration
+See `test-harness/fixtures/sample-plan.md` for a complete example.
 
-Create `production/configs/build-env.json`:
+---
 
-```json
-{
-  "npmRegistry": "https://registry.npmjs.org/",
-  "npmToken": "npm_...",
-  "workspaceRoot": "/Users/mattbernier/projects/tools",
-  "maxConcurrentBuilds": 4
-}
+## Workflow Architecture
+
+### Gemini Turn-Based Agent (Active)
+
+The workflow uses **Gemini 2.0 Flash** in a turn-based loop:
+
+1. **AI decides next action** - Gemini analyzes current state and chooses a command
+2. **Execute command** - Apply code changes, run linting, run tests, etc.
+3. **Update context** - Record results in action history
+4. **Repeat** - Up to 40 iterations until package is complete
+
+**Commands the AI can choose:**
+- `APPLY_CODE_CHANGES` - Create/modify files with git commit
+- `RUN_LINT_CHECK` - Run linting and report errors
+- `RUN_UNIT_TESTS` - Run tests and report coverage
+- `CHECK_LICENSE_HEADERS` - Validate license headers
+- `VALIDATE_PACKAGE_JSON` - Validate package.json structure
+- `PUBLISH_PACKAGE` - Publish to npm
+- `DONE` - Mark workflow complete
+- `REQUEST_HUMAN_INTERVENTION` - Ask for help when stuck
+
+### Task Queues
+
+- **`engine`** - Parent coordinator workflow (PackageBuildWorkflow)
+- **`turn-based-coding`** - Gemini agent child workflows (rate-limited to 1 concurrent)
+
+---
+
+## Monitoring
+
+### Temporal UI
+
+Open http://localhost:8080 to:
+- View running/completed workflows
+- See workflow history and events
+- Inspect activity inputs/outputs
+- Debug failures
+
+### Console Output
+
+The worker logs all activity to stdout:
+```
+[Gemini] Iteration 1/40
+[Gemini] AI chose command: APPLY_CODE_CHANGES
+[Gemini] Files modified: src/index.ts, src/types.ts
+[Gemini] Iteration 2/40
+[Gemini] AI chose command: RUN_LINT_CHECK
+[Gemini] Lint passed!
+...
 ```
 
-## Turn-Based Package Generation
+---
 
-For large or complex packages that exceed token limits or require comprehensive generation with recovery support, use the turn-based workflow.
-
-### Overview
-
-Turn-based generation breaks package scaffolding into 15 focused phases, each with its own Claude API call, git commit, and state checkpoint. This approach:
-
-- Avoids hitting Claude API token limits (16K output, 200K context)
-- Spreads work over time to comply with rate limits (8000 tokens/minute)
-- Enables recovery from failures without starting over
-- Provides clear phase-by-phase progress tracking
-- Commits after each phase for easy debugging
-
-### Quick Start
-
-```typescript
-import { PackageBuildTurnBasedWorkflow } from '@bernierllc/package-builder-production';
-import type { TurnBasedPackageBuildInput } from '@bernierllc/package-builder-production';
-
-const input: TurnBasedPackageBuildInput = {
-  packageName: '@bernierllc/data-validator',
-  packagePath: 'packages/core/data-validator',
-  planPath: 'plans/packages/core/data-validator.md',
-  category: 'core',
-  dependencies: [],
-  workspaceRoot: process.cwd(),
-  config: {
-    // ... your build config ...
-    turnBasedGeneration: {
-      enabled: true
-    }
-  },
-  enableTurnBasedGeneration: true
-};
-
-const handle = await client.workflow.start(PackageBuildTurnBasedWorkflow, {
-  taskQueue: 'package-builder',
-  args: [input]
-});
-```
-
-### The 15 Phases
-
-1. **PLANNING** - Create plan and architecture blueprint (5000 tokens)
-2. **FOUNDATION** - Generate config files (3000 tokens)
-3. **TYPES** - Generate type definitions (4000 tokens)
-4. **CORE_IMPLEMENTATION** - Implement main functionality (8000 tokens)
-5. **ENTRY_POINT** - Create barrel file (2000 tokens)
-6. **UTILITIES** - Generate utility functions (4000 tokens)
-7. **ERROR_HANDLING** - Create error classes (3000 tokens)
-8. **TESTING** - Generate test suite (6000 tokens)
-9. **DOCUMENTATION** - Write README and docs (3000 tokens)
-10. **EXAMPLES** - Create usage examples (4000 tokens)
-11. **INTEGRATION_REVIEW** - Review integrations (4000 tokens)
-12. **CRITICAL_FIXES** - Fix issues from review (5000 tokens)
-13. **BUILD_VALIDATION** - Validate build and tests (4000 tokens)
-14. **FINAL_POLISH** - Final quality pass (3000 tokens)
-15. **MERGE** - Prepare for merge (manual)
-
-Total execution time: 25-35 minutes
-
-### When to Use Turn-Based
-
-Use turn-based generation for:
-
-- Core packages requiring 90% test coverage
-- Packages with 10+ source files
-- Complex integrations (logger, neverhub)
-- High-value packages requiring comprehensive testing
-- Recovery from previous generation failures
-
-Use original single-shot workflow for:
-
-- Simple utility packages
-- Fewer than 5 source files
-- Quick prototypes
-- Time-sensitive generation
-
-### Recovery from Failures
-
-If a turn-based workflow fails, resume from the last successful phase:
-
-```typescript
-import { loadGenerationState } from '@bernierllc/package-builder-production';
-
-// Load failed session context
-const context = await loadGenerationState('gen-1732198765432', process.cwd());
-
-if (context) {
-  // Resume with same input, adding context
-  const resumeInput: TurnBasedPackageBuildInput = {
-    ...originalInput,
-    resumeFromContext: context
-  };
-
-  const handle = await client.workflow.start(PackageBuildTurnBasedWorkflow, {
-    taskQueue: 'package-builder',
-    args: [resumeInput]
-  });
-}
-```
-
-### Monitoring Progress
-
-State files track progress in `.generation-state/` directory:
+## Stopping Everything
 
 ```bash
-# Watch current phase
-watch -n 2 'cat .generation-state/gen-*.json | jq ".currentPhase, .currentStepNumber"'
+# Stop the worker
+Ctrl+C in the worker terminal
 
-# View git commits per phase
-git log --oneline feat/package-generation-<timestamp>
+# Stop Temporal infrastructure
+yarn infra:down
 ```
 
-### Documentation
+---
 
-Comprehensive documentation available:
+## Troubleshooting
 
-- **[Architecture](./docs/architecture/turn-based-generation.md)** - System design, phases, state management
-- **[Operator Guide](./docs/guides/turn-based-generation-guide.md)** - Configuration, monitoring, recovery, troubleshooting
-- **[Migration Guide](./docs/guides/migrating-to-turn-based.md)** - When to use, migration steps, rollback procedures
-
-## Usage
-
-Register this agent instead of the stub when running production workflows:
-
-```typescript
-import { Engine } from '@coordinator/engine';
-import { ProductionSuiteBuilderAgent } from './packages/agents/package-builder-production';
-
-const engine = new Engine();
-engine.registerAgent(new ProductionSuiteBuilderAgent());
-```
-
-## Testing
-
-Test the production agent with a small package first:
-
+### "GEMINI_API_KEY not found"
 ```bash
-cd production/scripts
-tsx test-production-agent.ts
+# Make sure .env is in monorepo root with:
+GEMINI_API_KEY=your-key
 ```
 
-## Security
+### "Connection refused to localhost:7233"
+```bash
+# Temporal isn't running. Start it:
+yarn infra:up
 
-This agent requires:
-- NPM authentication token
-- Write access to npm registry
-- Access to source code repositories
-- Claude API key with appropriate rate limits
+# Wait for healthy status:
+docker ps | grep temporal
+```
 
-Keep credentials in production/configs/ (gitignored).
+### "Worker not picking up workflows"
+```bash
+# Make sure worker is running on correct queue
+# Check that build completed: yarn build
+# Restart worker: yarn start:worker
+```
+
+### "Workflow timed out"
+- Check Temporal UI for error details
+- Gemini API rate limits may have been hit
+- Try running again (workflow state is checkpointed)
+
+---
+
+## Configuration Options
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GEMINI_API_KEY` | (required) | Google Gemini API key |
+| `NPM_TOKEN` | (required for publish) | npm authentication token |
+| `WORKSPACE_ROOT` | (required) | Where packages are generated |
+| `TEMPORAL_ADDRESS` | `localhost:7233` | Temporal server address |
+| `TEMPORAL_NAMESPACE` | `default` | Temporal namespace |
+| `TEMPORAL_TASK_QUEUE` | (multi-queue) | Override to single queue mode |
+| `MAX_CONCURRENT_ACTIVITY_EXECUTIONS` | `5` | Activity concurrency limit |
+| `MAX_CONCURRENT_WORKFLOW_EXECUTIONS` | `10` | Workflow concurrency limit |
+| `DRY_RUN` | `false` | Skip actual npm publish |
+
+### Single Queue Mode (Advanced)
+
+To run only one task queue:
+```bash
+TEMPORAL_TASK_QUEUE=engine yarn start:worker
+# or
+TEMPORAL_TASK_QUEUE=turn-based-coding yarn start:worker
+```
+
+---
+
+## Development
+
+### Running Tests
+```bash
+cd packages/agents/package-builder-production
+yarn test          # Run all tests
+yarn test gemini   # Run only Gemini-related tests
+```
+
+### Test Harness
+```bash
+# Test file operations without running full workflow
+npx tsx test-harness/test-file-operations.ts
+```
+
+---
+
+## Related Documentation
+
+- [Turn-Based Architecture](./docs/architecture/turn-based-generation.md)
+- [Operator Guide](./docs/guides/turn-based-generation-guide.md)
+- [Migration Guide](./docs/guides/migrating-to-turn-based.md)

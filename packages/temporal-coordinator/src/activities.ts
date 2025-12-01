@@ -1,14 +1,14 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { fileURLToPath } from 'url';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import Handlebars from 'handlebars';
 import Anthropic from '@anthropic-ai/sdk';
 
-const execPromise = promisify(exec);
+const execPromise = promisify(exec); // Directly assign
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,11 +66,18 @@ export async function executeGeminiAgent({ instruction, workingDir, contextConte
     console.log(`[Activity] Wrote GEMINI.md to ${workingDir}`);
   }
 
-  // 2. Construct the CLI Command
+  // 2. Construct the CLI Command (Updated for new Gemini CLI syntax)
   // --yolo: Auto-executes file creation/shell commands (Dangerous but necessary for agents)
-  // --output-format json: Returns structured data we can parse
-  // --context: Explicitly point to the context file we just wrote
-  const command = `gemini --prompt "${instruction.replace(/"/g, '\\"')}" --context GEMINI.md --output-format json --yolo`;
+  // -o json: Returns structured data we can parse
+  // Note: New CLI uses positional prompt and doesn't have --context flag
+  // We tell Gemini to read the GEMINI.md file in the instruction itself
+  const fullInstruction = contextContent
+    ? `First, read the GEMINI.md file in the current directory for project requirements and context. Then: ${instruction}`
+    : instruction;
+
+  // Escape the instruction for shell and use positional prompt syntax
+  const escapedInstruction = fullInstruction.replace(/'/g, "'\\''");
+  const command = `gemini '${escapedInstruction}' --yolo -o json`;
 
   try {
     const { stdout, stderr } = await execPromise(command, { cwd: workingDir });

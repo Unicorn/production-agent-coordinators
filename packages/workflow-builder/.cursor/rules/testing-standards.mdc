@@ -9,6 +9,8 @@
 
 The Workflow Builder uses a **layered testing strategy** with clear requirements at each level. All new code must include appropriate tests.
 
+**CRITICAL:** Testing must be planned and included from the beginning. See `planning-standards.mdc` for requirements on including testing in planning documents and implementation.
+
 ---
 
 ## Testing Layers
@@ -263,9 +265,23 @@ tests/
 
 ---
 
+## Planning Integration
+
+**MANDATORY:** All planning documents must include comprehensive testing requirements. See `planning-standards.mdc` for:
+- Testing requirements in plans
+- Testing tasks in checklists
+- Test coverage planning
+- Test strategy documentation
+
+**No feature is complete without tests.** Testing must be planned alongside implementation, not deferred.
+
+---
+
 ## References
 
+- **Planning Standards**: See `planning-standards.mdc` - Testing requirements in planning
 - [Testing Guide](../../docs/testing/README.md)
 - [Testing Architecture Plan](../../plans/testing/2025-11-26-testing-architecture-master-plan.md)
+- [UI/Compiler Activities Plan](../../plans/ui-compiler-activities.md) - Comprehensive testing strategy
 - [AGENTINFO.md](../../AGENTINFO.md) - Testing requirements section
 - [Phase Plans](../../plans/testing/) - Detailed phase breakdowns

@@ -11,6 +11,18 @@
       "types": "./dist/activities.d.ts",
       "import": "./dist/activities.js"
     },
+    "./claude-activities": {
+      "types": "./dist/claude-activities.d.ts",
+      "import": "./dist/claude-activities.js"
+    },
+    "./dist/activities.js": {
+      "types": "./dist/activities.d.ts",
+      "import": "./dist/activities.js"
+    },
+    "./dist/claude-activities.js": {
+      "types": "./dist/claude-activities.d.ts",
+      "import": "./dist/claude-activities.js"
+    },
     "./workflows": {
       "types": "./dist/workflows.d.ts",
       "import": "./dist/workflows.js"
@@ -24,6 +36,8 @@
     "build": "tsc",
     "build:worker": "node build-worker.js",
     "start:worker": "node dist/worker.bundle.js",
+    "worker": "npm run build && node dist/worker.js",
+    "test:client": "npx tsx src/test-audited-build-client.ts",
     "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {

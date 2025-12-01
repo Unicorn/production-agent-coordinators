@@ -154,7 +154,15 @@ describe('Build Activities', () => {
       });
 
       expect(result.passed).toBe(false);
-      expect(result.failures.length).toBeGreaterThan(0);
+      // STRONG assertion: Verify failures array exists and has at least one failure
+      expect(result.failures.length).toBeGreaterThanOrEqual(1);
+      // STRONG assertion: Verify failure object structure with exact file/line/message
+      expect(result.failures[0]).toMatchObject({
+        type: 'lint',
+        file: 'src/index.ts',
+        line: 10,
+        message: 'Missing semicolon'
+      });
     });
 
     it('should use cwd option instead of cd command (security fix)', async () => {
@@ -266,12 +274,16 @@ describe('Build Activities', () => {
 
       const result = await buildDependencyGraph('/tmp/test-audit-report.json');
 
-      expect(result.length).toBeGreaterThan(0);
-      expect(result[0]).toHaveProperty('name');
-      expect(result[0]).toHaveProperty('category');
-      expect(result[0]).toHaveProperty('layer');
-      expect(result[0]).toHaveProperty('dependencies');
-      expect(result[0]).toHaveProperty('buildStatus');
+      // STRONG assertion: Exact count - suite + 2 dependencies = 3 packages
+      expect(result.length).toBe(3);
+      // STRONG assertion: Verify first package has correct structure
+      expect(result[0]).toMatchObject({
+        name: expect.stringContaining('@bernierllc/'),
+        category: expect.stringMatching(/^(validator|core|utility|service|ui|suite)$/),
+        layer: expect.any(Number),
+        dependencies: expect.any(Array),
+        buildStatus: 'pending'
+      });
     });
 
     it('should categorize packages correctly', async () => {
@@ -300,12 +312,13 @@ describe('Build Activities', () => {
       const ui = result.find(p => p.category === 'ui');
       const suite = result.find(p => p.category === 'suite');
 
-      expect(validator).toBeDefined();
-      expect(core).toBeDefined();
-      expect(utility).toBeDefined();
-      expect(service).toBeDefined();
-      expect(ui).toBeDefined();
-      expect(suite).toBeDefined();
+      // STRONG assertions: Verify each package has correct name pattern
+      expect(validator?.name).toBe('@bernierllc/validator-base');
+      expect(core?.name).toBe('@bernierllc/core-types');
+      expect(utility?.name).toBe('@bernierllc/util-helpers');
+      expect(service?.name).toBe('@bernierllc/service-api');
+      expect(ui?.name).toBe('@bernierllc/ui-components');
+      expect(suite?.name).toBe('@bernierllc/content-management-suite');
     });
 
     it('should assign layers based on category', async () => {

@@ -1,6 +1,5 @@
 import { proxyActivities, startChild, defineSignal } from '@temporalio/workflow';
 import { PackageBuildWorkflow } from './package-build.workflow.js';
-import { TurnBasedCodingAgentWorkflow } from './turn-based-coding-agent.workflow.js';
 import type {
   PackageBuilderInput,
   PackageBuilderState,
@@ -203,15 +202,8 @@ async function buildPhase(state: PackageBuilderState, workspaceRoot: string, con
 
       console.log(`[Build] Starting child workflow for ${pkg.name}`);
 
-      // Select workflow based on feature flag
-      const enableTurnBased = config.features?.enableTurnBasedGeneration ?? false;
-      const childWorkflow = enableTurnBased
-        ? TurnBasedCodingAgentWorkflow
-        : PackageBuildWorkflow;
-
-      if (enableTurnBased) {
-        console.log(`[Build] Using turn-based coding agent workflow for ${pkg.name}`);
-      }
+      // Always use PackageBuildWorkflow with CLI agents
+      const childWorkflow = PackageBuildWorkflow;
 
       const packageDir = pkg.name.split('/')[1];
       const categoryDir = categoryToDirectory(pkg.category);
@@ -219,25 +211,16 @@ async function buildPhase(state: PackageBuilderState, workspaceRoot: string, con
       // Spawn child workflow (non-blocking - just gets the handle)
       const handle = await startChild(childWorkflow, {
         workflowId: `build-${state.buildId}-${pkg.name}`,
-        taskQueue: enableTurnBased ? 'turn-based-coding' : 'engine',
-        args: enableTurnBased
-          ? [{
-              task: 'build-package',
-              prompt: `Build ${pkg.name} package according to the plan file`,
-              workspaceRoot,
-              targetPath: `packages/${categoryDir}/${packageDir}`,
-              contextPaths: [`plans/packages/${categoryDir}/${packageDir}.md`],
-              category: pkg.category
-            }]
-          : [{
-              packageName: pkg.name,
-              packagePath: `packages/${categoryDir}/${packageDir}`,
-              planPath: `plans/packages/${categoryDir}/${packageDir}.md`,
-              category: pkg.category,
-              dependencies: pkg.dependencies,
-              workspaceRoot,
-              config
-            }]
+        taskQueue: 'engine',
+        args: [{
+          packageName: pkg.name,
+          packagePath: `packages/${categoryDir}/${packageDir}`,
+          planPath: `plans/packages/${categoryDir}/${packageDir}.md`,
+          category: pkg.category,
+          dependencies: pkg.dependencies,
+          workspaceRoot,
+          config
+        }]
       });
 
       activeBuilds.set(pkg.name, { handle, packageName: pkg.name });

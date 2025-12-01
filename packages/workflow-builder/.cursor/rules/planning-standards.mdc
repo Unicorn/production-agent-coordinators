@@ -1,0 +1,345 @@
+# Planning Standards - Workflow Builder
+
+**Last Updated**: 2025-01-20  
+**Related**: `testing-standards.mdc`, `testing.mdc`
+
+---
+
+## Overview
+
+All planning documents and implementation work MUST include comprehensive testing requirements. Testing is not optional—it is a core requirement that must be planned and implemented alongside all features.
+
+---
+
+## Planning Phase Requirements
+
+### 1. Testing Requirements in Plans
+
+**MANDATORY:** Every plan document (`./plans/**/*.md`) MUST include a "Testing Strategy" section that covers:
+
+#### 1.1 Backend Testing Requirements
+
+**For Activities, Services, and API Routes:**
+- ✅ **Unit Tests**: Test individual functions in isolation
+- ✅ **Integration Tests**: Test with real dependencies (Temporal, Supabase, file system)
+- ✅ **Error Handling Tests**: Test all error paths and edge cases
+- ✅ **Performance Tests**: Test resource limits, timeouts, and concurrent operations
+
+**Required Coverage:**
+- Minimum 90% code coverage for activities
+- 100% coverage for error handling paths
+- All public functions must have tests
+
+**Example Plan Section:**
+```markdown
+## Testing Strategy
+
+### Backend Activity Testing
+
+#### Unit Tests
+- Test `readFile` activity with various file types
+- Test error handling (file not found, permissions, etc.)
+- Test path validation and security
+- Location: `tests/unit/activities/file-system.test.ts`
+
+#### Integration Tests
+- Test real file operations in temp directories
+- Test with actual file system (not mocks)
+- Test cleanup and resource management
+- Location: `tests/integration/activities/file-system.integration.test.ts`
+```
+
+#### 1.2 Frontend Testing Requirements
+
+**For UI Components and Pages:**
+- ✅ **Component Tests**: Test React components with React Testing Library
+- ✅ **E2E Tests**: Test complete user flows with Playwright
+- ✅ **Accessibility Tests**: Test ARIA attributes and keyboard navigation
+- ✅ **Error State Tests**: Test error handling and user feedback
+
+**Required Coverage:**
+- Minimum 80% code coverage for UI components
+- 100% coverage for critical user flows
+- All user interactions must be tested
+
+**Example Plan Section:**
+```markdown
+### Frontend Component Testing
+
+#### Component Tests
+- Test `WorkflowEditor` component rendering
+- Test user interactions (clicks, form inputs)
+- Test error states and validation
+- Location: `tests/ui/components/workflow-editor.test.tsx`
+
+#### E2E Tests
+- Test complete workflow: create → edit → save → compile
+- Test error handling and user feedback
+- Test notifications and status updates
+- Location: `tests/e2e/ui/workflow-management.spec.ts`
+```
+
+#### 1.3 Generated Code Validation Requirements
+
+**For Compiler and Code Generation:**
+- ✅ **Code Generation Tests**: Verify generated code is valid TypeScript
+- ✅ **Compilation Tests**: Verify generated code compiles without errors
+- ✅ **Execution Tests**: Verify generated code executes correctly in Temporal
+- ✅ **Package Structure Tests**: Verify package.json, tsconfig.json, file structure
+
+**Required Coverage:**
+- 100% coverage for all workflow types
+- 100% coverage for validation logic
+- All generated code patterns must be tested
+
+**Example Plan Section:**
+```markdown
+### Generated Code Validation
+
+#### Code Generation Tests
+- Test TypeScript syntax validation
+- Test import statements and dependencies
+- Test type safety (no `any` types)
+- Location: `tests/integration/compiler-output/code-generation.test.ts`
+
+#### Execution Tests
+- Test generated workflows execute in Temporal
+- Test activity calls and error handling
+- Test retry logic and timeouts
+- Location: `tests/integration/compiler-execution/end-to-end.test.ts`
+```
+
+---
+
+### 2. Testing Tasks in Plan Checklists
+
+**MANDATORY:** Every plan checklist MUST include testing tasks:
+
+```markdown
+## Implementation Tasks
+
+### Phase 1: Core Implementation
+- [ ] Implement `readFile` activity
+- [ ] Implement `writeFile` activity
+- [ ] Write unit tests for file system activities
+- [ ] Write integration tests for file system activities
+- [ ] Test error handling and edge cases
+
+### Phase 2: UI Integration
+- [ ] Create `WorkflowEditor` component
+- [ ] Write component tests
+- [ ] Write E2E tests for workflow management
+- [ ] Test error states and user feedback
+
+### Phase 3: Compiler Integration
+- [ ] Integrate file system activities with compiler
+- [ ] Test code generation with real file operations
+- [ ] Test generated code compilation
+- [ ] Test generated code execution
+```
+
+**Testing tasks must be:**
+- ✅ Included in the same phase as implementation
+- ✅ Not deferred to "later" or "future"
+- ✅ Specific and actionable
+- ✅ Linked to test file locations
+
+---
+
+### 3. Testing Considerations During Planning
+
+**When creating plans, consider:**
+
+#### 3.1 Testability Requirements
+
+- **Design for testability**: Plan interfaces and abstractions that are easy to test
+- **Avoid tight coupling**: Design components that can be tested in isolation
+- **Plan test data**: Consider what test fixtures and helpers are needed
+- **Plan test infrastructure**: Consider what external services are needed (Temporal, Supabase, etc.)
+
+#### 3.2 Test Coverage Planning
+
+- **Identify critical paths**: Plan tests for all critical user flows
+- **Identify edge cases**: Plan tests for error scenarios and boundary conditions
+- **Identify integration points**: Plan tests for component interactions
+- **Identify performance requirements**: Plan tests for resource limits and timeouts
+
+#### 3.3 Test Maintenance Planning
+
+- **Plan test organization**: Structure tests to match code organization
+- **Plan test helpers**: Create reusable test utilities and fixtures
+- **Plan test data cleanup**: Ensure tests clean up after themselves
+- **Plan test debugging**: Include debug mode and artifact generation
+
+---
+
+## Implementation Phase Requirements
+
+### 1. Test-Driven Development
+
+**Preferred Approach:**
+- Write tests before or alongside implementation
+- Use tests to guide implementation
+- Refactor based on test feedback
+
+**Minimum Requirement:**
+- Tests must be written before feature is considered complete
+- No feature should be merged without tests
+- Tests must pass before code review
+
+---
+
+### 2. Test Implementation Checklist
+
+**For Each Feature, Verify:**
+
+- [ ] **Unit tests written** for all new functions
+- [ ] **Integration tests written** for all new activities/services
+- [ ] **Component tests written** for all new UI components
+- [ ] **E2E tests written** for all new user flows
+- [ ] **Error handling tested** for all error paths
+- [ ] **Edge cases tested** for boundary conditions
+- [ ] **Performance tested** for resource limits and timeouts
+- [ ] **Accessibility tested** for UI components
+- [ ] **Test coverage meets minimums** (90% backend, 80% frontend, 100% critical paths)
+
+---
+
+### 3. Test Quality Standards
+
+**All tests must:**
+
+- ✅ **Be independent**: Tests must run in any order
+- ✅ **Be isolated**: Tests must not share state
+- ✅ **Be deterministic**: Tests must produce consistent results
+- ✅ **Be fast**: Unit tests should run in milliseconds
+- ✅ **Be maintainable**: Tests should be easy to understand and update
+- ✅ **Be documented**: Complex tests should include comments explaining why
+
+**Test Naming:**
+- Use descriptive test names that explain what is being tested
+- Follow pattern: `should [expected behavior] when [condition]`
+- Example: `should return file content when file exists`
+
+**Test Organization:**
+- Group related tests in `describe` blocks
+- Use `beforeEach`/`afterEach` for setup/teardown
+- Keep test files focused (one file per module/component)
+
+---
+
+## Code Review Requirements
+
+### 1. Testing Review Checklist
+
+**Before approving any PR, verify:**
+
+- [ ] Tests are included for all new code
+- [ ] Tests cover happy paths and error paths
+- [ ] Tests are properly organized and named
+- [ ] Test coverage meets minimum requirements
+- [ ] All tests pass locally and in CI
+- [ ] No flaky tests or test failures
+- [ ] Test data is properly cleaned up
+- [ ] Test helpers and fixtures are reusable
+
+---
+
+### 2. Testing Review Questions
+
+**Ask these questions during code review:**
+
+1. **Coverage**: Do the tests cover all the code paths?
+2. **Edge Cases**: Are edge cases and error scenarios tested?
+3. **Integration**: Are integration points tested?
+4. **Performance**: Are resource limits and timeouts tested?
+5. **Maintainability**: Are tests easy to understand and maintain?
+6. **Isolation**: Are tests independent and isolated?
+7. **Cleanup**: Is test data properly cleaned up?
+
+---
+
+## Testing Documentation Requirements
+
+### 1. Test Documentation in Plans
+
+**Every plan MUST document:**
+
+- **Test Strategy**: How will this feature be tested?
+- **Test Locations**: Where will tests be located?
+- **Test Coverage Goals**: What coverage is required?
+- **Test Dependencies**: What external services are needed?
+- **Test Data**: What test fixtures and helpers are needed?
+
+---
+
+### 2. Test Code Documentation
+
+**Test files should include:**
+
+- **Purpose**: What is being tested?
+- **Setup**: What setup is required?
+- **Dependencies**: What external services are mocked/used?
+- **Cleanup**: How is test data cleaned up?
+
+**Example:**
+```typescript
+/**
+ * Tests for File System Activities
+ * 
+ * Purpose: Verify file system operations work correctly
+ * Setup: Creates temp directory before each test
+ * Dependencies: Uses real file system (not mocks)
+ * Cleanup: Removes temp directory after each test
+ */
+describe('File System Activities', () => {
+  // ...
+});
+```
+
+---
+
+## Integration with Existing Testing Standards
+
+This planning standard integrates with:
+
+- **`testing-standards.mdc`**: Defines testing layers and requirements
+- **`testing.mdc`**: Defines E2E testing standards and best practices
+- **Testing Architecture Plan**: `plans/testing/2025-11-26-testing-architecture-master-plan.md`
+- **UI/Compiler Activities Plan**: `plans/ui-compiler-activities.md` (comprehensive testing strategy)
+
+---
+
+## Enforcement
+
+### Pre-Commit Checks
+
+**Before committing:**
+- Run unit tests: `yarn test:unit`
+- Verify no test failures
+- Verify test coverage meets minimums
+
+### Pre-Push Checks
+
+**Before pushing:**
+- Run all tests: `yarn test`
+- Verify integration tests pass (if Temporal available)
+- Verify E2E tests pass (if dev server available)
+
+### CI/CD Checks
+
+**In CI/CD pipeline:**
+- All tests must pass
+- Test coverage must meet minimums
+- No flaky tests allowed
+- All test artifacts must be generated
+
+---
+
+## References
+
+- **Testing Standards**: See `testing-standards.mdc`
+- **E2E Testing**: See `testing.mdc`
+- **Testing Architecture**: See `plans/testing/2025-11-26-testing-architecture-master-plan.md`
+- **Comprehensive Testing Strategy**: See `plans/ui-compiler-activities.md` (Testing Strategy section)
+- **Development Workflow**: See global rules for general development standards

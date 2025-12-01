@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { spawnFixAgent, verifyDependencies } from '../agent.activities';
 import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock fs module
 vi.mock('fs', () => ({

@@ -42,7 +42,9 @@ export interface DependencyTreeValidation {
  */
 async function checkNpmPackageVersion(packageName: string): Promise<string | null> {
   try {
-    const { stdout } = await execAsync(`npm view ${packageName} version`);
+    // IMPORTANT: Explicitly use npmjs.org registry to avoid Yarn registry conflicts
+    // The --registry flag ensures we check the official npm registry, not yarn's
+    const { stdout } = await execAsync(`npm view ${packageName} version --registry=https://registry.npmjs.org`);
     return stdout.trim() || null;
   } catch (error: any) {
     // Package doesn't exist on npm

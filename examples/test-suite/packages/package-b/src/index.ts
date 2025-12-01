@@ -14,5 +14,6 @@ export {
   toCamelCase,
   generateRandomAlphanumeric,
   safeJsonParse,
-  PackageResult, // Export the interface as well
 } from './utils';
+
+export type { PackageResult } from './types';

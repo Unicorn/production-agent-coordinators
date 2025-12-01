@@ -43,7 +43,7 @@ export async function buildDependencyTree(
   // Topological sort to create layers
   // Layer assignment: max(dependencies' layers) + 1
   const visited = new Set<string>();
-  let maxIterations = tree.tasks.size + 1;
+  const maxIterations = tree.tasks.size + 1;
   let iterations = 0;
 
   while (visited.size < tree.tasks.size) {

@@ -3,10 +3,12 @@
  *
  * This worker runs TWO task queues simultaneously:
  * 1. 'engine' queue - Executes PackageBuilderWorkflow (parent coordinator)
- * 2. 'turn-based-coding' queue - Executes TurnBasedCodingAgentWorkflow (Claude API child workflows)
+ * 2. 'turn-based-coding' queue - Legacy queue (kept for backward compatibility)
+ *    - CLI agents now handle code generation directly in PackageBuildWorkflow
+ *    - No longer uses separate child workflows for code generation
  *
- * The turn-based queue has maxConcurrentWorkflowTaskExecutions: 1 to prevent
- * Claude API rate limiting by ensuring only one coding agent runs at a time.
+ * Note: CLI agents (Gemini/Claude) handle rate limiting internally.
+ * The turn-based-coding queue may be removed in a future version.
  *
  * Start with: yarn workspace @coordinator/agent-package-builder-production start:worker
  */
@@ -79,24 +81,21 @@ async function run() {
   console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
   console.log(`   Max Concurrent Workflow Tasks: ${maxConcurrentWorkflowTasks}`);
 
-  // Worker 2: 'turn-based-coding' queue (Claude API child workflows)
-  // CRITICAL: Both limits set to 1 to prevent Claude API rate limiting
-  //   - maxConcurrentWorkflowTaskExecutions: 1 limits workflow task concurrency
-  //   - maxConcurrentActivityTaskExecutions: 1 limits Claude API call concurrency (THE KEY!)
-  // maxCachedWorkflows: 0 prevents runtime conflicts when running multiple workers in same process
+  // Worker 2: 'turn-based-coding' queue (Legacy - kept for backward compatibility)
+  // NOTE: CLI agents now handle code generation directly in PackageBuildWorkflow
+  // This queue is maintained for backward compatibility but may be removed in future
   const turnBasedWorker = await Worker.create({
     taskQueue: 'turn-based-coding',
     workflowsPath: path.join(__dirname, 'workflows'),
     activities,
-    maxConcurrentActivityTaskExecutions: 1, // ← Only 1 concurrent Claude API call
-    maxConcurrentWorkflowTaskExecutions: 1, // ← Only 1 concurrent workflow task
-    maxCachedWorkflows: 0, // ← Disable caching to avoid runtime conflicts
+    maxConcurrentActivityTaskExecutions: 1,
+    maxConcurrentWorkflowTaskExecutions: 1,
+    maxCachedWorkflows: 0,
   });
 
-  console.log('✅ Turn-Based Coding Worker ready');
+  console.log('✅ Turn-Based Coding Worker ready (legacy queue)');
   console.log(`   Task Queue: turn-based-coding`);
-  console.log(`   Max Concurrent Activities: 1 (Claude API rate limit control)`);
-  console.log(`   Max Concurrent Workflow Tasks: 1`);
+  console.log(`   Note: CLI agents now handle code generation in PackageBuildWorkflow`);
 
   console.log(`\n   Namespace: ${process.env.TEMPORAL_NAMESPACE || 'default'}`);
   console.log('   Ready to execute all workflow types\n');

@@ -7,6 +7,8 @@ export * from './workflows/agent-executor.workflow.js';
 // Activities
 export * from './activities/build.activities.js';
 export * from './activities/agent.activities.js';
+export * from './activities/git.activities.js';
+export * from './activities/credentials.activities.js';
 export * from './activities/report.activities.js';
 export * from './activities/agent-registry.activities.js';
 export * from './activities/coordinator.activities.js';

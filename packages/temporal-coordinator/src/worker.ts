@@ -12,8 +12,15 @@
 
 import { Worker, NativeConnection } from '@temporalio/worker';
 import * as activities from './activities.js';
+import * as claudeActivities from './claude-activities.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+
+// Merge all activities into a single object
+const allActivities = {
+  ...activities,
+  ...claudeActivities,
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,9 +49,9 @@ async function run() {
   console.log('\n📦 Creating worker...');
   console.log('   Task Queue:', process.env.TEMPORAL_TASK_QUEUE || 'agent-coordinator-queue');
   console.log('   Workflows:', workflowsPath);
-  console.log('   Activities: Loaded from activities module');
+  console.log('   Activities: Loaded from activities + claude-activities modules');
   console.log('\n   📋 Registered Activities:');
-  console.log('   ', Object.keys(activities).sort().join(', '));
+  console.log('   ', Object.keys(allActivities).sort().join(', '));
 
   // Worker concurrency limits (configurable via environment variables)
   const maxConcurrentActivities = parseInt(
@@ -62,7 +69,7 @@ async function run() {
     namespace: process.env.TEMPORAL_NAMESPACE || 'default',
     taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'agent-coordinator-queue',
     workflowsPath,
-    activities,
+    activities: allActivities,
     // Worker options
     maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
     maxConcurrentWorkflowTaskExecutions: maxConcurrentWorkflowTasks,

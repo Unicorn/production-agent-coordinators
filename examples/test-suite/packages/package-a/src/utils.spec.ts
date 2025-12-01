@@ -14,8 +14,7 @@ import {
   deepMerge,
   pickKeys,
   formatDate,
-  addDays,
-  PackageResult
+  addDays
 } from './index.js'; // Import from index.js which re-exports everything
 import { ERROR_MESSAGES } from './constants.js';
 

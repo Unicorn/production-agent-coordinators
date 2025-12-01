@@ -431,7 +431,7 @@ describe('Timeout Handling Integration', () => {
       
       // Log for debugging if no timeout event found
       let hasTimeoutEvent = false;
-      let foundEventTypes: string[] = [];
+      const foundEventTypes: string[] = [];
 
       // Temporal history events have attributes like activityTaskTimedOutEventAttributes
       // Check for timeout events in the history

@@ -18,7 +18,6 @@ async function main() {
 
   const outputDir = path.join(process.cwd(), 'test-harness/output');
   const testWorkspace = path.join(outputDir, 'test-package');
-  const workspaceRoot = path.resolve(process.cwd(), '../../..');
 
   try {
     // Clean up any previous test workspace

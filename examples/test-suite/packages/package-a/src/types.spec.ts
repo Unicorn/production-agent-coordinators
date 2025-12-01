@@ -206,7 +206,6 @@ describe('Type Definitions', () => {
 
     it('should work with number base types', () => {
       const q1: Quantity = createQuantity(10);
-      const q2: Quantity = createQuantity(20);
       assertType<Quantity>(q1);
       expect(q1).toBe(10);
 

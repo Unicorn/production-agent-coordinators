@@ -13,9 +13,12 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Local Supabase configuration
+// Supabase configuration - use environment variable or default to local
+// For tests, this should match the NEXT_PUBLIC_SUPABASE_URL in .env.local
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54332';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+
+console.log('🔧 Using Supabase URL:', SUPABASE_URL);
 
 const TEST_USER = {
   email: 'test@example.com',
@@ -94,43 +97,49 @@ async function generateTestAuth() {
 async function saveAuthSession(session: any) {
   console.log('💾 Saving authentication session...');
   
+  // Generate cookie name based on Supabase URL
+  // Supabase SSR uses format: sb-{hostname}-auth-token
+  const supabaseUrl = new URL(SUPABASE_URL);
+  const hostname = supabaseUrl.hostname.replace(/\./g, '-');
+  const cookieName = `sb-${hostname}-auth-token`;
+  
+  console.log(`📝 Using cookie name: ${cookieName} for domain: ${supabaseUrl.hostname}`);
+  
   // Create Playwright storage state format
+  // Set cookies for both localhost and 127.0.0.1 to handle both cases
+  const cookieValue = JSON.stringify({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_in: session.expires_in,
+    expires_at: session.expires_at,
+    token_type: session.token_type,
+    user: session.user,
+  });
+  
   const storageState = {
     cookies: [
+      // Cookie for localhost domain
       {
-        name: 'sb-127-0-0-1-54332-auth-token',
-        value: JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-          expires_in: session.expires_in,
-          expires_at: session.expires_at,
-          token_type: session.token_type,
-          user: session.user,
-        }),
-        domain: '127.0.0.1',
-        path: '/',
-        expires: session.expires_at ? session.expires_at : -1,
-        httpOnly: false,
-        secure: false,
-        sameSite: 'Lax',
-      },
-      {
-        name: 'sb-localhost-auth-token',
-        value: JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-          expires_in: session.expires_in,
-          expires_at: session.expires_at,
-          token_type: session.token_type,
-          user: session.user,
-        }),
+        name: cookieName,
+        value: cookieValue,
         domain: 'localhost',
         path: '/',
         expires: session.expires_at ? session.expires_at : -1,
         httpOnly: false,
         secure: false,
-        sameSite: 'Lax',
+        sameSite: 'Lax' as const,
       },
+      // Cookie for 127.0.0.1 domain (if different)
+      ...(supabaseUrl.hostname === '127.0.0.1' ? [] : [{
+        name: `sb-127-0-0-1-${supabaseUrl.port || '54332'}-auth-token`,
+        value: cookieValue,
+        domain: '127.0.0.1',
+        path: '/',
+        expires: session.expires_at ? session.expires_at : -1,
+        httpOnly: false,
+        secure: false,
+        sameSite: 'Lax' as const,
+      }]),
     ],
     origins: [],
   };

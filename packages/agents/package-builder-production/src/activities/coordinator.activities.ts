@@ -50,7 +50,7 @@ export async function analyzeProblem(
 
   const response = await anthropic.messages.create({
     model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
-    max_tokens: parseInt(process.env.ANTHROPIC_MAX_TOKENS || '4096'),
+    max_tokens: parseInt(process.env.ANTHROPIC_MAX_TOKENS || '2000'),
     temperature: 0.2,
     messages: [{
       role: 'user',

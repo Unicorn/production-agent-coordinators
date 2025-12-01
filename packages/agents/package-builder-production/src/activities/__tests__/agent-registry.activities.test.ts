@@ -45,8 +45,13 @@ This is a test agent for testing purposes.
     const registry = await loadAgentRegistry(tempDir)
 
     const testAgent = registry.agents.find(a => a.name === 'test-agent')
-    expect(testAgent).toBeDefined()
-    expect(testAgent?.capabilities).toEqual(['testing', 'debugging'])
+    // STRONG assertion: Verify full agent structure instead of just toBeDefined
+    expect(testAgent).toMatchObject({
+      name: 'test-agent',
+      capabilities: ['testing', 'debugging'],
+      problemTypes: ['BUILD_FAILURE'],
+      priority: 75
+    })
     expect(testAgent?.problemTypes).toEqual(['BUILD_FAILURE'])
     expect(testAgent?.priority).toBe(75)
   })

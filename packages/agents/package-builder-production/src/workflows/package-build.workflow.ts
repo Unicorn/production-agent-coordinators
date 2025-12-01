@@ -1,13 +1,10 @@
-import { proxyActivities, executeChild } from '@temporalio/workflow';
-import type { PackageBuildInput, PackageBuildResult, PackageBuildReport, PackageAuditContext } from '../types/index';
+import { proxyActivities } from '@temporalio/workflow';
+import type { PackageBuildInput, PackageBuildResult, PackageBuildReport } from '../types/index';
 import type * as activities from '../activities/build.activities';
 import type * as agentActivities from '../activities/agent.activities';
 import type * as reportActivities from '../activities/report.activities';
-// NOTE: Keeping Claude turn-based workflow available for reference
-// import { TurnBasedCodingAgentWorkflow, type TurnBasedCodingAgentInput } from './turn-based-coding-agent.workflow.js';
-
-// Using Gemini turn-based workflow as the active generation method
-import { GeminiTurnBasedAgentWorkflow, type GeminiTurnBasedAgentInput } from './gemini-turn-based-agent.workflow.js';
+import type * as cliActivities from '../activities/cli-agent.activities';
+import type * as resumeActivities from '../activities/resume-detector.activities';
 
 // MCP activities (registered by orchestrator worker)
 interface MCPActivities {
@@ -25,6 +22,22 @@ const { verifyDependencies, spawnFixAgent } = proxyActivities<typeof agentActivi
 
 const { writePackageBuildReport } = proxyActivities<typeof reportActivities>({
   startToCloseTimeout: '1 minute'
+});
+
+const { 
+  executeCLIAgent, 
+  setupCLIWorkspace, 
+  selectCLIProvider,
+  readPlanFileContent,
+  readRequirementsContent
+} = proxyActivities<typeof cliActivities>({
+  startToCloseTimeout: '30 minutes' // CLI operations can take time
+});
+
+const { 
+  detectResumePoint
+} = proxyActivities<typeof resumeActivities>({
+  startToCloseTimeout: '5 minutes'
 });
 
 // loadAgentRegistry no longer needed - coordinator workflow removed
@@ -64,8 +77,8 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     // PRE-FLIGHT VALIDATION: Check package state before proceeding
     // ========================================================================
 
-    // Store audit context for passing to Gemini (if applicable)
-    let packageAuditContext: PackageAuditContext | undefined;
+    // Store audit context for resume detection (if applicable)
+    let packageAuditContext: { status: string; completionPercentage: number; existingFiles: string[]; missingFiles?: string[]; nextSteps?: string[] } | undefined;
 
     console.log(`[PreFlight] Validating package state for ${input.packageName}...`);
 
@@ -186,39 +199,124 @@ export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<Pa
     // Activity 1: Verify dependencies are published
     await verifyDependencies(input.dependencies);
 
-    // Activity 2: Scaffold package using Gemini turn-based coding agent (loop-based with dynamic commands)
-    console.log(`[Scaffold] Using Gemini turn-based generation (AI-driven command loop with git commits)`);
+    // Activity 2: Read plan and requirements files
+    console.log(`[Setup] Reading plan and requirements files...`);
+    
+    const [planContent, requirementsContent] = await Promise.all([
+      readPlanFileContent(input.workspaceRoot, input.planPath),
+      readRequirementsContent(input.workspaceRoot),
+    ]);
+    
+    console.log(`[Setup] Plan file read (${planContent.length} chars)`);
+    console.log(`[Setup] Requirements file read (${requirementsContent.length} chars)`);
 
-    const geminiInput: GeminiTurnBasedAgentInput = {
-      packageName: input.packageName,
-      packagePath: input.packagePath,
-      planPath: input.planPath,
-      workspaceRoot: input.workspaceRoot,
-      category: input.category,
-      gitUser: {
-        name: 'Gemini Package Builder Agent',
-        email: 'builder@bernier.llc'
-      },
-      // Pass audit context if package is partially complete (saves tokens by not regenerating existing files)
-      initialContext: packageAuditContext
-    };
-
-    const scaffoldResult = await executeChild(GeminiTurnBasedAgentWorkflow, {
-      taskQueue: 'turn-based-coding',
-      workflowId: `gemini-turn-based-${input.packageName}-${Date.now()}`,
-      args: [geminiInput]
-    });
-
-    // Handle Gemini turn-based generation result
-    // Each code change already committed to git during generation
-    if (!scaffoldResult.success) {
-      report.error = `Gemini turn-based generation failed: ${scaffoldResult.error || 'Unknown error'}`;
-      throw new Error(`Gemini turn-based generation failed: ${scaffoldResult.error}`);
+    // Activity 3: Detect resume point if package is partially complete
+    let resumePoint: resumeActivities.ResumePoint | undefined;
+    const packageFullPath = `${input.workspaceRoot}/${input.packagePath}`;
+    
+    if (packageAuditContext && packageAuditContext.status === 'incomplete') {
+      console.log(`[Resume] Detecting resume point for ${input.packageName}...`);
+      resumePoint = await detectResumePoint({
+        workspaceRoot: input.workspaceRoot,
+        packagePath: input.packagePath,
+        planPath: input.planPath,
+      });
+      console.log(`[Resume] Resuming from phase: ${resumePoint.phase} (${resumePoint.completionPercentage}% complete)`);
     }
 
-    console.log(`[Scaffold] Package generated successfully across ${scaffoldResult.totalIterations} iterations`);
-    console.log(`[Scaffold] Files modified: ${scaffoldResult.filesModified.length}`);
-    console.log(`[Scaffold] Action history: ${scaffoldResult.actionHistory.length} actions`);
+    // Activity 4: Select CLI provider (prefer Gemini, fallback to Claude)
+    const provider = await selectCLIProvider('scaffold');
+    console.log(`[CLI] Using provider: ${provider.name}`);
+
+    // Activity 5: Set up CLI workspace in package directory
+    // For Gemini: Write GEMINI.md with context
+    // For Claude: Write CLAUDE.md once, then use sessions
+    if (!codeExists || (resumePoint && resumePoint.phase === 'scaffold')) {
+      console.log(`[CLI] Setting up workspace in package directory...`);
+      // Set up provider-specific workspace (writes context files and creates directory if needed)
+      await setupCLIWorkspace({
+        basePath: packageFullPath,
+        requirementsContent,
+        provider: provider.name,
+      });
+      console.log(`[CLI] Workspace set up in: ${packageFullPath}`);
+    }
+
+    // Activity 6: Scaffold package using CLI agent
+    if (!codeExists || (resumePoint && resumePoint.phase === 'scaffold')) {
+      console.log(`[Scaffold] Using ${provider.name} CLI for scaffolding...`);
+      
+      const scaffoldInstruction = resumePoint?.resumeInstruction || `Create the package structure for: ${input.packageName}
+
+Read the plan file and requirements. Create:
+- package.json with all required scripts and dependencies
+- tsconfig.json (strict mode enabled)
+- jest.config.js (coverage thresholds per requirements)
+- .eslintrc.js (strict rules per requirements)
+- README.md (with usage examples)
+- Directory structure (src/, __tests__/)`;
+
+      const scaffoldResult = await executeCLIAgent({
+        instruction: scaffoldInstruction,
+        workingDir: packageFullPath,
+        contextContent: `# BernierLLC Package Requirements\n\n${requirementsContent}\n\n---\n\n# Package Specification\n\n${planContent}`,
+        task: 'scaffold',
+      }, provider.name);
+
+      if (!scaffoldResult.success) {
+        report.error = `${provider.name} CLI scaffolding failed: ${scaffoldResult.error || 'Unknown error'}`;
+        throw new Error(`${provider.name} CLI scaffolding failed: ${scaffoldResult.error}`);
+      }
+
+      console.log(`[Scaffold] Scaffolding complete (cost: $${scaffoldResult.cost_usd})`);
+    } else {
+      console.log(`[Scaffold] Skipping - package structure already exists`);
+    }
+
+    // Activity 7: Implement package using CLI agent
+    if (!codeExists || (resumePoint && (resumePoint.phase === 'implement' || resumePoint.phase === 'scaffold'))) {
+      console.log(`[Implement] Using ${provider.name} CLI for implementation...`);
+      
+      const implementInstruction = resumePoint?.resumeInstruction || `Implement the full package based on the specification.
+
+Create:
+- All TypeScript source files in src/
+- Comprehensive tests in __tests__/
+- TSDoc comments on all public exports
+
+Ensure all requirements are met.`;
+
+      let sessionId: string | undefined;
+      if (provider.name === 'claude' && resumePoint) {
+        // For Claude, we could resume session if we had it stored
+        // For now, we'll start fresh but include resume context
+      }
+
+      const implementResult = await executeCLIAgent({
+        instruction: implementInstruction,
+        workingDir: packageFullPath,
+        contextContent: `# BernierLLC Package Requirements\n\n${requirementsContent}\n\n---\n\n# Package Specification\n\n${planContent}`,
+        sessionId,
+        task: 'implement',
+      }, provider.name);
+
+      if (!implementResult.success) {
+        report.error = `${provider.name} CLI implementation failed: ${implementResult.error || 'Unknown error'}`;
+        throw new Error(`${provider.name} CLI implementation failed: ${implementResult.error}`);
+      }
+
+      console.log(`[Implement] Implementation complete (cost: $${implementResult.cost_usd})`);
+      
+      // For Claude, capture session ID for potential future use
+      if (provider.name === 'claude' && implementResult.session_id) {
+        sessionId = implementResult.session_id;
+      }
+    } else {
+      console.log(`[Implement] Skipping - package implementation already exists`);
+    }
+
+    // Note: CLI workspace files need to be copied to actual package path
+    // This will be handled in a follow-up activity if needed
 
     // Activity 3: Run build (turn-based generation already validated build during BUILD_VALIDATION phase)
     const buildResult = await runBuild({
@@ -272,15 +370,18 @@ Coverage: ${testResult.coverage}%
     });
     report.buildMetrics.qualityCheckTime = qualityResult.duration;
 
-    // If quality checks fail, spawn fix agent and retry (up to 3 times)
+    // If quality checks fail, use CLI agent to fix and retry (up to 3 times)
     let fixAttempt = 1;
     while (!qualityResult.passed && fixAttempt <= 3) {
       const fixStart = Date.now();
 
+      console.log(`[Quality] Fix attempt ${fixAttempt}/3 for ${qualityResult.failures.length} issues`);
+      
       await spawnFixAgent({
         packagePath: input.packagePath,
         planPath: input.planPath,
-        failures: qualityResult.failures
+        failures: qualityResult.failures,
+        workspaceRoot: input.workspaceRoot,
       });
 
       const fixDuration = Date.now() - fixStart;
@@ -288,7 +389,7 @@ Coverage: ${testResult.coverage}%
       report.fixAttempts.push({
         count: fixAttempt,
         types: qualityResult.failures.map(f => f.type),
-        agentPromptUsed: 'generic-developer.md', // Updated by agent
+        agentPromptUsed: 'cli-agent', // Using CLI agent now
         fixDuration
       });
 

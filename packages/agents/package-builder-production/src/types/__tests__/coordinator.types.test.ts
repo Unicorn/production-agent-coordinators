@@ -1,12 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type {
   Problem,
-  AgentRegistryEntry,
-  AgentRegistry,
-  CoordinatorAction,
-  AgentExecutionInput,
-  AgentExecutionResult,
-  CoordinatorInput
+  CoordinatorAction
 } from '../coordinator.types.js'
 
 describe('Coordinator Types', () => {

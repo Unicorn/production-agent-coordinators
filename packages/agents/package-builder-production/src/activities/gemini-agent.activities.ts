@@ -1,6 +1,14 @@
 /**
  * Gemini-based Agent Activities
  *
+ * @deprecated This file contains direct Gemini API integration code.
+ * Use CLI agent integration instead (see `cli-agent.activities.ts`).
+ * 
+ * These activities were used by the archived turn-based workflows.
+ * They are kept for reference but should not be used in new code.
+ *
+ * Migration: Use `executeCLIAgent` from `cli-agent.activities.ts` instead.
+ *
  * Alternative implementation of turn-based package generation using Google's Gemini API.
  * Uses an agentic command pattern where the AI chooses the next action from a set of commands.
  *
@@ -18,6 +26,7 @@ import { GoogleGenAI } from '@google/genai';
 import { ApplicationFailure } from '@temporalio/common';
 import { jsonrepair } from 'jsonrepair';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import simpleGit from 'simple-git';
@@ -66,7 +75,7 @@ export function resolvePackagePath(workspaceRoot: string, packagePath: string): 
 export function normalizeFilePath(filePath: string, packagePath: string): string {
   // Normalize both paths to use consistent separators
   const normalizedFilePath = filePath.replace(/\\/g, '/');
-  let normalizedPackagePath = packagePath.replace(/\\/g, '/').replace(/^\/|\/$/g, '');
+  const normalizedPackagePath = packagePath.replace(/\\/g, '/').replace(/^\/|\/$/g, '');
 
   // If packagePath is absolute, extract just the relative "packages/..." portion
   // e.g., "/Users/foo/projects/tools/packages/core/contentful-types" -> "packages/core/contentful-types"
@@ -102,7 +111,12 @@ export function normalizeFilePath(filePath: string, packagePath: string): string
 
 /**
  * Sanitizes file content before writing.
- * Specifically handles JSON files that may have markdown fences from AI responses.
+ * Handles markdown fence artifacts that Gemini sometimes includes in responses.
+ *
+ * This handles:
+ * - Full markdown fences: ```language ... ```
+ * - Trailing ``` markers at end of file
+ * - Leading ``` markers at start of file
  *
  * @param content - The raw content from the AI
  * @param filePath - The file path being written
@@ -114,38 +128,70 @@ export function sanitizeFileContent(
   filePath: string,
   logger?: { warn: (msg: string) => void }
 ): string {
-  // Only sanitize JSON files
-  if (!filePath.endsWith('.json')) {
-    return content;
+  let sanitized = content;
+
+  // Pattern 1: Full markdown fence wrapping entire content
+  // ```language ... ``` or ``` ... ```
+  const fullFencePattern = /^```(?:\w+)?\s*\n?([\s\S]*?)\n?```\s*$/;
+  const fullMatch = sanitized.match(fullFencePattern);
+  if (fullMatch) {
+    logger?.warn(`Stripped full markdown fences from file: ${filePath}`);
+    sanitized = fullMatch[1];
   }
 
-  let sanitized = content.trim();
+  // Pattern 2: Trailing ``` at end of file (common Gemini artifact)
+  // Match ``` at the end, possibly with whitespace
+  if (sanitized.trimEnd().endsWith('```')) {
+    const beforeFence = sanitized.trimEnd().slice(0, -3);
+    // Only strip if it doesn't look like a legitimate code block
+    // (i.e., there's no matching opening fence)
+    const openingFences = (beforeFence.match(/^```/gm) || []).length;
+    const closingFences = (beforeFence.match(/```$/gm) || []).length;
 
-  // Pattern 1: ```json ... ``` (with optional language tag)
-  const fencePattern = /^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/;
-  const match = sanitized.match(fencePattern);
-
-  if (match) {
-    logger?.warn(`Stripped markdown fences from JSON file: ${filePath}`);
-    sanitized = match[1].trim();
+    // If fences are unbalanced (more closings than openings), strip the trailing one
+    if (closingFences >= openingFences) {
+      logger?.warn(`Stripped trailing \`\`\` from file: ${filePath}`);
+      sanitized = beforeFence;
+    }
   }
 
-  // Pattern 2: Leading/trailing backticks without full fence
-  if (sanitized.startsWith('`') && sanitized.endsWith('`') && !sanitized.startsWith('```')) {
-    sanitized = sanitized.slice(1, -1).trim();
-    logger?.warn(`Stripped backticks from JSON file: ${filePath}`);
+  // Pattern 3: Leading ``` at start of file (with optional language tag)
+  // Match ```language or just ``` at start, followed by newline
+  const leadingFencePattern = /^```(?:\w+)?\s*\n/;
+  if (leadingFencePattern.test(sanitized)) {
+    // Check if there's a matching closing fence
+    const withoutLeading = sanitized.replace(leadingFencePattern, '');
+    if (!withoutLeading.trimEnd().endsWith('```')) {
+      // No matching closing fence, strip the leading one
+      logger?.warn(`Stripped leading \`\`\` from file: ${filePath}`);
+      sanitized = withoutLeading;
+    }
   }
 
-  // Validate it's actually valid JSON
-  try {
-    JSON.parse(sanitized);
-    return sanitized;
-  } catch {
-    // If parsing fails after sanitization, return original content
-    // Let the error propagate naturally during file write
-    logger?.warn(`JSON still invalid after sanitization for ${filePath}, returning original`);
-    return content;
+  // For JSON files, do additional validation
+  if (filePath.endsWith('.json')) {
+    const trimmed = sanitized.trim();
+    try {
+      JSON.parse(trimmed);
+      return trimmed;
+    } catch {
+      // If JSON parsing fails, try to repair common issues
+      logger?.warn(`JSON validation failed for ${filePath}, attempting repair`);
+
+      // Sometimes there's still residual fencing
+      const jsonMatch = trimmed.match(/^\{[\s\S]*\}$|^\[[\s\S]*\]$/);
+      if (jsonMatch) {
+        try {
+          JSON.parse(jsonMatch[0]);
+          return jsonMatch[0];
+        } catch {
+          // Give up, return what we have
+        }
+      }
+    }
   }
+
+  return sanitized;
 }
 
 // ========================================================================
@@ -264,6 +310,7 @@ export type AgentCommand =
   | { command: 'VALIDATE_PACKAGE_JSON' }
   | { command: 'CHECK_LICENSE_HEADERS' }
   | { command: 'RUN_LINT_CHECK' }
+  | { command: 'RUN_BUILD' }
   | { command: 'RUN_UNIT_TESTS' }
   | { command: 'PUBLISH_PACKAGE' };
 
@@ -451,7 +498,54 @@ interface PackageResult<T = unknown> {
 - Incorrect async/await usage
 - Using require() instead of import statements
 
-### 6. Package.json Requirements
+### 6. FIXING Common TypeScript ESLint Errors
+
+When you see ESLint errors like \`no-unsafe-return\`, \`no-explicit-any\`, \`no-unsafe-assignment\`, here's HOW to fix them:
+
+#### Regex Callback Parameters (no-unsafe-return, no-unsafe-call, no-unsafe-member-access)
+The \`String.replace\` callback has implicit \`any\` types. Add explicit types:
+
+WRONG:
+\`\`\`typescript
+str.replace(/pattern(.)?/g, (_, char) => char.toUpperCase())
+\`\`\`
+
+CORRECT:
+\`\`\`typescript
+str.replace(/pattern(.)?/g, (_match: string, char: string | undefined) =>
+  char ? char.toUpperCase() : ''
+)
+\`\`\`
+
+#### Intentional 'any' in Tests (no-explicit-any, no-unsafe-assignment, no-unsafe-argument)
+When testing runtime behavior with invalid types, use eslint-disable comments:
+
+WRONG:
+\`\`\`typescript
+const badInput = 123 as any;  // ESLint error!
+\`\`\`
+
+CORRECT:
+\`\`\`typescript
+// Testing runtime behavior when TypeScript type checks are bypassed
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument
+const badInput = 123 as any;
+\`\`\`
+
+#### Array/Object Callbacks with Inferred Types
+Always add explicit types to callback parameters:
+
+WRONG:
+\`\`\`typescript
+array.filter((item) => item.value > 0)
+\`\`\`
+
+CORRECT:
+\`\`\`typescript
+array.filter((item: MyType) => item.value > 0)
+\`\`\`
+
+### 7. Package.json Requirements
 Must include: name, version, description, main, types, author, license, files, publishConfig
 
 `.trim();
@@ -481,11 +575,33 @@ Your available commands and the required workflow are:
 1.  APPLY_CODE_CHANGES: Write or delete code. Use this for all coding tasks and for fixing errors.
 2.  CHECK_LICENSE_HEADERS: After writing code, verify all .ts files have the license header.
 3.  VALIDATE_PACKAGE_JSON: After creating/modifying package.json, verify its contents.
-4.  RUN_LINT_CHECK: After code and validation passes, check for style issues.
-5.  RUN_UNIT_TESTS: After linting passes, verify correctness and test coverage.
-6.  PUBLISH_PACKAGE: Only when ALL other steps are complete and verified, run this to publish to NPM.
+4.  RUN_BUILD: After writing code, run TypeScript compilation to check for type errors. This is CRITICAL - run this after creating/modifying TypeScript files!
+5.  RUN_LINT_CHECK: After build passes, check for style issues.
+6.  RUN_UNIT_TESTS: After linting passes, verify correctness and test coverage.
+7.  PUBLISH_PACKAGE: Only when ALL other steps are complete and verified, run this to publish to NPM.
 
-If the last action was a failed check (validation, lint, test), your next action MUST be 'APPLY_CODE_CHANGES' to fix the reported issues.
+IMPORTANT: After creating TypeScript files, ALWAYS run RUN_BUILD to verify the code compiles without type errors.
+
+## CRITICAL ERROR RECOVERY RULES - READ CAREFULLY
+
+**MANDATORY RULE: When the action history shows ANY failed check (lint errors, test failures, build errors, validation errors), your ONLY valid next command is APPLY_CODE_CHANGES.**
+
+DO NOT run additional validation commands after a failure. DO NOT run CHECK_LICENSE_HEADERS after a failure. DO NOT run RUN_LINT_CHECK again after it already failed.
+
+When you see error patterns like these in the action history, you MUST respond with APPLY_CODE_CHANGES:
+- "Lint check failed" → APPLY_CODE_CHANGES to fix the lint errors
+- "Build failed" → APPLY_CODE_CHANGES to fix the TypeScript errors
+- "Tests failed" → APPLY_CODE_CHANGES to fix the failing tests
+- "Validation failed" → APPLY_CODE_CHANGES to fix the validation errors
+
+Example: If the action history contains:
+"Result: Lint check failed. Details: 341:11 error Unsafe assignment of an \`any\` value"
+
+Your ONLY valid response is APPLY_CODE_CHANGES with the corrected file(s).
+
+DO NOT run RUN_LINT_CHECK again - that will just show the same errors.
+DO NOT run CHECK_LICENSE_HEADERS - that is unrelated to lint errors.
+YOU MUST use APPLY_CODE_CHANGES to fix the specific errors shown.
 
 ${protocolInstructions}
 
@@ -495,6 +611,10 @@ For commands that don't write files, just return pure JSON:
 
 \`\`\`
 {"command": "VALIDATE_PACKAGE_JSON"}
+\`\`\`
+
+\`\`\`
+{"command": "RUN_BUILD"}
 \`\`\`
 
 \`\`\`
@@ -922,6 +1042,481 @@ export async function getFileContent(input: { workspaceRoot: string; packagePath
 }
 
 // ========================================================================
+// ========================================================================
+// Package Scaffold Activity
+// ========================================================================
+
+export interface ScaffoldPackageConfigInput {
+  /** Workspace root directory */
+  workspaceRoot: string;
+  /** Package path (relative or absolute) */
+  packagePath: string;
+  /** Package name (e.g., "package-a") */
+  packageName: string;
+  /** Package description */
+  description: string;
+  /** Package dependencies (from plan) */
+  dependencies?: Record<string, string>;
+  /** Package keywords */
+  keywords?: string[];
+}
+
+export interface ScaffoldPackageConfigOutput {
+  /** Whether scaffolding was successful */
+  success: boolean;
+  /** List of files created */
+  filesCreated: string[];
+  /** List of files skipped (already existed) */
+  filesSkipped: string[];
+}
+
+/**
+ * Standardized configuration file templates.
+ * These are 100% identical across all packages - no variation needed.
+ */
+const STANDARD_CONFIGS = {
+  tsconfig: {
+    compilerOptions: {
+      target: 'ES2020',
+      module: 'ESNext',
+      lib: ['ES2020', 'DOM'],
+      declaration: true,
+      declarationMap: true,
+      sourceMap: true,
+      outDir: './dist',
+      strict: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      forceConsistentCasingInFileNames: true,
+      moduleResolution: 'node',
+      resolveJsonModule: true
+    },
+    include: ['src/**/*.ts'],
+    exclude: ['node_modules', 'dist']
+  },
+
+  jest: `/** @type {import('ts-jest').JestConfigWithTsJest} */
+export default {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  moduleFileExtensions: ['js', 'json', 'ts'],
+  rootDir: '.',
+  testRegex: '.*\\\\.spec\\\\.ts$',
+  transform: {
+    '^.+\\\\.(ts)$': 'ts-jest',
+  },
+  collectCoverageFrom: ['<rootDir>/src/**/*.ts'],
+  coverageDirectory: '<rootDir>/coverage',
+  coverageReporters: ['json', 'lcov', 'text', 'clover'],
+  extensionsToTreatAsEsm: ['.ts'],
+  moduleNameMapper: {
+    '^(\\\\.{1,2}/.*)\\\\.js$': '$1',
+  }
+};
+`,
+
+  eslint: {
+    root: true,
+    parser: '@typescript-eslint/parser',
+    plugins: ['@typescript-eslint'],
+    parserOptions: {
+      project: './tsconfig.json',
+      ecmaVersion: 2020,
+      sourceType: 'module'
+    },
+    env: {
+      node: true,
+      jest: true
+    },
+    extends: [
+      'eslint:recommended',
+      'plugin:@typescript-eslint/eslint-recommended',
+      'plugin:@typescript-eslint/recommended',
+      'plugin:@typescript-eslint/recommended-requiring-type-checking'
+    ],
+    rules: {
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-shadow': ['error'],
+      'no-shadow': 'off',
+      'no-var': 'error',
+      'prefer-const': 'error',
+      semi: ['error', 'always'],
+      indent: ['error', 2, { SwitchCase: 1 }],
+      quotes: ['error', 'single'],
+      'max-len': ['warn', { code: 120, ignoreComments: true, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true }],
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'off'
+    },
+    ignorePatterns: ['dist', 'node_modules', 'coverage', 'jest.config.js', '.eslintrc.json']
+  },
+
+  devDependencies: {
+    typescript: '^5.0.0',
+    jest: '^29.0.0',
+    'ts-jest': '^29.0.0',
+    '@types/jest': '^29.0.0',
+    eslint: '^8.0.0',
+    '@typescript-eslint/parser': '^6.0.0',
+    '@typescript-eslint/eslint-plugin': '^6.0.0'
+  }
+};
+
+/**
+ * Scaffolds standard package configuration files.
+ *
+ * Creates tsconfig.json, jest.config.js, .eslintrc.json, and package.json
+ * with standardized settings. These files are 100% identical across packages
+ * except for package.json which has variable fields (name, description, etc).
+ *
+ * Benefits:
+ * - Saves ~2000 tokens per package (Gemini doesn't regenerate configs)
+ * - Eliminates config bugs (like tsconfig excluding spec files)
+ * - Ensures consistency across all packages
+ */
+export async function scaffoldPackageConfig(input: ScaffoldPackageConfigInput): Promise<ScaffoldPackageConfigOutput> {
+  const logger = Context.current().log;
+  const { workspaceRoot, packagePath, packageName, description, dependencies = {}, keywords = [] } = input;
+
+  const fullPackagePath = resolvePackagePath(workspaceRoot, packagePath);
+  const filesCreated: string[] = [];
+  const filesSkipped: string[] = [];
+
+  logger.info(`Scaffolding config files for ${packageName} at ${fullPackagePath}`);
+
+  // Ensure src directory exists
+  const srcDir = path.join(fullPackagePath, 'src');
+  await fs.mkdir(srcDir, { recursive: true });
+
+  // 1. tsconfig.json
+  const tsconfigPath = path.join(fullPackagePath, 'tsconfig.json');
+  if (!fsSync.existsSync(tsconfigPath)) {
+    await fs.writeFile(tsconfigPath, JSON.stringify(STANDARD_CONFIGS.tsconfig, null, 2));
+    filesCreated.push('tsconfig.json');
+  } else {
+    filesSkipped.push('tsconfig.json');
+  }
+
+  // 2. jest.config.js
+  const jestPath = path.join(fullPackagePath, 'jest.config.js');
+  if (!fsSync.existsSync(jestPath)) {
+    await fs.writeFile(jestPath, STANDARD_CONFIGS.jest);
+    filesCreated.push('jest.config.js');
+  } else {
+    filesSkipped.push('jest.config.js');
+  }
+
+  // 3. .eslintrc.json
+  const eslintPath = path.join(fullPackagePath, '.eslintrc.json');
+  if (!fsSync.existsSync(eslintPath)) {
+    await fs.writeFile(eslintPath, JSON.stringify(STANDARD_CONFIGS.eslint, null, 2));
+    filesCreated.push('.eslintrc.json');
+  } else {
+    filesSkipped.push('.eslintrc.json');
+  }
+
+  // 4. package.json (only create if doesn't exist - variable parts)
+  const packageJsonPath = path.join(fullPackagePath, 'package.json');
+  if (!fsSync.existsSync(packageJsonPath)) {
+    const packageJson = {
+      name: packageName,
+      version: '0.1.0',
+      description,
+      main: 'dist/index.js',
+      types: 'dist/index.d.ts',
+      type: 'module',
+      author: 'Bernier LLC',
+      license: 'UNLICENSED',
+      files: ['dist', 'README.md'],
+      publishConfig: {
+        access: 'restricted'
+      },
+      scripts: {
+        build: 'tsc',
+        test: 'jest --coverage',
+        lint: 'eslint "{src,apps,libs,test}/**/*.ts" --fix',
+        prepublishOnly: 'npm run build && npm run test && npm run lint'
+      },
+      dependencies,
+      devDependencies: STANDARD_CONFIGS.devDependencies,
+      keywords: ['bernier', ...keywords]
+    };
+    await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+    filesCreated.push('package.json');
+  } else {
+    filesSkipped.push('package.json');
+  }
+
+  logger.info(`Scaffolding complete. Created: ${filesCreated.join(', ') || 'none'}. Skipped: ${filesSkipped.join(', ') || 'none'}`);
+
+  return {
+    success: true,
+    filesCreated,
+    filesSkipped
+  };
+}
+
+// Plan File Reading Activity
+// ========================================================================
+
+export interface ReadPlanFileInput {
+  /** Workspace root directory */
+  workspaceRoot: string;
+  /** Path to plan file (can be relative to workspace or absolute) */
+  planPath: string;
+  /** Package path for resolving relative plan paths */
+  packagePath?: string;
+}
+
+export interface ReadPlanFileOutput {
+  /** The plan content */
+  content: string;
+  /** Files expected to be created based on plan */
+  expectedFiles: string[];
+}
+
+/**
+ * Reads the plan file and extracts expected file list for scope enforcement.
+ *
+ * Parses the plan to find the file structure section and extracts what files
+ * should be created. This enables scope enforcement to prevent Gemini from
+ * creating files not specified in the plan.
+ */
+export async function readPlanFile(input: ReadPlanFileInput): Promise<ReadPlanFileOutput> {
+  const logger = Context.current().log;
+  const { workspaceRoot, planPath, packagePath } = input;
+
+  // Resolve plan path - check multiple locations
+  let fullPlanPath: string;
+
+  if (path.isAbsolute(planPath)) {
+    fullPlanPath = planPath;
+  } else if (packagePath) {
+    // Try relative to package first
+    const packageFullPath = resolvePackagePath(workspaceRoot, packagePath);
+    fullPlanPath = path.join(packageFullPath, planPath);
+  } else {
+    // Fall back to workspace root
+    fullPlanPath = path.join(workspaceRoot, planPath);
+  }
+
+  logger.info(`Reading plan file from: ${fullPlanPath}`);
+
+  try {
+    const content = await fs.readFile(fullPlanPath, 'utf-8');
+
+    // Extract expected files from the plan
+    // Look for markdown structure blocks like:
+    // ```
+    // package-a/
+    // ├── src/
+    // │   ├── index.ts
+    // │   ├── utils.ts
+    // ```
+    // Or simple file listings
+    const expectedFiles: string[] = [];
+
+    // Pattern 1: Tree structure (├── or │   ├──)
+    const treePattern = /[├└│]\s*──?\s*(\S+\.(ts|tsx|js|json|md))/g;
+    let match;
+    while ((match = treePattern.exec(content)) !== null) {
+      expectedFiles.push(match[1]);
+    }
+
+    // Pattern 2: File paths in structure code blocks
+    const structureBlock = content.match(/```[\s\S]*?```/g);
+    if (structureBlock) {
+      for (const block of structureBlock) {
+        // Look for paths like src/index.ts or package.json
+        const pathPattern = /(?:src\/|test\/|tests\/)?[\w-]+\.(ts|tsx|js|json)/g;
+        while ((match = pathPattern.exec(block)) !== null) {
+          if (!expectedFiles.includes(match[0])) {
+            expectedFiles.push(match[0]);
+          }
+        }
+      }
+    }
+
+    // Pattern 3: Explicit file listings in markdown lists
+    const listPattern = /^[-*]\s*`?(\S+\.(ts|tsx|js|json))`?\s*[-–:]?/gm;
+    while ((match = listPattern.exec(content)) !== null) {
+      if (!expectedFiles.includes(match[1])) {
+        expectedFiles.push(match[1]);
+      }
+    }
+
+    logger.info(`Plan parsed. Expected files: ${expectedFiles.join(', ') || 'none detected (will allow any files)'}`);
+
+    return {
+      content,
+      expectedFiles
+    };
+  } catch (error) {
+    logger.error(`Failed to read plan file at ${fullPlanPath}: ${error}`);
+    throw ApplicationFailure.create({
+      message: `Failed to read plan file at ${fullPlanPath}: ${error}`,
+      nonRetryable: true
+    });
+  }
+}
+
+// ========================================================================
+// File State Tracking Activities
+// ========================================================================
+
+export interface ListPackageFilesInput {
+  workspaceRoot: string;
+  packagePath: string;
+}
+
+export interface ListPackageFilesOutput {
+  /** List of file paths relative to package root */
+  files: string[];
+  /** Map of file path to size (for context budgeting) */
+  fileSizes: Record<string, number>;
+}
+
+/**
+ * Lists all files in a package directory.
+ * Used to track what files exist for context building.
+ */
+export async function listPackageFiles(input: ListPackageFilesInput): Promise<ListPackageFilesOutput> {
+  const logger = Context.current().log;
+  const fullPackagePath = resolvePackagePath(input.workspaceRoot, input.packagePath);
+
+  logger.info(`Listing files in: ${fullPackagePath}`);
+
+  const files: string[] = [];
+  const fileSizes: Record<string, number> = {};
+
+  async function walkDir(dir: string, prefix: string = ''): Promise<void> {
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+        // Skip common non-source directories
+        if (entry.isDirectory()) {
+          if (['node_modules', 'dist', '.git', 'coverage'].includes(entry.name)) {
+            continue;
+          }
+          await walkDir(path.join(dir, entry.name), relativePath);
+        } else {
+          // Only include source files
+          if (/\.(ts|tsx|js|jsx|json|md)$/.test(entry.name)) {
+            files.push(relativePath);
+            try {
+              const stats = await fs.stat(path.join(dir, entry.name));
+              fileSizes[relativePath] = stats.size;
+            } catch {
+              fileSizes[relativePath] = 0;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Directory might not exist yet
+      logger.info(`Could not read directory ${dir}: ${error}`);
+    }
+  }
+
+  await walkDir(fullPackagePath);
+
+  logger.info(`Found ${files.length} files in package`);
+
+  return { files, fileSizes };
+}
+
+export interface GetPackageContextInput {
+  workspaceRoot: string;
+  packagePath: string;
+  /** Maximum characters of file content to include */
+  maxContentLength?: number;
+  /** Specific files to include (if omitted, includes all) */
+  includeFiles?: string[];
+}
+
+export interface GetPackageContextOutput {
+  /** Formatted context string with file contents */
+  context: string;
+  /** Files included in the context */
+  filesIncluded: string[];
+  /** Files excluded due to size limits */
+  filesExcluded: string[];
+}
+
+/**
+ * Builds a context string with the current file contents for Gemini.
+ * This gives Gemini full visibility into what exists in the package.
+ */
+export async function getPackageContext(input: GetPackageContextInput): Promise<GetPackageContextOutput> {
+  const logger = Context.current().log;
+  const { workspaceRoot, packagePath, maxContentLength = 50000, includeFiles } = input;
+  const fullPackagePath = resolvePackagePath(workspaceRoot, packagePath);
+
+  // Get list of files
+  const { files, fileSizes } = await listPackageFiles({ workspaceRoot, packagePath });
+
+  // Filter to requested files if specified
+  const filesToInclude = includeFiles
+    ? files.filter(f => includeFiles.some(inc => f.includes(inc) || inc.includes(f)))
+    : files;
+
+  // Sort by importance (package.json first, then tsconfig, then src files)
+  const sortedFiles = filesToInclude.sort((a, b) => {
+    const priority = (f: string) => {
+      if (f === 'package.json') return 0;
+      if (f === 'tsconfig.json') return 1;
+      if (f.startsWith('src/')) return 2;
+      if (f.includes('index')) return 3;
+      return 4;
+    };
+    return priority(a) - priority(b);
+  });
+
+  const filesIncluded: string[] = [];
+  const filesExcluded: string[] = [];
+  const contextParts: string[] = [];
+  let totalLength = 0;
+
+  for (const file of sortedFiles) {
+    const fileSize = fileSizes[file] || 0;
+
+    // Check if we have room
+    if (totalLength + fileSize > maxContentLength) {
+      filesExcluded.push(file);
+      continue;
+    }
+
+    try {
+      const content = await fs.readFile(path.join(fullPackagePath, file), 'utf-8');
+      contextParts.push(`=== FILE: ${file} ===\n${content}\n=== END ${file} ===`);
+      filesIncluded.push(file);
+      totalLength += content.length + 50; // Account for headers
+    } catch (error) {
+      logger.warn(`Could not read ${file}: ${error}`);
+    }
+  }
+
+  const context = filesIncluded.length > 0
+    ? `## Current Package Files (${filesIncluded.length} files)\n\n${contextParts.join('\n\n')}`
+    : 'No files have been created yet.';
+
+  logger.info(`Built context with ${filesIncluded.length} files (${totalLength} chars), excluded ${filesExcluded.length}`);
+
+  return {
+    context,
+    filesIncluded,
+    filesExcluded
+  };
+}
+
+// ========================================================================
 // Validation Activities
 // ========================================================================
 
@@ -1011,6 +1606,55 @@ export async function checkLicenseHeaders(input: { workspaceRoot: string; packag
 // ========================================================================
 
 /**
+ * Parses ESLint output to extract file paths with errors.
+ * ESLint output format:
+ *   /path/to/file.ts
+ *     10:5  error  Some error message  rule-name
+ *     15:3  warning  Another message  rule-name
+ *
+ * Or inline format:
+ *   src/file.ts:10:5 error Some error message
+ */
+function parseEslintErrorFilePaths(eslintOutput: string): string[] {
+  const filePaths: Set<string> = new Set();
+
+  // Pattern 1: File path on its own line followed by indented errors
+  // Match lines that look like file paths (ending in .ts, .tsx, .js, .jsx)
+  const filePathPattern = /^([^\s].+?\.(ts|tsx|js|jsx))\s*$/gm;
+  let match;
+  while ((match = filePathPattern.exec(eslintOutput)) !== null) {
+    // Normalize to relative path if absolute
+    let filePath = match[1].trim();
+    if (filePath.includes('/src/')) {
+      filePath = 'src/' + filePath.split('/src/').pop();
+    }
+    filePaths.add(filePath);
+  }
+
+  // Pattern 2: Inline format: src/file.ts:10:5 error
+  const inlinePattern = /^([^\s]+\.(ts|tsx|js|jsx)):(\d+):(\d+)/gm;
+  while ((match = inlinePattern.exec(eslintOutput)) !== null) {
+    filePaths.add(match[1]);
+  }
+
+  // Pattern 3: ESLint stylish format path (may have full path)
+  const stylishPattern = /^\s*([^\s].*?\.(ts|tsx|js|jsx))\s*$/gm;
+  while ((match = stylishPattern.exec(eslintOutput)) !== null) {
+    let filePath = match[1].trim();
+    // Skip if it's just error counts
+    if (filePath.includes('problem') || filePath.includes('error') || filePath.includes('warning')) {
+      continue;
+    }
+    if (filePath.includes('/src/')) {
+      filePath = 'src/' + filePath.split('/src/').pop();
+    }
+    filePaths.add(filePath);
+  }
+
+  return Array.from(filePaths);
+}
+
+/**
  * Runs the linter
  */
 export async function runLintCheck(input: { workspaceRoot: string; packagePath: string }): Promise<RunLintCheckOutput> {
@@ -1025,12 +1669,120 @@ export async function runLintCheck(input: { workspaceRoot: string; packagePath: 
       success: true,
       details: 'Linting passed.'
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.warn('Lint check failed.');
+
+    // Safely extract error output
+    const errorObj = error as { stdout?: Buffer; stderr?: Buffer };
+    const errorOutput = errorObj.stdout?.toString() || errorObj.stderr?.toString() || 'Lint command failed';
+
+    // Parse file paths from ESLint output
+    const errorFilePaths = parseEslintErrorFilePaths(errorOutput);
+    logger.info(`Parsed ${errorFilePaths.length} error file paths from lint output: ${errorFilePaths.join(', ')}`);
+
     return {
       success: false,
-      details: error.stdout?.toString() || error.stderr?.toString() || 'Lint command failed',
-      errorFilePaths: []
+      details: errorOutput,
+      errorFilePaths
+    };
+  }
+}
+
+// Input/Output types for runBuildValidation
+export interface RunBuildValidationInput {
+  workspaceRoot: string;
+  packagePath: string;
+  installDeps?: boolean;
+}
+
+export interface RunBuildValidationOutput {
+  success: boolean;
+  buildOutput: string;
+  errors: string[];
+  errorFiles: Array<{
+    file: string;
+    line: number;
+    column: number;
+    message: string;
+  }>;
+}
+
+/**
+ * Runs npm install (if needed) and npm run build to validate TypeScript compiles.
+ * Returns structured error information that can be fed back to Gemini.
+ */
+export async function runBuildValidation(input: RunBuildValidationInput): Promise<RunBuildValidationOutput> {
+  const logger = Context.current().log;
+  const fullPath = resolvePackagePath(input.workspaceRoot, input.packagePath);
+  const nodeModulesPath = path.join(fullPath, 'node_modules');
+
+  logger.info(`Running build validation in ${fullPath}...`);
+
+  // Check if we need to install dependencies
+  const needsInstall = input.installDeps || !fsSync.existsSync(nodeModulesPath);
+
+  if (needsInstall) {
+    logger.info('Installing dependencies...');
+    try {
+      execSync('npm install', { cwd: fullPath, stdio: 'pipe', timeout: 120000 });
+      logger.info('Dependencies installed successfully');
+    } catch (error: any) {
+      const errorOutput = error.stdout?.toString() || error.stderr?.toString() || 'npm install failed';
+      logger.warn(`Failed to install dependencies: ${errorOutput}`);
+      return {
+        success: false,
+        buildOutput: errorOutput,
+        errors: ['Failed to install dependencies'],
+        errorFiles: []
+      };
+    }
+  }
+
+  // Run the build
+  logger.info('Running TypeScript build...');
+  try {
+    const output = execSync('npm run build', { cwd: fullPath, stdio: 'pipe', timeout: 60000 });
+    const outputStr = output.toString();
+    logger.info('Build succeeded!');
+    return {
+      success: true,
+      buildOutput: outputStr || 'Build completed successfully',
+      errors: [],
+      errorFiles: []
+    };
+  } catch (error: any) {
+    const errorOutput = error.stdout?.toString() || error.stderr?.toString() || 'Build failed';
+    logger.warn(`Build failed: ${errorOutput}`);
+
+    // Parse TypeScript errors from the output
+    const errors: string[] = [];
+    const errorFiles: Array<{ file: string; line: number; column: number; message: string }> = [];
+
+    // Pattern: src/utils.ts(108,11): error TS2322: Type 'X' is not assignable to type 'Y'.
+    const tsErrorPattern = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.+)$/gm;
+    let match;
+
+    while ((match = tsErrorPattern.exec(errorOutput)) !== null) {
+      const [, file, line, column, code, message] = match;
+      errors.push(`${file}:${line}:${column} - ${code}: ${message}`);
+      errorFiles.push({
+        file: file.trim(),
+        line: parseInt(line, 10),
+        column: parseInt(column, 10),
+        message: `${code}: ${message}`
+      });
+    }
+
+    // If no structured errors found, add the raw output
+    if (errors.length === 0 && errorOutput.trim()) {
+      errors.push(errorOutput.trim());
+    }
+
+    return {
+      success: false,
+      buildOutput: errorOutput,
+      errors,
+      errorFiles
     };
   }
 }

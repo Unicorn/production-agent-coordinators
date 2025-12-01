@@ -8,7 +8,7 @@ const { analyzeProblem, writeDiagnosticReport } = proxyActivities<typeof coordin
 })
 
 // Signal tracking
-let receivedSignals: string[] = []
+const receivedSignals: string[] = []
 
 export function hasReceivedSignal(signalName: string): boolean {
   return receivedSignals.includes(signalName)

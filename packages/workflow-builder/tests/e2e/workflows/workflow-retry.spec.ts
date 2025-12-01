@@ -11,11 +11,47 @@
 
 import { test, expect } from '@playwright/test';
 import { WorkflowBuilderPage } from '../page-objects/WorkflowBuilderPage';
+import { cleanupUserData } from '../helpers/cleanup';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3010';
+const TEST_USER_EMAIL = 'test@example.com';
 
 test.describe('Retry Policy Scenario', () => {
+  // Clean up after each test to prevent data accumulation
+  // Note: We don't clean up beforeEach to avoid breaking authentication state
+  test.afterEach(async ({ page }) => {
+    // Close any open modals/dialogs
+    try {
+      const modals = page.locator('[role="dialog"]');
+      const count = await modals.count();
+      for (let i = 0; i < count; i++) {
+        const modal = modals.nth(i);
+        if (await modal.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await page.keyboard.press('Escape');
+        }
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+
+    // Clean up test data
+    await cleanupUserData(TEST_USER_EMAIL);
+
+    // Navigate away from any modals or complex pages to ensure clean state
+    try {
+      if (!page.isClosed()) {
+        // Navigate to a simple page to clear any complex state
+        await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {
+          // Ignore navigation errors
+        });
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  });
+
   test('should configure retry policy and observe successful retry', async ({ page }) => {
+    test.setTimeout(180000); // 3 minutes for full workflow creation and execution
     const builder = new WorkflowBuilderPage(page, BASE_URL);
     const workflowName = `Test Retry Workflow ${Date.now()}`;
 
@@ -29,13 +65,39 @@ test.describe('Retry Policy Scenario', () => {
     await builder.openBuilder(workflowId);
     await builder.verifyCanvasLoaded();
 
-    // Step 3: Add an activity node
+    // Step 3: Add a trigger node first (required for compilation)
     const canvas = builder.canvas;
     const canvasBounds = await canvas.boundingBox();
     if (!canvasBounds) {
       throw new Error('Canvas not found');
     }
 
+    // Expand "Receive Data" category for triggers
+    const receiveDataCategory = page.getByText(/Receive Data/i).first();
+    await expect(receiveDataCategory).toBeVisible();
+    await receiveDataCategory.locator('..').locator('..').first().click();
+    await page.waitForTimeout(500);
+
+    // Find a trigger component
+    const triggerComponent = page.locator('[draggable="true"]').filter({ 
+      hasText: /endpoint|webhook|trigger|api|schedule|manual/i 
+    }).first();
+    
+    await expect(triggerComponent).toBeVisible();
+
+    // Drag trigger to canvas (left side)
+    await triggerComponent.dragTo(canvas, {
+      targetPosition: { x: canvasBounds.width / 2 - 150, y: canvasBounds.height / 2 },
+    });
+    await page.waitForTimeout(1000);
+
+    // Get trigger node
+    const triggerNodes = page.locator('.react-flow__node');
+    const triggerNodeCount = await triggerNodes.count();
+    const triggerNode = triggerNodes.nth(triggerNodeCount - 1);
+    await expect(triggerNode).toBeVisible();
+
+    // Step 4: Add an activity node
     // Expand "Core Actions" category
     const coreActionsCategory = page.getByText(/Core Actions/i).first();
     await expect(coreActionsCategory).toBeVisible();
@@ -49,9 +111,9 @@ test.describe('Retry Policy Scenario', () => {
     
     await expect(activityComponent).toBeVisible();
 
-    // Drag activity to canvas center
+    // Drag activity to canvas (right side of trigger)
     await activityComponent.dragTo(canvas, {
-      targetPosition: { x: canvasBounds.width / 2, y: canvasBounds.height / 2 },
+      targetPosition: { x: canvasBounds.width / 2 + 150, y: canvasBounds.height / 2 },
     });
     await page.waitForTimeout(1000);
 
@@ -61,7 +123,20 @@ test.describe('Retry Policy Scenario', () => {
     const activityNode = activityNodes.nth(activityNodeCount - 1);
     await expect(activityNode).toBeVisible();
 
-    // Step 4: Configure retry policy
+    // Connect trigger to activity
+    const sourceHandle = triggerNode.locator('.react-flow__handle-right, .react-flow__handle-source').first();
+    const targetHandle = activityNode.locator('.react-flow__handle-left, .react-flow__handle-target').first();
+
+    if (await sourceHandle.isVisible({ timeout: 2000 }).catch(() => false) && 
+        await targetHandle.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await sourceHandle.hover();
+      await page.mouse.down();
+      await targetHandle.hover();
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+    }
+
+    // Step 5: Configure retry policy
     // Click on activity node to open config panel
     await activityNode.click();
     await page.waitForTimeout(500);
@@ -111,20 +186,20 @@ test.describe('Retry Policy Scenario', () => {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
 
-    // Step 5: Save workflow
+    // Step 6: Save workflow
     await builder.save();
 
-    // Step 6: Compile workflow (optional)
+    // Step 7: Compile workflow (optional)
     const compileButton = page.getByTestId('compile-workflow-button');
     if (await compileButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await builder.compile();
       await builder.closeCodeViewer();
     }
 
-    // Step 7: Build and run workflow
+    // Step 8: Build and run workflow
     await builder.buildAndRun();
 
-    // Step 8: Wait for execution to complete
+    // Step 9: Wait for execution to complete
     // For retry scenarios, we expect eventual success (after retries)
     const executionPanel = page.getByTestId('execution-panel');
     await expect(executionPanel).toBeVisible({ timeout: 10000 });
@@ -132,17 +207,17 @@ test.describe('Retry Policy Scenario', () => {
     // Wait for execution to complete (may take longer due to retries)
     const status = await builder.waitForExecution(60000);
 
-    // Step 9: Assert execution eventually succeeds
+    // Step 10: Assert execution eventually succeeds
     expect(status).toBe('completed');
 
-    // Step 10: Verify UI indicates success
+    // Step 11: Verify UI indicates success
     const statusBadge = page.getByTestId('execution-status');
     if (await statusBadge.isVisible({ timeout: 5000 }).catch(() => false)) {
       const statusText = await statusBadge.textContent();
       expect(statusText?.toLowerCase()).toMatch(/completed|success/i);
     }
 
-    // Step 11: Check for retry information if displayed
+    // Step 12: Check for retry information if displayed
     // The UI may show retry count or attempt information
     const retryInfo = page.getByText(/retries|attempts|retry/i);
     if (await retryInfo.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -161,7 +236,7 @@ test.describe('Retry Policy Scenario', () => {
       console.log('Note: Error card visible but final status is completed (retries may have occurred)');
     }
 
-    // Step 12: Verify result is available
+    // Step 13: Verify result is available
     const result = await builder.getExecutionResult();
     expect(result).toBeTruthy();
   });

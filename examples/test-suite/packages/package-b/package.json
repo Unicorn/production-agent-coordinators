@@ -4,7 +4,6 @@
   "description": "A small TypeScript utility package with common helper functions for testing the Gemini workflow.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "type": "module",
   "author": "Bernier LLC",
   "license": "MIT",
   "files": [
@@ -33,6 +32,7 @@
   "keywords": [
     "bernier",
     "utility",
+    "helpers",
     "typescript"
   ]
 }

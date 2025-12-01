@@ -1,0 +1,17 @@
+/*
+Copyright (c) 2025 Bernier LLC
+
+This file is licensed to the client under a limited-use license.
+The client may use and modify this code *only within the scope of the project it was delivered for*.
+Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
+*/
+
+/**
+ * Standard result interface for package functions that might fail.
+ * @template T The type of data on success.
+ */
+export interface PackageResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}

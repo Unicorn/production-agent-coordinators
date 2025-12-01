@@ -28,7 +28,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3010';
 test.describe('End-to-End Workflow Creation and Execution', () => {
   let builderPage: WorkflowBuilderPage;
   let monitorPage: ExecutionMonitorPage;
-  let createdWorkflowIds: string[] = [];
+  const createdWorkflowIds: string[] = [];
 
   test.beforeEach(async ({ page }) => {
     // Initialize page objects

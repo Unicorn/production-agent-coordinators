@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { applyFileChanges, normalizeContent, verifyFileCreated } from '../file-operations.activities';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 
 // Mock fs/promises
 vi.mock('fs/promises', () => ({

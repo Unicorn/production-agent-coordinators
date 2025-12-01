@@ -69,7 +69,12 @@ describe('Coordinator Activities', () => {
 
     expect(action.decision).toBe('DELEGATE')
     expect(action.agent).toBe('environment-setup')
-    expect(action.task).toBeDefined()
+    // STRONG assertion: Verify task has required structure
+    expect(action.task).toEqual({
+      type: 'fix-shell-path',
+      instructions: 'Fix shell path issue',
+      context: {}
+    })
     expect(mockCreate).toHaveBeenCalled()
   })
 
@@ -109,6 +114,11 @@ describe('Coordinator Activities', () => {
     const action = await analyzeProblem(problem, registry)
 
     expect(action.decision).toBe('ESCALATE')
-    expect(action.escalation).toBeDefined()
+    // STRONG assertion: Verify escalation has required structure
+    expect(action.escalation).toEqual({
+      reason: 'Too many attempts, need human review',
+      waitForSignal: true,
+      reportPath: '/tmp/report.json'
+    })
   })
 })

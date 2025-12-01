@@ -285,7 +285,7 @@ export async function parsePlanFile(input: {
 
   // Extract dependencies from Dependencies section
   const dependencies: string[] = [];
-  const depsMatch = content.match(/## Dependencies\s+([\s\S]*?)(?=\n##|\n---|\z)/);
+  const depsMatch = content.match(/## Dependencies\s+([\s\S]*?)(?=\n##|\n---|$)/);
 
   if (depsMatch) {
     const depsSection = depsMatch[1];

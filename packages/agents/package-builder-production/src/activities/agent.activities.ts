@@ -1,18 +1,21 @@
-import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { QualityFailure } from '../types/index';
+import { executeCLIAgent, selectCLIProvider } from './cli-agent.activities';
 
+/**
+ * Spawn fix agent using CLI (Gemini or Claude)
+ * 
+ * Replaces the old API-based approach with CLI agent calls.
+ * Automatically selects appropriate model based on failure types.
+ */
 export async function spawnFixAgent(input: {
   packagePath: string;
   planPath: string;
   failures: QualityFailure[];
+  workspaceRoot?: string;
 }): Promise<void> {
   // Categorize failures
   const failureTypes = [...new Set(input.failures.map(f => f.type))];
-
-  // Get or create fix prompt
-  const fixPrompt = await getOrCreateFixPrompt(failureTypes);
 
   // Format failures for prompt
   const formattedFailures = input.failures
@@ -24,58 +27,47 @@ export async function spawnFixAgent(input: {
     })
     .join('\n');
 
-  // In a real implementation, this would use the Task tool
-  // For now, we'll simulate by logging what would be sent
-  console.log('Would spawn agent with prompt:');
-  console.log(`Package: ${input.packagePath}`);
-  console.log(`Plan: ${input.planPath}`);
-  console.log(`Failures:\n${formattedFailures}`);
-  console.log(`Prompt template: ${fixPrompt}`);
+  // Error type will be extracted from instruction for model selection
 
-  // TODO: Integrate with actual agent spawning mechanism
-  // await spawnAgent({
-  //   subagent_type: 'package-development-agent',
-  //   description: `Fix quality issues in ${input.packagePath}`,
-  //   prompt: `${fixPrompt}\n\nPackage: ${input.packagePath}\nPlan: ${input.planPath}\n\nQuality Failures:\n${formattedFailures}\n\nFix all issues and ensure ./manager validate-requirements passes.`
-  // });
-}
+  // Build fix instruction
+  const fixInstruction = `Fix the following quality issues in this package:
 
-async function getOrCreateFixPrompt(failureTypes: string[]): Promise<string> {
-  const promptsDir = '.claude/agents/fix-prompts';
+${formattedFailures}
 
-  // Try to find specific prompt for these failure types
-  const promptKey = failureTypes.sort().join('-');
-  const specificPrompt = path.join(promptsDir, `${promptKey}.md`);
+Requirements:
+- Fix all reported issues
+- Ensure code passes all quality checks
+- Maintain existing functionality
+- Follow BernierLLC package requirements
+- Run validation after fixes
 
-  if (fs.existsSync(specificPrompt)) {
-    return fs.readFileSync(specificPrompt, 'utf-8');
+Make minimal, targeted changes to resolve the issues.`;
+
+  // Select provider (prefer Gemini, fallback to Claude)
+  const provider = await selectCLIProvider('fix', 'gemini');
+  
+  // Get full package path
+  const workspaceRoot = input.workspaceRoot || process.cwd();
+  const packageFullPath = path.isAbsolute(input.packagePath)
+    ? input.packagePath
+    : path.join(workspaceRoot, input.packagePath);
+
+  console.log(`[FixAgent] Using ${provider.name} CLI to fix ${failureTypes.length} issue types`);
+  console.log(`[FixAgent] Package: ${packageFullPath}`);
+  console.log(`[FixAgent] Failures: ${formattedFailures.substring(0, 200)}...`);
+
+  // Execute CLI agent with fix task (provider will be selected automatically)
+  const result = await executeCLIAgent({
+    instruction: fixInstruction,
+    workingDir: packageFullPath,
+    task: 'fix',
+  }, provider.name);
+
+  if (!result.success) {
+    throw new Error(`Fix agent failed: ${result.error || 'Unknown error'}`);
   }
 
-  // Fall back to generic developer prompt
-  const genericPrompt = path.join(promptsDir, 'generic-developer.md');
-
-  if (!fs.existsSync(genericPrompt)) {
-    // Copy from ~/.claude/agents/package-development-agent.md as template
-    const homeAgentsDir = path.join(os.homedir(), '.claude/agents');
-    const templatePrompt = path.join(homeAgentsDir, 'package-development-agent.md');
-
-    if (fs.existsSync(templatePrompt)) {
-      const template = fs.readFileSync(templatePrompt, 'utf-8');
-
-      // Create prompts directory
-      fs.mkdirSync(promptsDir, { recursive: true });
-
-      // Write generic prompt
-      fs.writeFileSync(genericPrompt, template);
-    } else {
-      // Create minimal fallback prompt
-      const fallbackPrompt = `You are a package development agent. Fix the reported quality issues.`;
-      fs.mkdirSync(promptsDir, { recursive: true });
-      fs.writeFileSync(genericPrompt, fallbackPrompt);
-    }
-  }
-
-  return fs.readFileSync(genericPrompt, 'utf-8');
+  console.log(`[FixAgent] Fix complete (cost: $${result.cost_usd}, provider: ${result.provider})`);
 }
 
 export async function verifyDependencies(dependencies: string[] = []): Promise<void> {

@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 import {
   saveGenerationState,
-  loadGenerationState,
-  getStateFilePath
+  loadGenerationState
 } from '../generation-state.activities.js';
 import type { GenerationContext } from '../../types/index.js';
 

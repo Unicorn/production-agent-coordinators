@@ -6,15 +6,7 @@ The client may use and modify this code *only within the scope of the project it
 Redistribution or use in other products or commercial offerings is not permitted without written consent from Bernier LLC.
 */
 
-/**
- * Interface for a standard package result, indicating success or failure.
- * @template T The type of data returned on success. Defaults to unknown.
- */
-export interface PackageResult<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
+import type { PackageResult } from './types';
 
 /**
  * Checks if a value is null or undefined.
@@ -27,9 +19,9 @@ export function isNil(value: unknown): value is null | undefined {
 
 /**
  * Capitalizes the first letter of a string.
- * Handles null or undefined inputs by returning an empty string.
+ * Handles null, undefined, or empty strings by returning an empty string.
  * @param str The input string.
- * @returns The string with its first letter capitalized, or an empty string if input is null/undefined.
+ * @returns The string with its first letter capitalized, or an empty string if the input is nil or empty.
  */
 export function capitalizeFirstLetter(str: string | null | undefined): string {
   if (isNil(str) || str.length === 0) {
@@ -40,95 +32,87 @@ export function capitalizeFirstLetter(str: string | null | undefined): string {
 
 /**
  * Reverses a string.
- * Handles null or undefined inputs by returning an empty string.
+ * Handles null, undefined, or empty strings by returning an empty string.
  * @param str The input string.
- * @returns The reversed string, or an empty string if input is null/undefined.
+ * @returns The reversed string, or an empty string if the input is nil or empty.
  */
 export function reverseString(str: string | null | undefined): string {
-  if (isNil(str)) {
+  if (isNil(str) || str.length === 0) {
     return '';
   }
   return str.split('').reverse().join('');
 }
 
 /**
- * Removes duplicates from an array based on a key selector function.
+ * Removes duplicate objects from an array based on a key selector function.
+ * The first occurrence of an item with a given key is kept.
  * @template T The type of elements in the array.
  * @param array The input array.
- * @param keySelector A function that returns a unique key for each item.
+ * @param keySelector A function that returns a unique key (string or number) for each item.
  * @returns A new array with unique elements.
  */
 export function uniqueArrayBy<T>(array: T[], keySelector: (item: T) => string | number): T[] {
-  if (!Array.isArray(array)) {
-    return [];
-  }
-  const seenKeys = new Set<string | number>();
-  const uniqueItems: T[] = [];
+  const seen = new Map<string | number, boolean>();
+  const result: T[] = [];
 
   for (const item of array) {
     const key = keySelector(item);
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      uniqueItems.push(item);
+    if (!seen.has(key)) {
+      seen.set(key, true);
+      result.push(item);
     }
-  }
-  return uniqueItems;
-}
-
-/**
- * Converts a string to camelCase.
- * Handles spaces, hyphens, and underscores as delimiters.
- * Handles null or undefined inputs by returning an empty string.
- * @param str The input string.
- * @returns The camelCased string, or an empty string if input is null/undefined.
- */
-export function toCamelCase(str: string | null | undefined): string {
-  if (isNil(str)) {
-    return '';
-  }
-
-  // Remove leading/trailing non-alphanumeric characters, and convert to camelCase
-  return str
-    .replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '') // Remove leading/trailing non-alphanumeric
-    .replace(/[^a-zA-Z0-9]+(.)?/g, (_match: string, char: string | undefined) =>
-      char ? char.toUpperCase() : ''
-    );
-}
-
-/**
- * Generates a random alphanumeric string of a specified length.
- * @param length The desired length of the string. Must be a non-negative number.
- * @returns A random alphanumeric string. Returns an empty string if length is invalid.
- */
-export function generateRandomAlphanumeric(length: number): string {
-  if (length <= 0 || !Number.isInteger(length)) {
-    return '';
-  }
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
   }
   return result;
 }
 
 /**
- * Safely parses a JSON string, catching any parsing errors.
- * @template T The expected type of the parsed JSON data. Defaults to unknown.
+ * Converts a string to camelCase.
+ * Handles spaces, hyphens, and underscores as delimiters.
+ * @param str The input string.
+ * @returns The camelCased string, or an empty string if the input is nil or empty.
+ */
+export function toCamelCase(str: string | null | undefined): string {
+  if (isNil(str) || str.length === 0) {
+    return '';
+  }
+
+  return str.replace(/[ -_]([a-zA-Z])/g, (_match: string, char: string) => char.toUpperCase());
+}
+
+/**
+ * Generates a random alphanumeric string of a specified length.
+ * @param length The desired length of the string. Must be a non-negative integer.
+ * @returns A random alphanumeric string. Returns an empty string if length is less than or equal to 0.
+ */
+export function generateRandomAlphanumeric(length: number): string {
+  if (length <= 0) {
+    return '';
+  }
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+/**
+ * Safely parses a JSON string into an object of the specified type.
+ * Returns a PackageResult indicating success or failure, with the parsed data or an error message.
+ * @template T The expected type of the parsed JSON object.
  * @param jsonString The JSON string to parse.
- * @returns A PackageResult indicating success or failure, with data or an error message.
+ * @returns A PackageResult object containing the parsed data on success, or an error message on failure.
  */
 export function safeJsonParse<T>(jsonString: string): PackageResult<T> {
   try {
     const data: T = JSON.parse(jsonString) as T;
     return { success: true, data };
-  } catch (e: unknown) {
+  } catch (error: unknown) {
     let errorMessage = 'Unknown JSON parsing error.';
-    if (e instanceof Error) {
-      errorMessage = e.message;
-    } else if (typeof e === 'string') {
-      errorMessage = e;
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
     }
     return { success: false, error: `Failed to parse JSON: ${errorMessage}` };
   }

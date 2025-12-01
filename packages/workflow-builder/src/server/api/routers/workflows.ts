@@ -211,27 +211,49 @@ export const workflowsRouter = createTRPCRouter({
         console.log('✅ [Workflow Create] Using provided task queue:', taskQueueId);
       } else {
         // Look up task queue from project
-        const { data: taskQueue } = await ctx.supabase
+        let { data: taskQueue } = await ctx.supabase
           .from('task_queues')
           .select('id')
           .eq('name', project.task_queue_name)
           .single();
         
+        // If task queue doesn't exist, create it
         if (!taskQueue) {
-          throw new TRPCError({
-            code: 'INTERNAL_SERVER_ERROR',
-            message: 'Project task queue not found',
-          });
+          console.log('⚠️  [Workflow Create] Task queue not found, creating:', project.task_queue_name);
+          const { data: newTaskQueue, error: createError } = await ctx.supabase
+            .from('task_queues')
+            .insert({
+              name: project.task_queue_name,
+              description: `Task queue for project ${project.id}`,
+              created_by: ctx.user.id,
+              is_system_queue: false,
+              max_concurrent_workflows: 100,
+              max_concurrent_activities: 1000,
+            })
+            .select('id')
+            .single();
+          
+          if (createError || !newTaskQueue) {
+            console.error('❌ [Workflow Create] Failed to create task queue:', createError);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `Failed to create task queue: ${createError?.message || 'Unknown error'}`,
+            });
+          }
+          
+          taskQueue = newTaskQueue;
+          console.log('✅ [Workflow Create] Created task queue:', taskQueue.id);
         }
         
         taskQueueId = taskQueue.id;
-        console.log('✅ [Workflow Create] Looked up task queue:', taskQueueId);
+        console.log('✅ [Workflow Create] Using task queue:', taskQueueId);
       }
       
       // Create workflow
       const { data: workflow, error } = await ctx.supabase
         .from('workflows')
         .insert({
+          name: input.kebabName, // 'name' column is required - use kebab_name as the name
           kebab_name: input.kebabName,
           display_name: input.displayName,
           description: input.description,

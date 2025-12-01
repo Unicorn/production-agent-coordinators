@@ -10,20 +10,30 @@
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start:worker": "node dist/worker.js"
+    "test:cli": "vitest run cli-integration.e2e.test.ts",
+    "test:cli:watch": "vitest cli-integration.e2e.test.ts",
+    "test:integration": "./scripts/test-cli-integration.sh",
+    "test:integration:phase4": "vitest run integration/phase4-e2e.test.ts",
+    "test:integration:phase4:watch": "vitest integration/phase4-e2e.test.ts",
+    "start:worker": "node dist/worker.js",
+    "optimization-dashboard": "tsx src/scripts/optimization-dashboard.ts"
   },
   "dependencies": {
-    "@temporalio/workflow": "^1.10.0",
-    "@temporalio/activity": "^1.10.0",
-    "@temporalio/worker": "^1.10.0",
-    "@temporalio/client": "^1.10.0",
     "@anthropic-ai/sdk": "^0.30.0",
+    "@google/genai": "^1.30.0",
+    "@temporalio/activity": "^1.10.0",
+    "@temporalio/client": "^1.10.0",
+    "@temporalio/worker": "^1.10.0",
+    "@temporalio/workflow": "^1.10.0",
     "handlebars": "^4.7.8",
+    "jsonrepair": "^3.13.1",
+    "simple-git": "^3.30.0",
     "yaml": "^2.3.4"
   },
   "devDependencies": {
-    "@types/node": "^22.7.5",
     "@types/handlebars": "^4.1.0",
+    "@types/node": "^22.7.5",
+    "tsx": "^4.7.0",
     "typescript": "^5.6.3",
     "vitest": "^1.6.0"
   }

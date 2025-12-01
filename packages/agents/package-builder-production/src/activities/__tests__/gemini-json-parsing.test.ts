@@ -58,7 +58,7 @@ function fixMalformedJsonQuotes(text: string): string {
     let i = match.index + match[0].length;
     let depth = 0;
     let foundStart = false;
-    let contentStart = i;
+    const contentStart = i;
 
     // Find the closing quote of the content string
     // The content typically starts with { and ends with }

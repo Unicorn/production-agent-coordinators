@@ -66,7 +66,7 @@ describe('Constants', () => {
     it('ERROR_MESSAGES should be readonly', () => {
       // Attempting to modify should not be possible at compile time (but runtime may allow if not frozen)
       // This is a type-level check rather than a runtime expectation.
-      // @ts-expect-error
+      // @ts-expect-error Testing compile-time readonly constraint
       // ERROR_MESSAGES.INVALID_INPUT = 'New message'; // This line should cause a TS error
       expect(() => {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -106,7 +106,7 @@ describe('Constants', () => {
 
     it('STATUS_CODES should be readonly', () => {
       // Similar to ERROR_MESSAGES, `as const` makes it readonly at compile time.
-      // @ts-expect-error
+      // @ts-expect-error Testing compile-time readonly constraint
       // STATUS_CODES.SUCCESS = 201; // This line should cause a TS error
       expect(() => {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
