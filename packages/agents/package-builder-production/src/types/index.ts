@@ -467,11 +467,12 @@ export interface PackageAuditContext {
 /**
  * Re-export Gemini workflow types for external use
  */
-export type {
-  GeminiTurnBasedAgentInput,
-  GeminiTurnBasedAgentResult,
-  HumanInterventionSignal
-} from '../workflows/gemini-turn-based-agent.workflow.js';
+// Archived workflow types - no longer exported
+// export type {
+//   GeminiTurnBasedAgentInput,
+//   GeminiTurnBasedAgentResult,
+//   HumanInterventionSignal
+// } from '../workflows/gemini-turn-based-agent.workflow.js';
 
 /**
  * Re-export Gemini activity types for external use

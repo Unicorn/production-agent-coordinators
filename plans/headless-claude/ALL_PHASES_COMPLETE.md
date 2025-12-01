@@ -184,19 +184,20 @@ npm run optimization-runner subagent parallel-vs-sequential
 
 ---
 
-## Next Steps (Optional Enhancements)
+## Next Steps
 
-### Integration with Real Workflows
-- [ ] Connect optimization tests to actual workflow execution
-- [ ] Run real A/B tests with actual packages
-- [ ] Collect real metrics and update configurations
+### Immediate: Integration Testing ⏸️ IN PROGRESS
+- [ ] Run integration tests with real workflows
+- [ ] Validate all features end-to-end
+- [ ] Fix any issues discovered
+- **See:** `plans/headless-claude/integration-testing-checklist.md`
 
-### Advanced Features
-- [ ] Automated configuration selection based on test results
-- [ ] Continuous optimization monitoring
-- [ ] Historical trend analysis
-- [ ] Cost prediction models
-- [ ] Performance regression detection
+### Post-Integration: Enhancements
+- [ ] Enhanced hook logging (token tracking, file modifications)
+- [ ] Enhanced optimization dashboard (visualizations, web UI)
+- [ ] Automated configuration selection
+- [ ] Performance optimization
+- **See:** `plans/headless-claude/post-integration-next-steps.md`
 
 ### Documentation
 - [ ] Video walkthrough

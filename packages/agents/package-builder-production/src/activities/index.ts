@@ -17,7 +17,11 @@ export * from './phase-executor.activities.js';
 export * from './generation-state.activities.js';
 export * from './gemini-agent.activities.js';
 export * from './cli-agent.activities.js';
-export * from './git.activities.js';
+// Export git activities but exclude duplicate types (already exported from build.activities)
+export {
+  gitCommit,
+  gitPush,
+} from './git.activities.js';
 export * from './credentials.activities.js';
 
 // Optional: Export a list of all activity names for validation

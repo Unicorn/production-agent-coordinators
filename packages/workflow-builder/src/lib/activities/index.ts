@@ -93,3 +93,24 @@ export {
   type ListBranchesResult,
   type BranchInfo,
 } from './git.activities';
+
+/**
+ * Notification Activities
+ *
+ * Export notification operations for UI component user feedback
+ */
+
+export {
+  sendSlackNotification,
+  updateWorkflowStatus,
+  sendErrorAlert,
+  sendProgressUpdate,
+  type SlackNotificationInput,
+  type SlackNotificationResult,
+  type StatusUpdateInput,
+  type StatusUpdateResult,
+  type ErrorAlertInput,
+  type ErrorAlertResult,
+  type ProgressUpdateInput,
+  type ProgressUpdateResult,
+} from './notifications.activities';

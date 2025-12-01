@@ -108,9 +108,9 @@
 
 ## Immediate Next Steps (This Week)
 
-### 1. Integration Testing with Real Workflows
+### 1. Integration Testing with Real Workflows ⏸️ IN PROGRESS
 **Priority:** High  
-**Status:** Ready to test
+**Status:** Checklist created, ready to execute
 
 **Tasks:**
 - [ ] Test PR creation with real GitHub repository
@@ -124,6 +124,10 @@
 - GitHub CLI authenticated
 - Claude CLI authenticated
 - Test repository available
+
+**Resources:**
+- Checklist: `plans/headless-claude/integration-testing-checklist.md`
+- Test Runner: `packages/agents/package-builder-production/scripts/run-integration-tests.sh`
 
 ---
 
@@ -276,4 +280,12 @@
 - **Parallelization** provides the biggest performance win for large packages
 - **Optimization** is ongoing and can be done incrementally
 - All features are **backward compatible** - existing workflows continue to work
+
+---
+
+## Post-Integration Next Steps
+
+After integration testing is complete, see:
+- `plans/headless-claude/post-integration-next-steps.md` - Detailed enhancement plan
+- `plans/headless-claude/integration-testing-checklist.md` - Complete test checklist
 

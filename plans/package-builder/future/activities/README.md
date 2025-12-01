@@ -84,22 +84,45 @@ This directory contains comprehensive plans for future activity implementations,
 
 ---
 
+### 6. Manager CLI Activities (`manager-cli-activities.md`)
+**Status:** Plan complete  
+**Priority:** High  
+**Focus:** BernierLLC package manager CLI integration
+
+**Key Activities:**
+- Package publishing and validation
+- Status tracking and discovery
+- Publication control (pause/resume)
+- Configuration management
+- Requirements validation and MECE compliance
+- Plan file synchronization
+- Package taxonomy operations
+- Build queue management
+- API integration (MCP)
+
+**Estimated Implementation:** Critical for package lifecycle management and workflow orchestration
+
+---
+
 ## Implementation Priority Summary
 
 ### Immediate (Next Sprint)
 1. **Command-Line Activities** - Foundation for all command execution
-2. **Git Activities (Phase 1)** - Tag creation, status, branch management
-3. **Package Management (Phase 1)** - Version bumping, dependency updates, vulnerability scanning
+2. **Manager CLI Activities (Phase 1)** - Core development, status, discovery, tracking, publication control
+3. **Git Activities (Phase 1)** - Tag creation, status, branch management
+4. **Package Management (Phase 1)** - Version bumping, dependency updates, vulnerability scanning
 
 ### Short Term (Next Month)
-4. **Notification Activities (Phase 1)** - Slack integration, status updates, error alerting
-5. **File System Activities (Phase 1)** - File search, grep, directory operations
+5. **Manager CLI Activities (Phase 2)** - Configuration management, plan sync, taxonomy, dependencies
+6. **Notification Activities (Phase 1)** - Slack integration, status updates, error alerting
+7. **File System Activities (Phase 1)** - File search, grep, directory operations
 
 ### Medium Term (When Needed)
-6. **Git Activities (Phase 2)** - Log analysis, stash operations
-7. **Package Management (Phase 2)** - Deprecation, metadata updates
-8. **Notification Activities (Phase 2)** - Email, webhooks
-9. **File System Activities (Phase 2)** - Metadata, watching
+8. **Manager CLI Activities (Phase 3)** - API integration (MCP), utility commands
+9. **Git Activities (Phase 2)** - Log analysis, stash operations
+10. **Package Management (Phase 2)** - Deprecation, metadata updates
+11. **Notification Activities (Phase 2)** - Email, webhooks
+12. **File System Activities (Phase 2)** - Metadata, watching
 
 ### Long Term (Advanced Features)
 10. All Phase 3 activities from each plan
@@ -153,4 +176,5 @@ All activities should work with both Gemini and Claude workflows, using the unif
 - [Package Management Activities Plan](./package-management.md)
 - [Notification & Communication Activities Plan](./notification-communication.md)
 - [File System Activities Plan](./file-system.md)
+- [Manager CLI Activities Plan](./manager-cli-activities.md)
 

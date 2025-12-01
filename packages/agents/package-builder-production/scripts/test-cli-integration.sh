@@ -37,14 +37,28 @@ else
     CLAUDE_AVAILABLE=false
 fi
 
-# Check Temporal server
-if curl -s http://localhost:7233/health &> /dev/null; then
+# Check Temporal server (try multiple endpoints)
+TEMPORAL_AVAILABLE=false
+if nc -z localhost 7233 2>/dev/null; then
+    echo -e "${GREEN}✅ Temporal server port 7233 is open${NC}"
+    TEMPORAL_AVAILABLE=true
+elif curl -s http://localhost:7233/health &> /dev/null; then
     echo -e "${GREEN}✅ Temporal server is running${NC}"
     TEMPORAL_AVAILABLE=true
+elif curl -s http://localhost:8080 &> /dev/null; then
+    echo -e "${GREEN}✅ Temporal UI is accessible (assuming server is running)${NC}"
+    TEMPORAL_AVAILABLE=true
 else
-    echo -e "${RED}❌ Temporal server not running on localhost:7233${NC}"
-    echo "   Start Temporal with: docker-compose up -d temporal"
-    TEMPORAL_AVAILABLE=false
+    echo -e "${YELLOW}⚠️  Temporal server health check failed, but port may be open${NC}"
+    echo "   Checking if Temporal container is running..."
+    if docker ps --filter "name=temporal" --format "{{.Names}}" | grep -q temporal; then
+        echo -e "${GREEN}✅ Temporal container is running - proceeding with tests${NC}"
+        TEMPORAL_AVAILABLE=true
+    else
+        echo -e "${RED}❌ Temporal server not running${NC}"
+        echo "   Start Temporal with: docker-compose up -d temporal"
+        TEMPORAL_AVAILABLE=false
+    fi
 fi
 
 # Check environment variables

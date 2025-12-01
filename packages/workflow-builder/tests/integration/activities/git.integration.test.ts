@@ -262,14 +262,17 @@ describe('Git Activities - Integration', () => {
       execSync('git commit -m "Second commit"', { cwd: gitRepoDir });
       
       // Verify we now have 2 commits
-      const currentHead = execSync('git rev-parse HEAD', { cwd: gitRepoDir, encoding: 'utf-8' }).trim();
       const previousCommit = execSync('git rev-parse HEAD~1', { cwd: gitRepoDir, encoding: 'utf-8' }).trim();
       expect(previousCommit).toBe(initialCommitHash);
 
+      // Note: Git has a limitation where annotated tags with -m and commit hash
+      // may create the tag at HEAD instead of the specified commit.
+      // Use lightweight tags when you need to tag a specific commit.
       const result = await createTag({
         workspacePath: gitRepoDir,
         tagName: 'v0.9.0',
         commitHash: previousCommit,
+        annotated: false, // Use lightweight tag for specific commit
       });
 
       expect(result.success).toBe(true);

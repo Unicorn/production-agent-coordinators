@@ -162,15 +162,24 @@ export async function analyzeThinkingLevels(
 
   // Calculate improvement over "none"
   const noneLevel = levelAnalyses.find(l => l.keyword === 'none');
-  levelAnalyses.forEach(level => {
+  const levelAnalysesWithImprovement: Array<{
+    keyword: string;
+    runs: number;
+    successRate: number;
+    averageCost: number;
+    averageDuration: number;
+    costPerSuccess: number;
+    improvementOverNone?: number;
+  }> = levelAnalyses.map(level => {
     if (noneLevel && level.keyword !== 'none' && noneLevel.costPerSuccess > 0) {
       const improvement = ((noneLevel.costPerSuccess - level.costPerSuccess) / noneLevel.costPerSuccess) * 100;
-      level.improvementOverNone = improvement;
+      return { ...level, improvementOverNone: improvement };
     }
+    return { ...level, improvementOverNone: undefined };
   });
 
   // Find optimal level (best cost/benefit ratio)
-  const optimalLevel = levelAnalyses
+  const optimalLevel = levelAnalysesWithImprovement
     .filter(l => l.successRate > 0)
     .sort((a, b) => {
       // Primary: cost per success
@@ -185,7 +194,7 @@ export async function analyzeThinkingLevels(
   const recommendations: string[] = [];
 
   if (optimalLevel) {
-    const improvement = optimalLevel.improvementOverNone
+    const improvement = optimalLevel.improvementOverNone !== undefined
       ? `${optimalLevel.improvementOverNone > 0 ? '+' : ''}${optimalLevel.improvementOverNone.toFixed(1)}%`
       : 'N/A';
     recommendations.push(
@@ -193,7 +202,7 @@ export async function analyzeThinkingLevels(
     );
   }
 
-  levelAnalyses.forEach(level => {
+  levelAnalysesWithImprovement.forEach(level => {
     if (level.successRate < 0.7 && level.keyword !== 'none') {
       recommendations.push(
         `Warning: "${level.keyword}" has low success rate (${(level.successRate * 100).toFixed(1)}%) - may not be worth the extra cost`
@@ -204,11 +213,11 @@ export async function analyzeThinkingLevels(
   return {
     testName,
     baseModel: config.baseModel,
-    levels: levelAnalyses,
+    levels: levelAnalysesWithImprovement,
     optimalLevel: optimalLevel ? {
       keyword: optimalLevel.keyword,
       reason: `Best cost/benefit ratio: $${optimalLevel.costPerSuccess.toFixed(4)} per success with ${(optimalLevel.successRate * 100).toFixed(1)}% success rate`,
-      costBenefit: optimalLevel.improvementOverNone
+      costBenefit: optimalLevel.improvementOverNone !== undefined
         ? `${optimalLevel.improvementOverNone > 0 ? 'Saves' : 'Costs'} ${Math.abs(optimalLevel.improvementOverNone).toFixed(1)}% compared to no thinking`
         : 'N/A',
     } : undefined,
