@@ -5,9 +5,10 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ScrollView, YStack, XStack, Text, Separator } from 'tamagui';
 import { ComponentCard } from '../component/ComponentCard';
+import { api } from '@/lib/trpc/client';
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -156,6 +157,22 @@ function categorizeComponent(component: Component): string {
 export function ComponentPalette({ components, disabled = false }: ComponentPaletteProps) {
   // Track which sections are expanded
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  // Optionally discover component files from file system (if workspace path is available)
+  // This allows discovering components that aren't yet registered in the database
+  const workspacePath = process.env.NEXT_PUBLIC_WORKSPACE_PATH;
+  const { data: discoveredFiles } = api.fileOperations.findFiles.useQuery(
+    {
+      directory: workspacePath || './components',
+      pattern: '**/*.{ts,tsx}',
+      excludeDirs: ['node_modules', '.git', 'dist', '.next'],
+      maxDepth: 3,
+    },
+    {
+      enabled: !!workspacePath && !disabled,
+      refetchOnWindowFocus: false,
+    }
+  );
 
   // Group by utility category instead of technical type
   const groupedComponents = components.reduce((acc, comp) => {

@@ -376,6 +376,223 @@ The Compiler component needs activities for:
 
 ---
 
+## Detailed Implementation Phases
+
+### Phase 1.1: File System Activities ✅
+**Status:** Complete
+- Implemented: `readFile`, `writeFile`, `findFiles`, `searchFileContent`, `listDirectory`, `batchReadFiles`, `batchWriteFiles`
+- Tests: Unit + Integration tests passing
+- Location: `src/lib/activities/file-system.activities.ts`
+
+### Phase 1.2: Command Execution Activities ✅
+**Status:** Complete
+- Implemented: `executeCommand`, `runBuildCommand`, `runTestCommand`, `runLintCommand`
+- Tests: Unit + Integration tests passing
+- Location: `src/lib/activities/command-execution.activities.ts`
+
+### Phase 1.3: Git Activities ✅
+**Status:** Complete
+- Implemented: `createTag`, `gitStatus`, `listBranches`, `gitDiff`
+- Tests: Unit + Integration tests passing
+- Location: `src/lib/activities/git.activities.ts`
+
+### Phase 1.4: Notification Activities ✅
+**Status:** Complete
+- Implemented: `sendSlackNotification`, `updateWorkflowStatus`, `sendErrorAlert`, `sendProgressUpdate`
+- Tests: Unit + Integration tests passing (with real Slack webhook)
+- Location: `src/lib/activities/notifications.activities.ts`
+
+### Phase 1.5: Activity Registration ✅
+**Status:** Complete
+- Registered all 19 activities in the activity registry database
+- Created registration script: `scripts/register-activities.ts`
+- All activities discoverable via `activities.ts` tRPC router
+- Location: `src/lib/activities/activity-registry.ts`
+
+### Phase 1.6: tRPC Integration ✅
+**Status:** Complete
+- Verified `activities.ts` router (334 lines) handles all registry operations
+- Activities are executed within Temporal workflows, not via tRPC
+- No new routers needed for activity execution
+- Documentation: `docs/architecture/trpc-router-organization.md`
+
+### Phase 1.6.5: Router Refactoring (Large Router Splitting) ✅
+**Status:** Complete
+**Priority:** High (Code Quality)
+
+### Phase 1.7: UI Integration ✅
+**Status:** Complete
+- Created `file-operations.ts` tRPC router wrapping file system activities for UI use
+- Created `notifications.ts` tRPC router wrapping notification activities for UI use
+- Updated `WorkflowCanvas` component to use notification activities for user feedback
+- Updated `WorkflowBuilderPage` to use notification activities for save/build/compile operations
+- Added optional file operations support to `ComponentPalette` for component discovery
+- All routers registered in `root.ts`
+- Location: `src/server/api/routers/file-operations.ts`, `src/server/api/routers/notifications.ts`
+
+**Problem Statement:**
+Several tRPC routers have grown beyond recommended size limits:
+- `execution.ts`: 819 lines (should be < 600)
+- `projects.ts`: 705 lines (should be < 600)
+- `workflows.ts`: 595 lines (monitoring threshold)
+
+**Goals:**
+1. Split large routers into focused, maintainable sub-routers
+2. Maintain backward compatibility (no breaking API changes)
+3. Follow domain-based organization principles
+4. Keep routers between 200-400 lines (target size)
+
+**Implementation Plan:**
+
+#### 1. Split `execution.ts` (819 lines)
+
+**Current Structure:**
+- Core execution operations (build, start, status)
+- Monitoring operations (history, statistics)
+- Results handling (outputs, errors)
+
+**Proposed Split:**
+
+**1.1 Create `execution-core.ts`** (~300 lines)
+- `build` - Build and execute workflow
+- `start` - Start workflow execution
+- `getStatus` - Get execution status
+- `cancel` - Cancel execution
+- `retry` - Retry failed execution
+- Core execution logic and Temporal client operations
+
+**1.2 Create `execution-monitoring.ts`** (~250 lines)
+- `getHistory` - Get execution history
+- `getStatistics` - Get execution statistics
+- `listExecutions` - List executions with filters
+- `getExecutionTimeline` - Get detailed timeline
+- Monitoring and history operations
+
+**1.3 Create `execution-results.ts`** (~200 lines)
+- `getOutput` - Get execution output
+- `getErrors` - Get execution errors
+- `getLogs` - Get execution logs
+- `downloadArtifacts` - Download execution artifacts
+- Results and output handling
+
+**1.4 Update `execution.ts`** (~70 lines)
+- Re-export all procedures from sub-routers
+- Maintain backward compatibility
+- Single entry point for execution operations
+
+**Files to Create:**
+- `src/server/api/routers/execution-core.ts`
+- `src/server/api/routers/execution-monitoring.ts`
+- `src/server/api/routers/execution-results.ts`
+
+**Files to Update:**
+- `src/server/api/routers/execution.ts` (refactor to re-export)
+- `src/server/api/root.ts` (update imports if needed)
+
+**Testing Requirements:**
+- ✅ All existing tRPC calls continue to work
+- ✅ No breaking changes to API surface
+- ✅ All tests pass
+- ✅ Type safety maintained
+
+#### 2. Split `projects.ts` (705 lines)
+
+**Current Structure:**
+- Project CRUD operations
+- Project settings and configuration
+- Worker management
+- Project statistics
+
+**Proposed Split:**
+
+**2.1 Create `projects-core.ts`** (~300 lines)
+- `list` - List projects
+- `get` - Get project by ID
+- `create` - Create project
+- `update` - Update project
+- `delete` - Delete project
+- Core CRUD operations
+
+**2.2 Create `project-settings.ts`** (~250 lines)
+- `updateSettings` - Update project settings
+- `getSettings` - Get project settings
+- `updateTaskQueue` - Update task queue
+- `getTaskQueue` - Get task queue info
+- Settings and configuration operations
+
+**2.3 Create `project-workers.ts`** (~150 lines)
+- `startWorker` - Start project worker
+- `stopWorker` - Stop project worker
+- `getWorkerStatus` - Get worker status
+- `getWorkerHealth` - Get worker health
+- Worker management operations
+
+**2.4 Update `projects.ts`** (~50 lines)
+- Re-export all procedures from sub-routers
+- Maintain backward compatibility
+
+**Files to Create:**
+- `src/server/api/routers/projects-core.ts`
+- `src/server/api/routers/project-settings.ts`
+- `src/server/api/routers/project-workers.ts`
+
+**Files to Update:**
+- `src/server/api/routers/projects.ts` (refactor to re-export)
+- `src/server/api/root.ts` (update imports if needed)
+
+#### 3. Monitor `workflows.ts` (595 lines)
+
+**Current Status:** Approaching threshold but acceptable
+**Action:** Monitor and split if it grows beyond 650 lines
+
+**Future Split (if needed):**
+- `workflows-core.ts` - CRUD operations
+- `workflow-deployment.ts` - Deployment operations
+
+**Implementation Steps:**
+
+1. **Create sub-routers** for each domain
+2. **Move procedures** from main router to sub-routers
+3. **Update main router** to re-export from sub-routers
+4. **Update root router** imports (if needed)
+5. **Run tests** to verify no breaking changes
+6. **Update documentation** with new structure
+
+**Backward Compatibility Strategy:**
+
+```typescript
+// execution.ts - Re-export pattern
+import { executionCoreRouter } from './execution-core';
+import { executionMonitoringRouter } from './execution-monitoring';
+import { executionResultsRouter } from './execution-results';
+
+export const executionRouter = createTRPCRouter({
+  // Re-export all procedures for backward compatibility
+  ...executionCoreRouter._def.procedures,
+  ...executionMonitoringRouter._def.procedures,
+  ...executionResultsRouter._def.procedures,
+});
+```
+
+**Testing Checklist:**
+- [ ] All existing tRPC calls work without changes
+- [ ] TypeScript types remain compatible
+- [ ] All unit tests pass
+- [ ] All integration tests pass
+- [ ] No breaking changes to API surface
+- [ ] Documentation updated
+
+**Timeline:** 1-2 days
+**Dependencies:** None (can be done independently)
+
+**Deliverables:**
+- Split routers created and tested
+- Backward compatibility maintained
+- Documentation updated
+- All tests passing
+
+---
+
 ## Integration Points
 
 ### UI Integration

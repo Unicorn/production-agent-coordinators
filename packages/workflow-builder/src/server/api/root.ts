@@ -24,6 +24,8 @@ import { serviceInterfacesRouter } from './routers/serviceInterfaces';
 import { publicInterfacesRouter } from './routers/publicInterfaces';
 import { connectorsRouter } from './routers/connectors';
 import { projectConnectorsRouter } from './routers/projectConnectors';
+import { fileOperationsRouter } from './routers/file-operations';
+import { notificationsRouter } from './routers/notifications';
 
 export const appRouter = createTRPCRouter({
   users: usersRouter,
@@ -48,6 +50,8 @@ export const appRouter = createTRPCRouter({
   publicInterfaces: publicInterfacesRouter,
   connectors: connectorsRouter,
   projectConnectors: projectConnectorsRouter,
+  fileOperations: fileOperationsRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

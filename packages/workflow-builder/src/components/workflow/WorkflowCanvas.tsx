@@ -59,19 +59,71 @@ export function WorkflowCanvas({
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const utils = api.useUtils();
+  const notificationMutation = api.notifications.sendSlack.useMutation();
+  
   const saveMutation = api.workflows.update.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       utils.workflows.get.invalidate({ id: workflowId });
       // Update last saved state on successful save
       lastSavedNodesRef.current = JSON.stringify(nodes);
       lastSavedEdgesRef.current = JSON.stringify(edges);
+      
+      // Send success notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `💾 Workflow saved successfully`,
+        }).catch(err => console.warn('Failed to send notification:', err));
+      }
+    },
+    onError: async (error) => {
+      // Send error notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `❌ Failed to save workflow: ${error.message}`,
+        }).catch(err => console.warn('Failed to send error notification:', err));
+      }
     },
   });
   
   const deployMutation = api.workflows.deploy.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       utils.workflows.get.invalidate({ id: workflowId });
       utils.workflows.list.invalidate();
+      
+      // Send success notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `🚀 Workflow deployed successfully!`,
+          attachments: [{
+            title: 'Deployment Details',
+            fields: [
+              { title: 'Workflow ID', value: workflowId, short: true },
+              { title: 'Status', value: 'Deployed', short: true },
+            ],
+          }],
+        }).catch(err => console.warn('Failed to send notification:', err));
+      }
+    },
+    onError: async (error) => {
+      // Send error notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `❌ Workflow deployment failed: ${error.message}`,
+          attachments: [{
+            color: 'danger',
+            title: 'Deployment Error',
+            text: error.message,
+          }],
+        }).catch(err => console.warn('Failed to send error notification:', err));
+      }
     },
   });
 
@@ -85,7 +137,7 @@ export function WorkflowCanvas({
   });
 
   const compileMutation = api.compiler.compile.useMutation({
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result.success && result.compiled) {
         setGeneratedCode({
           workflowCode: result.compiled.workflowCode,
@@ -94,10 +146,40 @@ export function WorkflowCanvas({
         });
         setShowCodeModal(true);
         console.log('✅ Workflow compiled successfully! View the generated TypeScript code');
+        
+        // Send success notification if Slack webhook is configured
+        const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+        if (slackWebhook) {
+          await notificationMutation.mutateAsync({
+            webhookUrl: slackWebhook,
+            message: `✅ Workflow compiled successfully!`,
+            attachments: [{
+              title: 'Compilation Details',
+              fields: [
+                { title: 'Workflow ID', value: workflowId, short: true },
+                { title: 'Status', value: 'Compiled', short: true },
+              ],
+            }],
+          }).catch(err => console.warn('Failed to send notification:', err));
+        }
       }
     },
-    onError: (error) => {
+    onError: async (error) => {
       console.error('❌ Compilation failed:', error.message);
+      
+      // Send error notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `❌ Workflow compilation failed: ${error.message}`,
+          attachments: [{
+            color: 'danger',
+            title: 'Compilation Error',
+            text: error.message,
+          }],
+        }).catch(err => console.warn('Failed to send error notification:', err));
+      }
     },
   });
 
@@ -128,7 +210,7 @@ export function WorkflowCanvas({
   const handleSave = useCallback(async () => {
     const definition: WorkflowDefinition = {
       nodes: nodes as WorkflowNode[],
-      edges: edges as WorkflowNode[],
+      edges: edges as any[], // Fix: edges should be Edge[], not WorkflowNode[]
     };
 
     await saveMutation.mutateAsync({
@@ -180,6 +262,8 @@ export function WorkflowCanvas({
 
     isApplyingHistoryRef.current = true;
     const previous = past[past.length - 1];
+    if (!previous) return;
+    
     const newPast = past.slice(0, past.length - 1);
 
     setPast(newPast);
@@ -199,6 +283,8 @@ export function WorkflowCanvas({
 
     isApplyingHistoryRef.current = true;
     const next = future[0];
+    if (!next) return;
+    
     const newFuture = future.slice(1);
 
     setPast((prev) => [...prev, { nodes, edges }]);
@@ -284,10 +370,10 @@ export function WorkflowCanvas({
     // Only set a timer if there are changes
     if (hasChanges && (nodes.length > 0 || edges.length > 0)) {
       autoSaveTimerRef.current = setTimeout(() => {
-        const definition: WorkflowDefinition = {
-          nodes: nodes as WorkflowNode[],
-          edges: edges as WorkflowNode[],
-        };
+    const definition: WorkflowDefinition = {
+      nodes: nodes as WorkflowNode[],
+      edges: edges as any[], // Fix: edges should be Edge[], not WorkflowNode[]
+    };
 
         saveMutation.mutate({
           id: workflowId,

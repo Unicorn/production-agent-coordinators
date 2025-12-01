@@ -33,6 +33,19 @@ export default function WorkflowBuilderPage() {
     pageSize: 100,
   });
 
+  // Optionally discover components from file system (if workspace path is available)
+  // This would be used for discovering local component files
+  // const { data: discoveredComponents } = trpc.fileOperations.findFiles.useQuery(
+  //   {
+  //     directory: process.env.NEXT_PUBLIC_WORKSPACE_PATH || './components',
+  //     pattern: '**/*.ts',
+  //     excludeDirs: ['node_modules', '.git', 'dist'],
+  //   },
+  //   {
+  //     enabled: !!process.env.NEXT_PUBLIC_WORKSPACE_PATH,
+  //   }
+  // );
+
   // Fetch work queues
   const { data: workQueuesData } = trpc.workQueues.list.useQuery({
     workflowId,
@@ -51,16 +64,55 @@ export default function WorkflowBuilderPage() {
   // Compile mutation
   const compileMutation = trpc.compiler.compile.useMutation({
     onSuccess: (data) => {
-      setCompiledCode(data.compiled);
-      setShowCodePreview(true);
+      // Handle both success and error response types
+      if (data.success && 'workflowCode' in data) {
+        setCompiledCode({
+          workflowCode: data.workflowCode,
+          activitiesCode: data.activitiesCode,
+          workerCode: data.workerCode,
+        });
+        setShowCodePreview(true);
+      }
     },
   });
 
+  // Notification mutation for user feedback
+  const notificationMutation = trpc.notifications.sendSlack.useMutation();
+
   // Build/Execute mutation
   const buildMutation = trpc.execution.build.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setCurrentExecutionId(data.executionId);
-      // Start polling for execution status
+      // Send success notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook && workflowData?.workflow) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `✅ Workflow "${(workflowData.workflow as any).display_name || (workflowData.workflow as any).name}" execution started successfully`,
+          attachments: [{
+            title: 'Execution Details',
+            fields: [
+              { title: 'Execution ID', value: data.executionId, short: true },
+              { title: 'Workflow ID', value: workflowId, short: true },
+            ],
+          }],
+        }).catch(err => console.warn('Failed to send notification:', err));
+      }
+    },
+    onError: async (error) => {
+      // Send error notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `❌ Failed to start workflow execution: ${error.message}`,
+          attachments: [{
+            color: 'danger',
+            title: 'Error Details',
+            text: error.message,
+          }],
+        }).catch(err => console.warn('Failed to send error notification:', err));
+      }
     },
   });
 
@@ -104,10 +156,46 @@ export default function WorkflowBuilderPage() {
     }
   }, [executionStatus, currentExecutionId]);
 
+  // Save mutation
+  const saveMutation = trpc.workflows.update.useMutation({
+    onSuccess: async () => {
+      setHasUnsavedChanges(false);
+      
+      // Send success notification if Slack webhook is configured
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook && workflowData?.workflow) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `💾 Workflow "${(workflowData.workflow as any).display_name || (workflowData.workflow as any).name}" saved successfully`,
+        }).catch(err => console.warn('Failed to send notification:', err));
+      }
+    },
+    onError: async (error) => {
+      console.error('Failed to save workflow:', error);
+      // Send error notification
+      const slackWebhook = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL;
+      if (slackWebhook) {
+        await notificationMutation.mutateAsync({
+          webhookUrl: slackWebhook,
+          message: `❌ Failed to save workflow: ${error.message}`,
+        }).catch(err => console.warn('Failed to send error notification:', err));
+      }
+    },
+  });
+
   const handleSave = async () => {
-    // TODO: Implement save workflow definition
-    console.log('Saving workflow...');
-    setHasUnsavedChanges(false);
+    if (!workflowData?.workflow) return;
+    
+    try {
+      // Save workflow definition via tRPC
+      await saveMutation.mutateAsync({
+        id: workflowId,
+        definition: (workflowData.workflow as any).definition,
+      });
+    } catch (error) {
+      // Error handling is done in mutation callbacks
+      console.error('Failed to save workflow:', error);
+    }
   };
 
   const handleGenerateCode = async () => {
