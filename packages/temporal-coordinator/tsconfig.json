@@ -3,15 +3,21 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true
+    "composite": true,
+    "skipLibCheck": true
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*",
+    "../agents/package-builder-production/src/activities/credentials.activities.ts",
+    "../agents/package-builder-production/src/activities/git.activities.ts"
+  ],
   "references": [
     { "path": "../contracts" },
     { "path": "../engine" },
     { "path": "../coordinator" },
     { "path": "../specs/hello" },
     { "path": "../agents/mock" },
-    { "path": "../storage" }
+    { "path": "../storage" },
+    { "path": "../agents/package-builder-production" }
   ]
 }

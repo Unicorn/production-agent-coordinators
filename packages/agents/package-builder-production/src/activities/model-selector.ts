@@ -5,7 +5,7 @@
  * to optimize cost while maintaining quality.
  */
 
-import type { BuildTask } from './cli-agent.activities';
+import type { BuildTask } from './cli-agent.activities.js';
 
 export type ClaudeModel = 'opus' | 'sonnet' | 'haiku';
 

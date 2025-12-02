@@ -15,7 +15,7 @@
  * Options:
  *   --plan, -p         Path to package plan/spec (required)
  *   --requirements, -r Path to requirements (optional)
- *   --task-queue, -q   Temporal task queue (default: agent-coordinator-queue)
+ *   --task-queue, -q   Temporal task queue (default: agent-coordinator-e2e)
  *   --create-pr        Create PR (default: false for testing)
  *   --dry-run          Don't execute, just show what would happen
  */
@@ -46,7 +46,7 @@ function parseArgs(): TestOptions {
   const options: TestOptions = {
     planPath: '',
     requirementsPath: DEFAULT_REQUIREMENTS_PATH,
-    taskQueue: 'agent-coordinator-queue',
+    taskQueue: 'agent-coordinator-e2e', // Default to E2E test queue
     createPR: false,
     dryRun: false,
   };
@@ -68,7 +68,7 @@ function parseArgs(): TestOptions {
         break;
       case '--task-queue':
       case '-q':
-        options.taskQueue = nextArg || 'agent-coordinator-queue';
+        options.taskQueue = nextArg || 'agent-coordinator-e2e';
         i++;
         break;
       case '--workflow-id':
@@ -109,7 +109,7 @@ Usage:
 Options:
   --plan, -p         Path to package plan/spec file (required)
   --requirements, -r Path to requirements file (optional)
-  --task-queue, -q   Temporal task queue (default: agent-coordinator-queue)
+  --task-queue, -q   Temporal task queue (default: agent-coordinator-e2e)
   --workflow-id, -w  Custom workflow ID (optional)
   --create-pr        Create PR (default: false for testing)
   --dry-run, -d     Don't execute, just show what would happen

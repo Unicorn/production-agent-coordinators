@@ -39,6 +39,8 @@
     "worker": "npm run build && node dist/worker.js",
     "test:client": "npx tsx src/test-audited-build-client.ts",
     "test:integration:e2e": "npx tsx src/test-integration-e2e.ts",
+    "test:e2e": "./scripts/run-e2e-test.sh",
+    "worker:test": "./scripts/start-test-worker.sh",
     "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {

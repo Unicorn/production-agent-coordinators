@@ -368,11 +368,13 @@ The Compiler component needs activities for:
 10. Path Operations (`resolvePath`, `validatePathSafety`)
 
 **Compiler Activities:**
-8. Advanced Package Management (`bumpVersion`, `checkLicenses`)
-9. Code Analysis (`searchFileContent` with patterns)
-10. Performance Optimization (caching, parallel operations)
+8. Advanced Package Management (`bumpVersion`, `checkLicenses`) ✅
+9. Code Analysis (`searchFileContent` with patterns) - See [Future Enhancements](./future/phase3-optional-enhancements.md)
+10. Performance Optimization (caching, parallel operations) - See [Future Enhancements](./future/phase3-optional-enhancements.md)
 
 **Timeline:** As Needed
+
+**Note:** Items 9 and 10 are optional enhancements documented in [Phase 3 Optional Enhancements](./future/phase3-optional-enhancements.md)
 
 ---
 
@@ -1712,4 +1714,5 @@ All tests follow the existing patterns in the codebase and integrate with the cu
 - [Package Management Activities Plan](../../plans/package-builder/future/activities/package-management.md)
 - [Workflow Builder System Design](./2025-11-14-workflow-builder-system-design.md)
 - [Compiler Architecture](../../docs/architecture/compiler.md)
+- [Phase 3 Optional Enhancements](./future/phase3-optional-enhancements.md) - Future improvements for code analysis and performance
 

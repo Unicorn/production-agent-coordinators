@@ -17,6 +17,7 @@ export * from './phase-executor.activities.js';
 export * from './generation-state.activities.js';
 export * from './gemini-agent.activities.js';
 export * from './cli-agent.activities.js';
+export * from './resume-detector.activities.js';
 // Export git activities but exclude duplicate types (already exported from build.activities)
 export {
   gitCommit,
@@ -99,6 +100,11 @@ export const ALL_ACTIVITY_NAMES = [
   'notifyPublishSuccess',
   'getFileContent',
   'scaffoldPackageConfig',
+
+  // Resume detector activities
+  'detectResumePoint',
+  'canResumePackage',
+  'getResumeContext',
 ] as const;
 
 export type ActivityName = typeof ALL_ACTIVITY_NAMES[number];

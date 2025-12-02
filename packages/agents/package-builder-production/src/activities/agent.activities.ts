@@ -1,6 +1,6 @@
 import * as path from 'path';
 import type { QualityFailure } from '../types/index';
-import { executeCLIAgent, selectCLIProvider } from './cli-agent.activities';
+import { executeCLIAgent, selectCLIProvider } from './cli-agent.activities.js';
 
 /**
  * Spawn fix agent using CLI (Gemini or Claude)

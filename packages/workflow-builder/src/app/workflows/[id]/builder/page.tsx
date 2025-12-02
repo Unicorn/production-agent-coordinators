@@ -6,6 +6,7 @@ import { YStack, XStack, Heading, Text, Spinner, Button, Dialog, Tabs } from 'ta
 import { Save, Play, Settings, Code2, Network, GitBranch, Inbox, Radio, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { WorkflowCanvas } from '@/components/workflow/WorkflowCanvas';
+import { ServiceBuilderView } from '@/components/service/ServiceBuilderView';
 import { CodePreviewDialog } from '@/components/workflow-builder/CodePreviewDialog';
 import { WorkflowExecutionPanel } from '@/components/workflow-execution/WorkflowExecutionPanel';
 import { WorkerStatus } from '@/components/workflow/WorkerStatus';
@@ -21,6 +22,7 @@ export default function WorkflowBuilderPage() {
   const [compiledCode, setCompiledCode] = useState<any>(null);
   const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
   const [executionData, setExecutionData] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'workflow' | 'service'>('workflow');
 
   // Fetch workflow details
   const { data: workflowData, isLoading } = trpc.workflows.get.useQuery({
@@ -267,8 +269,19 @@ export default function WorkflowBuilderPage() {
               size="$2"
               chromeless
               pressStyle={{ backgroundColor: '$gray4' }}
+              backgroundColor={viewMode === 'workflow' ? '$blue4' : 'transparent'}
+              onPress={() => setViewMode('workflow')}
             >
-              Builder
+              Workflow
+            </Button>
+            <Button
+              size="$2"
+              chromeless
+              pressStyle={{ backgroundColor: '$gray4' }}
+              backgroundColor={viewMode === 'service' ? '$blue4' : 'transparent'}
+              onPress={() => setViewMode('service')}
+            >
+              Service View
             </Button>
             <Button
               size="$2"
@@ -365,13 +378,20 @@ export default function WorkflowBuilderPage() {
 
       {/* Canvas + Execution Panel */}
       <XStack f={1} position="relative">
-        {/* Workflow Canvas */}
+        {/* Workflow Canvas or Service Builder View */}
         <YStack f={1}>
-          <WorkflowCanvas
-            workflowId={workflowId}
-            initialDefinition={workflowData.workflow.definition}
-            readOnly={false}
-          />
+          {viewMode === 'workflow' ? (
+            <WorkflowCanvas
+              workflowId={workflowId}
+              initialDefinition={workflowData.workflow.definition}
+              readOnly={false}
+            />
+          ) : (
+            <ServiceBuilderView
+              serviceId={workflowId}
+              readOnly={false}
+            />
+          )}
         </YStack>
 
         {/* Execution Panel */}

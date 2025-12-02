@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactFlow, {
   Background,
@@ -43,6 +43,7 @@ export function ProjectView({
   readOnly = false 
 }: ProjectViewProps) {
   const router = useRouter();
+  const utils = api.useUtils();
 
   // Fetch project data
   const { data: projectData, isLoading: isLoadingProject } = api.projects.get.useQuery({ 
@@ -53,12 +54,6 @@ export function ProjectView({
   const { data: workflowsData, isLoading: isLoadingWorkflows } = api.workflows.list.useQuery({
     projectId,
   });
-
-  // Fetch service interfaces for all services
-  const serviceIds = workflowsData?.workflows?.map(w => w.id) || [];
-  const interfaceQueries = serviceIds.map(serviceId => 
-    api.serviceInterfaces.list.useQuery({ serviceId }, { enabled: serviceIds.length > 0 })
-  );
 
   // Fetch connectors for the project
   const { data: connectors, isLoading: isLoadingConnectors } = api.connectors.list.useQuery(
@@ -73,19 +68,50 @@ export function ProjectView({
       { enabled: !!projectId }
     );
 
-  const isLoading = isLoadingProject || isLoadingWorkflows || isLoadingConnectors || 
-    isLoadingProjectConnectors || interfaceQueries.some(q => q.isLoading);
+  // Get service IDs - we'll fetch interfaces individually but safely
+  const serviceIds = useMemo(() => {
+    return workflowsData?.workflows?.map(w => w.id) || [];
+  }, [workflowsData?.workflows]);
 
-  // Build a map of service ID to interfaces
-  const interfacesByService = useMemo(() => {
-    const map = new Map<string, typeof interfaceQueries[0]['data']>();
-    interfaceQueries.forEach((query, index) => {
-      if (query.data && serviceIds[index]) {
-        map.set(serviceIds[index], query.data);
-      }
-    });
-    return map;
-  }, [interfaceQueries, serviceIds]);
+  // Fetch interfaces for each service using useEffect and tRPC utils
+  const [interfacesByService, setInterfacesByService] = useState<Map<string, any[]>>(new Map());
+  const [isLoadingInterfaces, setIsLoadingInterfaces] = useState(false);
+
+  // Fetch interfaces for all services
+  useEffect(() => {
+    if (serviceIds.length === 0) {
+      setInterfacesByService(new Map());
+      setIsLoadingInterfaces(false);
+      return;
+    }
+
+    setIsLoadingInterfaces(true);
+    const fetchInterfaces = async () => {
+      const map = new Map<string, any[]>();
+      const promises = serviceIds.map(async (serviceId) => {
+        try {
+          // Use tRPC utils to fetch interfaces for each service
+          const interfaces = await utils.serviceInterfaces.list.fetch({ workflowId: serviceId });
+          return { serviceId, interfaces: interfaces || [] };
+        } catch (error) {
+          console.error(`Failed to fetch interfaces for service ${serviceId}:`, error);
+          return { serviceId, interfaces: [] };
+        }
+      });
+      
+      const results = await Promise.all(promises);
+      results.forEach(({ serviceId, interfaces }) => {
+        map.set(serviceId, interfaces);
+      });
+      setInterfacesByService(map);
+      setIsLoadingInterfaces(false);
+    };
+
+    fetchInterfaces();
+  }, [serviceIds, utils.serviceInterfaces.list]);
+
+  const isLoading = isLoadingProject || isLoadingWorkflows || isLoadingConnectors || 
+    isLoadingProjectConnectors || isLoadingInterfaces;
 
   // Transform data into React Flow nodes and edges
   const { initialNodes, initialEdges } = useMemo(() => {
@@ -227,7 +253,7 @@ export function ProjectView({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Update nodes when data changes
-  useMemo(() => {
+  useEffect(() => {
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);

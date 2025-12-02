@@ -16,6 +16,7 @@ import type * as claudeActivities from './claude-activities';
 import type { ClaudeModel, ClaudeComplianceResult } from './claude-activities';
 // Import credential activities from package-builder-production
 // Using relative path since we're in the same monorepo
+// Note: formatCredentialsError is a regular function, not an activity, so we import it directly
 import type * as credentialActivities from '../../agents/package-builder-production/src/activities/credentials.activities.js';
 import type * as gitActivities from '../../agents/package-builder-production/src/activities/git.activities.js';
 
@@ -37,7 +38,8 @@ const {
 });
 
 // Shared activities (credentials, git operations)
-const { checkCredentials, formatCredentialsError } = proxyActivities<typeof credentialActivities>({
+// Note: formatCredentialsError is a regular function, not an activity, so we'll format errors inline
+const { checkCredentials } = proxyActivities<typeof credentialActivities>({
   startToCloseTimeout: '1 minute',
   retry: {
     maximumAttempts: 1, // Fail fast on credential checks
@@ -190,11 +192,13 @@ export async function ClaudeAuditedBuildWorkflow(
   });
 
   if (!credentialsStatus.allAvailable) {
-    const errorMessage = formatCredentialsError(credentialsStatus);
+    // Format error message inline (formatCredentialsError is not an activity)
+    const missingList = credentialsStatus.missing || [];
+    const errorMessage = `Missing required credentials: ${missingList.join(', ')}`;
     throw ApplicationFailure.nonRetryable(
       `Missing required credentials:\n\n${errorMessage}`,
       'MISSING_CREDENTIALS',
-      { missing: credentialsStatus.missing, checks: credentialsStatus.checks }
+      [credentialsStatus.missing, credentialsStatus.checks]
     );
   }
 

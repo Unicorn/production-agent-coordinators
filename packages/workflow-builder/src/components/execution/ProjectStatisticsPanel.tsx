@@ -10,7 +10,12 @@ interface ProjectStatisticsPanelProps {
 }
 
 export function ProjectStatisticsPanel({ projectId }: ProjectStatisticsPanelProps) {
-  const { data, isLoading, error } = api.execution.getProjectStatistics.useQuery({
+  const { data: statsData, isLoading, error } = api.execution.getProjectStatistics.useQuery({
+    projectId,
+  });
+
+  // Get workflow count for the project
+  const { data: workflowsData } = api.workflows.list.useQuery({
     projectId,
   });
 
@@ -22,7 +27,7 @@ export function ProjectStatisticsPanel({ projectId }: ProjectStatisticsPanelProp
     );
   }
 
-  if (error || !data) {
+  if (error || !statsData) {
     return (
       <Card p="$4" bg="$red2">
         <Text color="$red11">Error loading statistics</Text>
@@ -30,7 +35,30 @@ export function ProjectStatisticsPanel({ projectId }: ProjectStatisticsPanelProp
     );
   }
 
-  const stats = data.statistics;
+  // Map database fields to camelCase and provide defaults
+  const stats = {
+    totalWorkflows: workflowsData?.total || 0,
+    totalExecutions: statsData.total_executions || 0,
+    averageDurationMs: statsData.avg_duration_ms || null,
+    totalErrors: statsData.total_failures || 0,
+    mostUsedTaskQueue: statsData.most_used_task_queue_id ? {
+      queueName: statsData.most_used_task_queue_id,
+      executionCount: statsData.most_used_task_queue_count || 0,
+    } : null,
+    mostUsedWorkflow: statsData.most_used_workflow_id ? {
+      workflowName: statsData.most_used_workflow_id,
+      executionCount: statsData.most_used_workflow_count || 0,
+    } : null,
+    mostUsedComponent: statsData.most_used_component_id ? {
+      componentName: statsData.most_used_component_id,
+      usageCount: statsData.most_used_component_count || 0,
+    } : null,
+    longestRun: statsData.longest_run_workflow_id ? {
+      workflowName: statsData.longest_run_workflow_id,
+      durationMs: statsData.longest_run_duration_ms || 0,
+      startedAt: statsData.last_execution_at,
+    } : null,
+  };
 
   return (
     <ScrollView f={1}>

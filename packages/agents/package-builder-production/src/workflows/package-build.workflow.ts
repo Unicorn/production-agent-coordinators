@@ -46,6 +46,38 @@ const { updateMCPPackageStatus } = proxyActivities<MCPActivities>({
   startToCloseTimeout: '1 minute'
 });
 
+/**
+ * Sanitize package name from content to prevent Gemini CLI ImportProcessor errors
+ * Replaces both @scope/name and scope/name formats with [PACKAGE_NAME] placeholder
+ * Uses word boundaries to avoid partial matches
+ */
+function sanitizePackageName(content: string, packageName: string): string {
+  // Extract scope/name part (remove @ if present)
+  const namePart = packageName.startsWith('@') ? packageName.substring(1) : packageName;
+  const scopePart = namePart.split('/')[0];
+  const packagePart = namePart.split('/')[1] || namePart;
+  
+  // Escape special regex characters
+  const escapedNamePart = namePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedScope = scopePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedPackage = packagePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+  // Replace patterns with word boundaries to avoid partial matches
+  // Match: @scope/name, scope/name, or just the name part if it appears standalone
+  const patterns = [
+    new RegExp(`@${escapedNamePart}\\b`, 'g'),  // @scope/name
+    new RegExp(`\\b${escapedNamePart}\\b`, 'g'), // scope/name (word boundary)
+    new RegExp(`\\b${escapedScope}/${escapedPackage}\\b`, 'g'), // scope/package (if different from full name)
+  ];
+  
+  let sanitized = content;
+  for (const pattern of patterns) {
+    sanitized = sanitized.replace(pattern, '[PACKAGE_NAME]');
+  }
+  
+  return sanitized;
+}
+
 export async function PackageBuildWorkflow(input: PackageBuildInput): Promise<PackageBuildResult> {
   const startTime = Date.now();
   const report: PackageBuildReport = {
@@ -254,12 +286,22 @@ Read the plan file and requirements. Create:
 - jest.config.js (coverage thresholds per requirements)
 - .eslintrc.js (strict rules per requirements)
 - README.md (with usage examples)
-- Directory structure (src/, __tests__/)`;
+- Directory structure (src/, __tests__/)
+
+CRITICAL IMPORTANT: 
+- Do NOT try to import or reference the package by name (e.g., "test/simple-package" or "@test/simple-package")
+- Do NOT use import statements that reference the package name
+- Work directly in the current directory using relative paths only
+- All imports should use relative paths like "./file" or "../file", never package names`;
+
+      // Sanitize package name from context to prevent ImportProcessor errors
+      const sanitizedPlanContent = sanitizePackageName(planContent, input.packageName);
+      const sanitizedRequirementsContent = sanitizePackageName(requirementsContent, input.packageName);
 
       const scaffoldResult = await executeCLIAgent({
         instruction: scaffoldInstruction,
         workingDir: packageFullPath,
-        contextContent: `# BernierLLC Package Requirements\n\n${requirementsContent}\n\n---\n\n# Package Specification\n\n${planContent}`,
+        contextContent: `# BernierLLC Package Requirements\n\n${sanitizedRequirementsContent}\n\n---\n\n# Package Specification\n\n${sanitizedPlanContent}\n\n---\n\n# IMPORTANT: Package Name Sanitization\n\nThe package name "${input.packageName}" has been replaced with "[PACKAGE_NAME]" in this context to prevent import errors.\nDO NOT try to import or reference the package by name. Work directly in the current directory using relative paths only.`,
         task: 'scaffold',
       }, provider.name);
 
@@ -284,7 +326,13 @@ Create:
 - Comprehensive tests in __tests__/
 - TSDoc comments on all public exports
 
-Ensure all requirements are met.`;
+Ensure all requirements are met.
+
+CRITICAL IMPORTANT:
+- Do NOT try to import or reference the package by name (e.g., "test/simple-package" or "@test/simple-package")
+- Do NOT use import statements that reference the package name
+- Use ONLY relative imports like "./file" or "../file"
+- Never use package name imports - they will cause ImportProcessor errors`;
 
       let sessionId: string | undefined;
       if (provider.name === 'claude' && resumePoint) {
@@ -292,10 +340,14 @@ Ensure all requirements are met.`;
         // For now, we'll start fresh but include resume context
       }
 
+      // Sanitize package name from context to prevent ImportProcessor errors
+      const sanitizedPlanContent = sanitizePackageName(planContent, input.packageName);
+      const sanitizedRequirementsContent = sanitizePackageName(requirementsContent, input.packageName);
+
       const implementResult = await executeCLIAgent({
         instruction: implementInstruction,
         workingDir: packageFullPath,
-        contextContent: `# BernierLLC Package Requirements\n\n${requirementsContent}\n\n---\n\n# Package Specification\n\n${planContent}`,
+        contextContent: `# BernierLLC Package Requirements\n\n${sanitizedRequirementsContent}\n\n---\n\n# Package Specification\n\n${sanitizedPlanContent}\n\n---\n\n# IMPORTANT: Package Name Sanitization\n\nThe package name "${input.packageName}" has been replaced with "[PACKAGE_NAME]" in this context to prevent import errors.\nDO NOT try to import or reference the package by name. Work directly in the current directory using relative paths only.`,
         sessionId,
         task: 'implement',
       }, provider.name);
@@ -321,7 +373,8 @@ Ensure all requirements are met.`;
     // Activity 3: Run build (turn-based generation already validated build during BUILD_VALIDATION phase)
     const buildResult = await runBuild({
       workspaceRoot: input.workspaceRoot,
-      packagePath: input.packagePath
+      packagePath: input.packagePath,
+      expectedPackageName: input.packageName
     });
     report.buildMetrics.buildTime = buildResult.duration;
 

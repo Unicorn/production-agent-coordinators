@@ -95,7 +95,6 @@ export async function ParallelBuildWorkflow(
   input: ParallelBuildWorkflowInput
 ): Promise<ParallelBuildWorkflowResult> {
   const {
-    specFileContent,
     requirementsFileContent,
     tasks,
     basePath = '/tmp/claude-builds',
@@ -114,7 +113,6 @@ export async function ParallelBuildWorkflow(
   const mainWorkspace = await setupClaudeWorkspace({
     basePath,
     requirementsContent: requirementsFileContent,
-    specContent: specFileContent,
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -173,14 +171,13 @@ export async function ParallelBuildWorkflow(
         sessionId = result.session_id;
         totalCost += result.cost_usd;
 
-        await logClaudeAuditEntry({
+        await logClaudeAuditEntry(mainWorkspace, {
           workflow_run_id: workflowInfo().workflowId,
           step_name: `parallel_${task.name}`,
           timestamp: new Date().toISOString(),
           cost_usd: result.cost_usd,
           session_id: sessionId,
           validation_status: 'N/A',
-          model_used: task.model || 'sonnet',
         });
 
         return {
@@ -229,7 +226,7 @@ export async function ParallelBuildWorkflow(
 
   const validation = await runClaudeComplianceChecks(mainWorkspace);
 
-  await logClaudeAuditEntry({
+  await logClaudeAuditEntry(mainWorkspace, {
     workflow_run_id: workflowInfo().workflowId,
     step_name: 'validation_merged',
     timestamp: new Date().toISOString(),
@@ -243,10 +240,7 @@ export async function ParallelBuildWorkflow(
       message: `Merged build failed validation: ${validation.output.substring(0, 500)}`,
       type: 'VALIDATION_FAILED',
       nonRetryable: true,
-      details: {
-        workspacePath: mainWorkspace,
-        mergeResult,
-      },
+      details: [mainWorkspace, mergeResult],
     });
   }
 

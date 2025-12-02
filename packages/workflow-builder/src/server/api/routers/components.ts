@@ -69,13 +69,72 @@ export const componentsRouter = createTRPCRouter({
           message: error.message 
         });
       }
-      
+
+      // Also fetch activities that aren't components yet and merge them
+      const { data: activities } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('is_active', true)
+        .eq('deprecated', false);
+
+      // Get component type and visibility for activities
+      const { data: activityType } = await supabase
+        .from('component_types')
+        .select('id, name, icon')
+        .eq('name', 'activity')
+        .single();
+
+      const { data: publicVisibility } = await supabase
+        .from('component_visibility')
+        .select('id, name')
+        .eq('name', 'public')
+        .single();
+
+      // Convert activities to component-like objects
+      const activityComponents = (activities || [])
+        .filter(activity => {
+          // Only include activities that don't have a corresponding component
+          return !data?.some(comp => comp.name === activity.name);
+        })
+        .map(activity => ({
+          id: `activity-${activity.id}`, // Temporary ID
+          name: activity.name,
+          display_name: activity.name.replace(/([A-Z])/g, ' $1').trim() || activity.name,
+          description: activity.description || '',
+          component_type_id: activityType?.id || '',
+          component_type: activityType || { id: '', name: 'activity', icon: null },
+          version: '1.0.0',
+          created_by: activity.created_by,
+          created_by_user: null,
+          visibility_id: publicVisibility?.id || '',
+          visibility: publicVisibility || { id: '', name: 'public' },
+          tags: activity.tags || [],
+          capabilities: activity.category ? [activity.category.toLowerCase()] : [],
+          config_schema: activity.input_schema || {},
+          input_schema: activity.input_schema || {},
+          output_schema: activity.output_schema || {},
+          implementation_path: activity.module_path || null,
+          npm_package: activity.package_name || null,
+          deprecated: false,
+          created_at: activity.created_at,
+          updated_at: activity.updated_at,
+          // Mark as activity source
+          _source: 'activity' as const,
+          _activity_id: activity.id,
+        }));
+
+      // Merge components and activity components
+      const allComponents = [
+        ...(data || []),
+        ...activityComponents,
+      ];
+
       return {
-        components: data || [],
-        total: count || 0,
+        components: allComponents,
+        total: (count || 0) + activityComponents.length,
         page: input.page,
         pageSize: input.pageSize,
-        totalPages: Math.ceil((count || 0) / input.pageSize),
+        totalPages: Math.ceil(((count || 0) + activityComponents.length) / input.pageSize),
       };
     }),
 

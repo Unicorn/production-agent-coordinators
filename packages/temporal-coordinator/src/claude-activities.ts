@@ -196,7 +196,39 @@ export async function executeClaudeAgent(
 
       try {
         // Parse JSON output from Claude CLI
-        const parsed = JSON.parse(stdout);
+        // Check if output looks incomplete (common when interrupted)
+        const trimmedStdout = stdout.trim();
+        if (!trimmedStdout || trimmedStdout.length === 0) {
+          resolve({
+            success: false,
+            result: '',
+            cost_usd: 0,
+            duration_ms: duration,
+            session_id: '',
+            error: 'CLI output is empty - operation may have been interrupted',
+            raw_output: stdout,
+          });
+          return;
+        }
+
+        // Check for incomplete JSON (common when process is killed)
+        if (trimmedStdout.endsWith(',') || !trimmedStdout.endsWith('}') && !trimmedStdout.endsWith(']')) {
+          console.warn(`[ClaudeActivity] Output appears incomplete (may have been interrupted)`);
+          // Try to extract session_id even if full parse fails
+          const sessionMatch = stdout.match(/"session_id"\s*:\s*"([^"]+)"/);
+          resolve({
+            success: false,
+            result: '',
+            cost_usd: 0,
+            duration_ms: duration,
+            session_id: sessionMatch?.[1] || '',
+            error: 'CLI output is incomplete - operation may have been interrupted or timed out',
+            raw_output: stdout,
+          });
+          return;
+        }
+
+        const parsed = JSON.parse(trimmedStdout);
         console.log(`[ClaudeActivity] Success - Cost: $${parsed.cost_usd || 0}, Duration: ${parsed.duration_ms || duration}ms`);
 
         resolve({
@@ -207,9 +239,15 @@ export async function executeClaudeAgent(
           session_id: parsed.session_id || '', // Capture for next step
           num_turns: parsed.num_turns,
         });
-      } catch (parseError) {
-        console.warn(`[ClaudeActivity] Failed to parse JSON output`);
-        console.warn(`[ClaudeActivity] Raw output: ${stdout.substring(0, 500)}...`);
+      } catch (parseError: unknown) {
+        const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+        console.warn(`[ClaudeActivity] Failed to parse JSON output: ${errorMessage}`);
+        console.warn(`[ClaudeActivity] Raw output length: ${stdout.length}, preview: ${stdout.substring(0, 500)}...`);
+
+        // Check if it's an "Unexpected end of JSON" error (common when interrupted)
+        const isInterrupted = errorMessage.includes('Unexpected end of JSON') || 
+                             errorMessage.includes('end of data') ||
+                             stdout.trim().length === 0;
 
         // Try to extract session_id even if full parse fails
         const sessionMatch = stdout.match(/"session_id"\s*:\s*"([^"]+)"/);
@@ -220,7 +258,9 @@ export async function executeClaudeAgent(
           cost_usd: 0,
           duration_ms: duration,
           session_id: sessionMatch?.[1] || '',
-          error: `Failed to parse JSON output: ${parseError}`,
+          error: isInterrupted 
+            ? 'CLI operation was interrupted or timed out - output is incomplete'
+            : `Failed to parse JSON output: ${errorMessage}`,
           raw_output: stdout,
         });
       }

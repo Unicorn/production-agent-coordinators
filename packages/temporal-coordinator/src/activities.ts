@@ -71,9 +71,16 @@ export async function executeGeminiAgent({ instruction, workingDir, contextConte
   // -o json: Returns structured data we can parse
   // Note: New CLI uses positional prompt and doesn't have --context flag
   // We tell Gemini to read the GEMINI.md file in the instruction itself
+  // IMPORTANT: Add explicit warning to prevent ImportProcessor from trying to import package names
   const fullInstruction = contextContent
-    ? `First, read the GEMINI.md file in the current directory for project requirements and context. Then: ${instruction}`
-    : instruction;
+    ? `First, read the GEMINI.md file in the current directory for project requirements and context. 
+
+CRITICAL: Do NOT use import statements with package names. Use only relative imports like "./file" or "../file". The ImportProcessor should NOT try to import packages by name.
+
+Then: ${instruction}`
+    : `CRITICAL: Do NOT use import statements with package names. Use only relative imports like "./file" or "../file". The ImportProcessor should NOT try to import packages by name.
+
+${instruction}`;
 
   // Escape the instruction for shell and use positional prompt syntax
   const escapedInstruction = fullInstruction.replace(/'/g, "'\\''");
@@ -99,9 +106,92 @@ export async function executeGeminiAgent({ instruction, workingDir, contextConte
     }
 
   } catch (error: any) {
-    const errorMsg = error.stderr || error.message;
-    console.error(`[Activity] Gemini CLI failed: ${errorMsg}`);
-    throw new Error(`Gemini CLI failed: ${errorMsg}`);
+    // Capture full error details
+    const stderr = error.stderr || '';
+    const stdout = error.stdout || '';
+    const message = error.message || 'Unknown error';
+    
+    // Try to extract error report file path from stderr or stdout
+    let actualError = message;
+    let errorReportPath: string | null = null;
+    
+    // Check stderr first
+    const stderrMatch = stderr.match(/Full report available at: (.+\.json)/);
+    if (stderrMatch) {
+      errorReportPath = stderrMatch[1];
+    } else {
+      // Check stdout
+      const stdoutMatch = stdout.match(/Full report available at: (.+\.json)/);
+      if (stdoutMatch) {
+        errorReportPath = stdoutMatch[1];
+      }
+    }
+    
+    // If we found an error report path, try to read it
+    if (errorReportPath) {
+      try {
+        const errorReportContent = await fs.readFile(errorReportPath, 'utf-8');
+        const errorReport = JSON.parse(errorReportContent);
+        if (errorReport.error?.message) {
+          actualError = errorReport.error.message;
+          // Include stack trace if available (first few lines)
+          if (errorReport.error.stack) {
+            const stackLines = errorReport.error.stack.split('\n').slice(0, 3);
+            actualError += `\nStack: ${stackLines.join('\n')}`;
+          }
+        }
+      } catch (readError: any) {
+        // If we can't read the error report, log and fall back
+        console.warn(`[Activity] Could not read error report at ${errorReportPath}: ${readError.message}`);
+      }
+    } else {
+      // Try to find the most recent error report file as fallback
+      try {
+        const tmpDir = '/var/folders/r0/wspnzd1s18sfjy10ffyv2qxw0000gn/T';
+        const files = await fs.readdir(tmpDir);
+        const errorReports = files
+          .filter(f => f.startsWith('gemini-client-error-') && f.endsWith('.json'))
+          .map(f => ({ name: f, path: `${tmpDir}/${f}` }));
+        
+        if (errorReports.length > 0) {
+          // Get the most recently modified file
+          const stats = await Promise.all(
+            errorReports.map(async (f) => ({
+              ...f,
+              mtime: (await fs.stat(f.path)).mtime.getTime()
+            }))
+          );
+          const mostRecent = stats.sort((a, b) => b.mtime - a.mtime)[0];
+          
+          try {
+            const errorReportContent = await fs.readFile(mostRecent.path, 'utf-8');
+            const errorReport = JSON.parse(errorReportContent);
+            if (errorReport.error?.message) {
+              actualError = errorReport.error.message;
+              console.log(`[Activity] Found error in most recent report: ${mostRecent.name}`);
+            }
+          } catch (readError: any) {
+            console.warn(`[Activity] Could not read most recent error report: ${readError.message}`);
+          }
+        }
+      } catch (dirError: any) {
+        // If we can't access the temp directory, that's okay
+        console.warn(`[Activity] Could not search for error reports: ${dirError.message}`);
+      }
+    }
+    
+    // Build comprehensive error message
+    let errorMsg = `Gemini CLI failed: ${actualError}`;
+    if (stderr && !stderr.includes(actualError) && stderr.length > 0) {
+      errorMsg += `\nStderr: ${stderr.substring(0, 500)}`;
+    }
+    if (stdout && !stdout.includes('{') && !stdout.includes(actualError) && stdout.length > 0) {
+      // Include stdout if it's not JSON (might contain error info)
+      errorMsg += `\nStdout: ${stdout.substring(0, 500)}`;
+    }
+    
+    console.error(`[Activity] ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 }
 

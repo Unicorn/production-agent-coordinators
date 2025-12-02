@@ -13,6 +13,9 @@
 import { Worker, NativeConnection } from '@temporalio/worker';
 import * as activities from './activities.js';
 import * as claudeActivities from './claude-activities.js';
+// Import shared activities from package-builder-production
+import * as credentialActivities from '../../agents/package-builder-production/src/activities/credentials.activities.js';
+import * as gitActivities from '../../agents/package-builder-production/src/activities/git.activities.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -20,6 +23,8 @@ import { dirname, join } from 'node:path';
 const allActivities = {
   ...activities,
   ...claudeActivities,
+  ...credentialActivities,
+  ...gitActivities,
 };
 
 const __filename = fileURLToPath(import.meta.url);

@@ -7,6 +7,106 @@ import { createTRPCRouter, protectedProcedure, publicProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { createActivityRegistry } from '@/lib/activities/activity-registry';
 
+/**
+ * Sync activities to components - Creates component entries for all activities
+ * that don't have corresponding components yet
+ */
+async function syncActivitiesToComponents(supabase: any, userId: string) {
+  // Get all active, non-deprecated activities
+  const { data: activities, error: activitiesError } = await supabase
+    .from('activities')
+    .select('*')
+    .eq('is_active', true)
+    .eq('deprecated', false);
+
+  if (activitiesError) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: `Failed to fetch activities: ${activitiesError.message}`,
+    });
+  }
+
+  if (!activities || activities.length === 0) {
+    return { synced: 0, skipped: 0, errors: [] };
+  }
+
+  // Get component type ID for 'activity'
+  const { data: activityType, error: typeError } = await supabase
+    .from('component_types')
+    .select('id')
+    .eq('name', 'activity')
+    .single();
+
+  if (typeError || !activityType) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Activity component type not found',
+    });
+  }
+
+  // Get public visibility ID
+  const { data: publicVisibility, error: visibilityError } = await supabase
+    .from('component_visibility')
+    .select('id')
+    .eq('name', 'public')
+    .single();
+
+  if (visibilityError || !publicVisibility) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Public visibility not found',
+    });
+  }
+
+  const results = { synced: 0, skipped: 0, errors: [] as string[] };
+
+  for (const activity of activities) {
+    try {
+      // Check if component already exists
+      const { data: existing } = await supabase
+        .from('components')
+        .select('id')
+        .eq('name', activity.name)
+        .single();
+
+      if (existing) {
+        results.skipped++;
+        continue;
+      }
+
+      // Create component from activity
+      const { error: insertError } = await supabase
+        .from('components')
+        .insert({
+          name: activity.name,
+          display_name: activity.name.replace(/([A-Z])/g, ' $1').trim() || activity.name,
+          description: activity.description || '',
+          component_type_id: activityType.id,
+          version: '1.0.0', // Default version
+          created_by: userId,
+          visibility_id: publicVisibility.id,
+          tags: activity.tags || [],
+          capabilities: activity.category ? [activity.category.toLowerCase()] : [],
+          config_schema: activity.input_schema || {},
+          input_schema: activity.input_schema || {},
+          output_schema: activity.output_schema || {},
+          implementation_path: activity.module_path || null,
+          npm_package: activity.package_name || null,
+        });
+
+      if (insertError) {
+        results.errors.push(`${activity.name}: ${insertError.message}`);
+      } else {
+        results.synced++;
+      }
+    } catch (err: any) {
+      results.errors.push(`${activity.name}: ${err.message}`);
+    }
+  }
+
+  return results;
+}
+
 export const activitiesRouter = createTRPCRouter({
   /**
    * List all activities with optional filters
@@ -182,6 +282,24 @@ export const activitiesRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to discover activities',
+        });
+      }
+    }),
+
+  /**
+   * Sync activities to components - Creates component entries for activities
+   * that don't have corresponding components yet
+   */
+  syncToComponents: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      try {
+        const results = await syncActivitiesToComponents(ctx.supabase, ctx.user.id);
+        return results;
+      } catch (error: any) {
+        console.error('Error syncing activities to components:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message || 'Failed to sync activities to components',
         });
       }
     }),

@@ -6,4 +6,10 @@ describe('greet', () => {
     const result = greet(name);
     expect(result).toBe('Hello, World!');
   });
+
+  it('should return a greeting with an empty name', () => {
+    const name = '';
+    const result = greet(name);
+    expect(result).toBe('Hello, !');
+  });
 });

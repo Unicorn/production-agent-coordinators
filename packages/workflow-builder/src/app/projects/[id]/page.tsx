@@ -9,10 +9,11 @@ import { Header } from '@/components/shared/Header';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { api } from '@/lib/trpc/client';
 import { formatDistanceToNow } from 'date-fns';
-import { Edit, Trash, Save, X, ExternalLink, Play, Square, BarChart3, Database, Globe } from 'lucide-react';
+import { Edit, Trash, Save, X, ExternalLink, BarChart3, Database, Globe } from 'lucide-react';
 import { ProjectStatisticsPanel } from '@/components/execution/ProjectStatisticsPanel';
 import { ConnectionManager } from '@/components/project/ConnectionManager';
 import { ConnectorManager } from '@/components/connector/ConnectorManager';
+import { ProjectView } from '@/components/service/ProjectView';
 
 function ProjectDetailContent() {
   const router = useRouter();
@@ -293,6 +294,12 @@ function ProjectDetailContent() {
                   <Text>Connectors</Text>
                 </XStack>
               </Tabs.Tab>
+              <Tabs.Tab value="visualization">
+                <XStack gap="$2" ai="center">
+                  <Globe size={16} />
+                  <Text>Visualization</Text>
+                </XStack>
+              </Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Content value="workflows">
@@ -369,6 +376,19 @@ function ProjectDetailContent() {
 
             <Tabs.Content value="connectors">
               <ConnectorManager projectId={projectId} />
+            </Tabs.Content>
+
+            <Tabs.Content value="visualization">
+              <Card padding="$4" elevate>
+                <YStack gap="$3" minHeight="600px">
+                  <H2 fontSize="$5">Project Visualization</H2>
+                  <Text color="$gray11">
+                    View all services and their connections in this project
+                  </Text>
+                  <Separator />
+                  <ProjectView projectId={projectId} readOnly={false} />
+                </YStack>
+              </Card>
             </Tabs.Content>
           </Tabs>
         </YStack>

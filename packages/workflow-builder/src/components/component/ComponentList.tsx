@@ -1,14 +1,22 @@
 /**
- * Component List - Grid of component cards
+ * Component List - Grid of component cards organized by utility category
  */
 
 'use client';
 
-import { YStack, XStack, Text, Spinner, Button, Input } from 'tamagui';
-import { useState } from 'react';
+import { YStack, XStack, Text, Spinner, Button, Input, Card, Separator, ScrollView } from 'tamagui';
+import { useState, useEffect, useRef } from 'react';
 import { ComponentCard } from './ComponentCard';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/trpc/client';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { UTILITY_CATEGORIES, categorizeComponent } from '@/lib/component-categorization';
+import type { Database } from '@/types/database';
+
+type Component = Database['public']['Tables']['components']['Row'] & {
+  component_type: { name: string; icon: string | null };
+  visibility: { name: string };
+};
 
 interface ComponentListProps {
   type?: string;
@@ -24,13 +32,8 @@ export function ComponentList({
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState(type || '');
-
-  console.log('🔍 [ComponentList] Initiating components.list query with params:', {
-    type: selectedType || undefined,
-    capability,
-    includeDeprecated: false,
-  });
-
+  
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const queryResult = api.components.list.useQuery({
     type: selectedType || undefined,
     capability,
@@ -38,21 +41,55 @@ export function ComponentList({
   });
 
   const { data, isLoading, error } = queryResult;
-
-  console.log('📊 [ComponentList] Query state:', {
-    isLoading,
-    hasError: !!error,
-    errorMessage: error?.message,
-    hasData: !!data,
-    componentCount: data?.components?.length,
-    status: queryResult.status,
-    fetchStatus: queryResult.fetchStatus,
-    isFetching: queryResult.isFetching,
-    isPaused: queryResult.isPaused,
-  });
-
   const { data: types } = api.components.getTypes.useQuery();
+  
+  // Track which sections are expanded - initialize with all categories expanded
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const initializedRef = useRef(false);
 
+  // Filter components by search and type (computed before conditional returns)
+  const filteredComponents = (data?.components || []).filter((c) => {
+    // Type filter
+    if (selectedType && c.component_type.name !== selectedType) {
+      return false;
+    }
+    
+    // Search filter
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      c.display_name.toLowerCase().includes(query) ||
+      c.name.toLowerCase().includes(query) ||
+      c.description?.toLowerCase().includes(query)
+    );
+  }) as Component[];
+
+  // Group by utility category
+  const groupedComponents = filteredComponents.reduce((acc, comp) => {
+    const categoryId = categorizeComponent(comp);
+    if (!acc[categoryId]) acc[categoryId] = [];
+    acc[categoryId].push(comp);
+    return acc;
+  }, {} as Record<string, Component[]>);
+
+  // Get categories that have components, in the order defined in UTILITY_CATEGORIES
+  const activeCategories = UTILITY_CATEGORIES.filter(cat => 
+    groupedComponents[cat.id] && groupedComponents[cat.id].length > 0
+  );
+
+  // Initialize expanded sections when categories are first computed
+  useEffect(() => {
+    if (activeCategories.length > 0 && !initializedRef.current) {
+      const initial: Record<string, boolean> = {};
+      activeCategories.forEach(cat => {
+        initial[cat.id] = true; // Start with all expanded
+      });
+      setExpandedSections(initial);
+      initializedRef.current = true;
+    }
+  }, [activeCategories]);
+
+  // NOW we can do conditional returns
   if (isLoading) {
     return (
       <YStack flex={1} alignItems="center" justifyContent="center" padding="$6">
@@ -70,15 +107,14 @@ export function ComponentList({
     );
   }
 
-  const filteredComponents = data?.components.filter((c) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      c.display_name.toLowerCase().includes(query) ||
-      c.name.toLowerCase().includes(query) ||
-      c.description?.toLowerCase().includes(query)
-    );
-  }) || [];
+  const toggleSection = (categoryId: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId],
+    }));
+  };
+
+  const totalComponents = filteredComponents.length;
 
   return (
     <YStack flex={1} gap="$4">
@@ -116,37 +152,97 @@ export function ComponentList({
 
       {/* Results count */}
       <Text fontSize="$3" color="$gray11">
-        {filteredComponents.length} component{filteredComponents.length !== 1 ? 's' : ''} found
+        {totalComponents} component{totalComponents !== 1 ? 's' : ''} found
       </Text>
 
-      {/* Component grid */}
-      <YStack gap="$3">
-        {filteredComponents.length === 0 ? (
-          <YStack padding="$6" alignItems="center">
-            <Text color="$gray11">No components found</Text>
-            <Button
-              marginTop="$4"
-              onPress={() => router.push('/components/new')}
-            >
-              Create Component
-            </Button>
+      {/* Component categories */}
+      {totalComponents === 0 ? (
+        <YStack padding="$6" alignItems="center">
+          <Text color="$gray11">No components found</Text>
+          <Button
+            marginTop="$4"
+            onPress={() => router.push('/components/new')}
+          >
+            Create Component
+          </Button>
+        </YStack>
+      ) : (
+        <ScrollView flex={1}>
+          <YStack gap="$4">
+            {activeCategories.map((category) => {
+              const comps = groupedComponents[category.id] || [];
+              const Icon = category.icon;
+              const categoryColor = category.color;
+              const isExpanded = expandedSections[category.id] ?? true;
+
+              return (
+                <Card key={category.id} padding="$4" elevate>
+                  <YStack gap="$3">
+                    {/* Category Header */}
+                    <XStack
+                      alignItems="center"
+                      gap="$3"
+                      cursor="pointer"
+                      onPress={() => toggleSection(category.id)}
+                    >
+                      {isExpanded ? (
+                        <ChevronDown size={18} color="#64748b" />
+                      ) : (
+                        <ChevronRight size={18} color="#64748b" />
+                      )}
+                      <Icon size={20} color={categoryColor} />
+                      <YStack flex={1} gap="$1">
+                        <Text
+                          fontSize="$5"
+                          fontWeight="700"
+                          color={categoryColor}
+                        >
+                          {category.name}
+                        </Text>
+                        <Text
+                          fontSize="$3"
+                          color="$gray11"
+                        >
+                          {category.description}
+                        </Text>
+                      </YStack>
+                      <XStack
+                        backgroundColor="$gray4"
+                        paddingHorizontal="$3"
+                        paddingVertical="$1.5"
+                        borderRadius="$3"
+                      >
+                        <Text fontSize="$3" fontWeight="700" color="$gray11">
+                          {comps.length}
+                        </Text>
+                      </XStack>
+                    </XStack>
+
+                    {/* Components in this category */}
+                    {isExpanded && (
+                      <YStack gap="$3" paddingLeft="$8">
+                        {comps.map((component) => (
+                          <ComponentCard
+                            key={component.id}
+                            component={component as any}
+                            onClick={() => {
+                              if (onComponentClick) {
+                                onComponentClick(component.id);
+                              } else {
+                                router.push(`/components/${component.id}`);
+                              }
+                            }}
+                          />
+                        ))}
+                      </YStack>
+                    )}
+                  </YStack>
+                </Card>
+              );
+            })}
           </YStack>
-        ) : (
-          filteredComponents.map((component) => (
-            <ComponentCard
-              key={component.id}
-              component={component as any}
-              onClick={() => {
-                if (onComponentClick) {
-                  onComponentClick(component.id);
-                } else {
-                  router.push(`/components/${component.id}`);
-                }
-              }}
-            />
-          ))
-        )}
-      </YStack>
+        </ScrollView>
+      )}
 
       {/* Pagination */}
       {data && data.totalPages > 1 && (

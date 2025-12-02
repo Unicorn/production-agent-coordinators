@@ -4,7 +4,7 @@
  * Ensures workflows, workspaces, and processes are cleaned up after tests
  */
 
-import { Connection, Client } from '@temporalio/client';
+import { Client } from '@temporalio/client';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -30,7 +30,7 @@ export async function cancelWorkflows(
 ): Promise<void> {
   const cancelPromises = workflowIds.map(async (workflowId) => {
     try {
-      const handle = client.getHandle(workflowId);
+      const handle = client.workflow.getHandle(workflowId);
       const description = await handle.describe();
       
       // Only cancel if workflow is still running
@@ -155,20 +155,20 @@ export async function cleanupTestResources(
   const {
     workflowIds = [],
     workspacePaths = [],
-    cancelWorkflows = true,
-    removeWorkspaces = true,
+    cancelWorkflows: shouldCancelWorkflows = true,
+    removeWorkspaces: shouldRemoveWorkspaces = true,
     killProcesses: shouldKillProcesses = false,
     processPatterns = [],
   } = options;
 
   // 1. Cancel workflows
-  if (cancelWorkflows && workflowIds.length > 0) {
+  if (shouldCancelWorkflows && workflowIds.length > 0) {
     console.log('📋 Cancelling workflows...');
     await cancelWorkflows(client, workflowIds);
   }
 
   // 2. Remove workspaces
-  if (removeWorkspaces && workspacePaths.length > 0) {
+  if (shouldRemoveWorkspaces && workspacePaths.length > 0) {
     console.log('\n📁 Removing workspaces...');
     await removeWorkspaces(workspacePaths);
   }

@@ -9,9 +9,27 @@ const execAsync = promisify(exec);
 export async function runBuild(input: {
   workspaceRoot: string;
   packagePath: string;
+  expectedPackageName?: string;
 }): Promise<BuildResult> {
   const startTime = Date.now();
   const fullPath = path.join(input.workspaceRoot, input.packagePath);
+
+  // Validate and fix package.json name if needed
+  if (input.expectedPackageName) {
+    try {
+      const packageJsonPath = path.join(fullPath, 'package.json');
+      const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
+      const packageJson = JSON.parse(packageJsonContent);
+      
+      if (packageJson.name !== input.expectedPackageName) {
+        packageJson.name = input.expectedPackageName;
+        await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+      }
+    } catch (error: any) {
+      // If we can't fix the package.json, log but continue
+      console.warn(`[Build] Could not validate/fix package.json: ${error.message}`);
+    }
+  }
 
   try {
     const { stdout, stderr } = await execAsync('yarn build', { cwd: fullPath });
@@ -38,10 +56,29 @@ export async function runTests(input: {
 }): Promise<TestResult> {
   const startTime = Date.now();
   const fullPath = path.join(input.workspaceRoot, input.packagePath);
+  const nodeModulesPath = path.join(fullPath, 'node_modules');
+
+  // Ensure dependencies are installed before running tests
+  const needsInstall = !(await fs.access(nodeModulesPath).then(() => true).catch(() => false));
+  if (needsInstall) {
+    try {
+      await execAsync('yarn install', { cwd: fullPath });
+    } catch (installError: any) {
+      return {
+        success: false,
+        duration: Date.now() - startTime,
+        coverage: 0,
+        stdout: installError.stdout || '',
+        stderr: `Failed to install dependencies: ${installError.stderr || installError.message}`
+      };
+    }
+  }
 
   try {
+    // Use yarn jest directly to ensure we use the local jest from node_modules
+    // This is more reliable than relying on the test script
     const { stdout, stderr } = await execAsync(
-      'yarn test --run --coverage',
+      'yarn jest --coverage',
       { cwd: fullPath }
     );
 

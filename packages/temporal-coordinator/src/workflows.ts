@@ -343,8 +343,6 @@ If you fail these, you fail the job.
  * Re-export from package-builder-production agent
  */
 export { PackageBuildWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/package-build.workflow.js'
-export { CoordinatorWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/coordinator.workflow.js'
-export { AgentExecutorWorkflow } from '@coordinator/agent-package-builder-production/dist/workflows/agent-executor.workflow.js'
 
 /**
  * Claude CLI Workflows

@@ -13,7 +13,7 @@
 
 import type { GeminiAgentInput } from '@coordinator/temporal-coordinator/activities';
 import type { ExecuteClaudeAgentInput, ClaudeModel } from '@coordinator/temporal-coordinator/claude-activities';
-import { selectClaudeModel, buildClaudeInstruction, type ModelSelection } from './model-selector';
+import { selectClaudeModel, buildClaudeInstruction, type ModelSelection } from './model-selector.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Unified Types
@@ -543,8 +543,11 @@ export class ProviderFactory {
           continue;
         }
         
-        // Non-recoverable error
-        throw new Error(result.error || 'CLI execution failed');
+        // Non-recoverable error - include full error details
+        const errorDetails = result.error 
+          ? `Provider: ${currentProvider.name}, Error: ${result.error}`
+          : 'CLI execution failed';
+        throw new Error(errorDetails);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         // Check if we should fallback
@@ -553,7 +556,11 @@ export class ProviderFactory {
           attempts++;
           continue;
         }
-        throw error;
+        // Include provider context in error
+        const enhancedError = error instanceof Error 
+          ? new Error(`Provider: ${currentProvider.name}, ${errorMessage}`)
+          : error;
+        throw enhancedError;
       }
     }
     
@@ -566,16 +573,31 @@ export class ProviderFactory {
   private shouldFallback(error: string | undefined, _currentProvider: CLIProviderName): boolean {
     if (!error) return false;
     
+    // Don't fallback on interruption errors - they're not recoverable
+    const interruptionTriggers = [
+      'interrupted',
+      'incomplete',
+      'timed out',
+      'unexpected end of json',
+      'end of data',
+    ];
+    const errorLower = error.toLowerCase();
+    if (interruptionTriggers.some(trigger => errorLower.includes(trigger))) {
+      return false;
+    }
+    
     const fallbackTriggers = [
       'rate limit',
       'rate limited',
       'quota exceeded',
+      'exhausted your capacity',
+      'quota will reset',
       'credits',
       'authentication',
       'unauthorized',
+      'capacity',
     ];
     
-    const errorLower = error.toLowerCase();
     return fallbackTriggers.some(trigger => errorLower.includes(trigger));
   }
   
