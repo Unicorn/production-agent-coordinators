@@ -1,15 +1,15 @@
 /**
  * @license
- * Copyright 2025 BernierLLC. All Rights Reserved.
+ * Copyright (c) 2025 BernierLLC.
  *
- * Use of this source code is governed by an MIT-style license that can be
- * found in the LICENSE file at https://github.com/bernier-llc/cli-tool/blob/main/LICENSE
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 /**
- * Greets a person with a message.
+ * Greets a person by name.
  * @param name The name of the person to greet.
- * @returns A greeting message.
+ * @returns A greeting string.
  */
 export function greet(name: string): string {
   return `Hello, ${name}!`;

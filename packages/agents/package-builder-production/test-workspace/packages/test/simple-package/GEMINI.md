@@ -1,26 +1,28 @@
 # BernierLLC Package Requirements
 
+# BernierLLC Package Requirements
+
 ## TypeScript & Code Quality
-- [x] Zero TypeScript Errors (Strict Mode)
-- [x] Zero ESLint Errors
-- [x] No `any` types
-- [x] JSDoc comments on all public APIs
-- [x] License header in every .ts file
+- Zero TypeScript Errors (Strict Mode)
+- Zero ESLint Errors
+- No `any` types
+- JSDoc comments on all public APIs
+- License header in every .ts file
 
 ## Testing
-- [x] Minimum 80% test coverage
-- [x] Tests in __tests__/ directory
+- Minimum 80% test coverage
+- Tests in __tests__/ directory
 
 ## Build
-- [x] package.json with required scripts (build, test, lint)
-- [x] tsconfig.json with strict mode
-- [x] dist/ directory with compiled output
+- package.json with required scripts (build, test, lint)
+- tsconfig.json with strict mode
+- dist/ directory with compiled output
 
 ## Verification Commands
-- [x] npm install
-- [x] npm run build
-- [x] npm run lint
-- [x] npm test
+- npm install
+- npm run build
+- npm run lint
+- npm test
 
 ---
 
@@ -29,7 +31,7 @@
 # Test Package Plan
 
 ## Package Overview
-- Name: @test/simple-package
+- Name: [PACKAGE_NAME]
 - Description: A simple test package for CLI integration testing
 - Version: 0.1.0
 
@@ -38,4 +40,12 @@
 - Export a simple function: `greet(name: string): string`
 
 ## Implementation
-- [x] Create a simple greeting function that returns "Hello, {name}!"
+Create a simple greeting function that returns "Hello, {name}!"
+
+
+---
+
+# IMPORTANT: Package Name Sanitization
+
+The package name "@test/simple-package" has been replaced with "[PACKAGE_NAME]" in this context to prevent import errors.
+DO NOT try to import or reference the package by name. Work directly in the current directory using relative paths only.
