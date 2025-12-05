@@ -162,18 +162,35 @@ export async function executeClaudeAgent(
     let stderr = '';
     const startTime = Date.now();
 
+    // Explicitly set stdio to pipes and ensure stdin is closed
+    // This prevents hanging when CLI expects TTY or waits on stdin
     const proc = spawn('claude', args, {
       cwd: workingDir,
       timeout: timeoutMs,
       env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe'], // Explicitly set stdin/stdout/stderr to pipes
     });
 
+    // CRITICAL: Close stdin immediately to prevent CLI from waiting for input
+    // This is especially important in test environments where stdin is not a TTY
+    proc.stdin.end();
+
+    // Drain stdout to prevent backpressure blocking
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 
+    // Drain stderr to prevent backpressure blocking
     proc.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
+    });
+
+    // Handle errors on stdin (shouldn't happen after end(), but be safe)
+    proc.stdin.on('error', (err) => {
+      // Ignore EPIPE errors after stdin.end() - this is expected
+      if ((err as NodeJS.ErrnoException).code !== 'EPIPE') {
+        console.error(`[ClaudeActivity] stdin error: ${err}`);
+      }
     });
 
     proc.on('close', (code: number | null) => {
@@ -181,14 +198,25 @@ export async function executeClaudeAgent(
 
       if (code !== 0) {
         console.error(`[ClaudeActivity] CLI exited with code ${code}`);
-        console.error(`[ClaudeActivity] stderr: ${stderr.substring(0, 500)}`);
+        console.error(`[ClaudeActivity] stderr (${stderr.length} chars): ${stderr.substring(0, 1000)}`);
+        console.error(`[ClaudeActivity] stdout (${stdout.length} chars): ${stdout.substring(0, 1000)}`);
+        console.error(`[ClaudeActivity] Command was: claude ${args.join(' ').substring(0, 200)}...`);
+        console.error(`[ClaudeActivity] Working directory: ${workingDir}`);
+        
+        // Exit code 143 = SIGTERM (128 + 15) - process was killed/interrupted
+        // Exit code 130 = SIGINT (128 + 2) - process was interrupted (Ctrl+C)
+        const isInterrupted = code === 143 || code === 130 || code === null;
+        const errorMessage = isInterrupted
+          ? `CLI operation was interrupted or killed (exit code ${code}). This usually happens when the workflow is cancelled or the process is terminated.`
+          : `CLI exited with code ${code}: ${stderr || stdout || 'Unknown error'}`;
+        
         resolve({
           success: false,
           result: '',
           cost_usd: 0,
           duration_ms: duration,
           session_id: '',
-          error: `CLI exited with code ${code}: ${stderr}`,
+          error: errorMessage,
           raw_output: stdout,
         });
         return;
@@ -300,8 +328,40 @@ export async function setupClaudeWorkspace(
 
   console.log(`[ClaudeActivity] Created workspace: ${workspacePath}`);
 
-  // Write static CLAUDE.md - this is the ONLY time we write it
-  const claudeMdContent = `# Project Instructions
+  // Copy CLAUDE.md from tools repo (repository root) instead of writing it
+  // This ensures we use the canonical CLAUDE.md file from the tools repository
+  try {
+    // Resolve path to repository root
+    // When compiled: __dirname is packages/temporal-coordinator/dist/src
+    // When source: __dirname is packages/temporal-coordinator/src
+    // Go up enough levels to reach repo root (4 levels from dist/src, 3 from src)
+    // Try dist/src first (compiled), then fall back to src (development)
+    let repoRoot: string;
+    try {
+      // Try compiled location first (4 levels up)
+      const compiledRoot = path.resolve(__dirname, '../../../../');
+      await fs.access(path.join(compiledRoot, 'CLAUDE.md'));
+      repoRoot = compiledRoot;
+    } catch {
+      // Fall back to source location (3 levels up)
+      repoRoot = path.resolve(__dirname, '../../../');
+    }
+    const sourceClaudeMd = path.join(repoRoot, 'CLAUDE.md');
+    const targetClaudeMd = path.join(workspacePath, 'CLAUDE.md');
+
+    // Check if source file exists
+    try {
+      await fs.access(sourceClaudeMd);
+      
+      // Copy the file
+      await fs.copyFile(sourceClaudeMd, targetClaudeMd);
+      console.log(`[ClaudeActivity] Copied CLAUDE.md from ${sourceClaudeMd} to ${targetClaudeMd}`);
+    } catch (accessError) {
+      // If CLAUDE.md doesn't exist in repo root, fall back to writing a minimal version
+      console.warn(
+        `[ClaudeActivity] CLAUDE.md not found at ${sourceClaudeMd}, writing minimal version instead`
+      );
+      const claudeMdContent = `# Project Instructions
 
 ${requirementsContent}
 
@@ -310,14 +370,30 @@ ${requirementsContent}
 *These are static project requirements. The package specification and
 step-specific context will be provided in conversation prompts.*
 `;
+      await fs.writeFile(targetClaudeMd, claudeMdContent, 'utf-8');
+      console.log(`[ClaudeActivity] Wrote minimal CLAUDE.md to ${targetClaudeMd}`);
+    }
+  } catch (error) {
+    // Fallback: write minimal version if copy fails
+    console.warn(
+      `[ClaudeActivity] Failed to copy CLAUDE.md: ${error instanceof Error ? error.message : String(error)}, writing minimal version`
+    );
+    const claudeMdContent = `# Project Instructions
 
-  await fs.writeFile(
-    path.join(workspacePath, 'CLAUDE.md'),
-    claudeMdContent,
-    'utf-8'
-  );
+${requirementsContent}
 
-  console.log(`[ClaudeActivity] Wrote CLAUDE.md to ${workspacePath}`);
+---
+
+*These are static project requirements. The package specification and
+step-specific context will be provided in conversation prompts.*
+`;
+    await fs.writeFile(
+      path.join(workspacePath, 'CLAUDE.md'),
+      claudeMdContent,
+      'utf-8'
+    );
+    console.log(`[ClaudeActivity] Wrote minimal CLAUDE.md to ${workspacePath}`);
+  }
 
   // Copy .claude directory with subagents and commands
   // Source: packages/agents/package-builder-production/.claude

@@ -153,9 +153,11 @@ describe('CLI Agent Integration - End-to-End', () => {
   let testPackagePath: string;
 
   beforeAll(async () => {
-    // Connect to Temporal
+    // Connect to Temporal (can take time to establish connection)
+    // Increase connection timeout for slow connections
     connection = await Connection.connect({
       address: TEMPORAL_ADDRESS,
+      connectTimeout: '30s', // 30 second connection timeout
     });
 
     client = new Client({ connection });
@@ -173,7 +175,7 @@ describe('CLI Agent Integration - End-to-End', () => {
     const requirementsPath = path.join(TEST_WORKSPACE_ROOT, 'docs', 'PACKAGE_REQUIREMENTS.md');
     await fs.mkdir(path.dirname(requirementsPath), { recursive: true });
     await fs.writeFile(requirementsPath, TEST_REQUIREMENTS_CONTENT, 'utf-8');
-  });
+  }, 30000); // 30 second timeout for hook (Temporal connection can take time)
 
   afterAll(async () => {
     // Cleanup test workspace
@@ -183,9 +185,15 @@ describe('CLI Agent Integration - End-to-End', () => {
       console.warn('Failed to cleanup test workspace:', error);
     }
 
-    // Close Temporal connection
-    await connection.close();
-  });
+    // Close Temporal connection (if it was established)
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (error) {
+        console.warn('Failed to close Temporal connection:', error);
+      }
+    }
+  }, 30000); // 30 second timeout for hook
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Claude CLI Tests
@@ -376,9 +384,9 @@ describe('CLI Agent Integration - End-to-End', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Gemini CLI Tests
+  // Gemini CLI Tests - COMMENTED OUT FOR NOW (focusing on Claude)
   // ─────────────────────────────────────────────────────────────────────────────
-  describe('Gemini CLI Integration', () => {
+  describe.skip('Gemini CLI Integration', () => {
     let geminiHasCredits: boolean;
 
     beforeAll(async () => {

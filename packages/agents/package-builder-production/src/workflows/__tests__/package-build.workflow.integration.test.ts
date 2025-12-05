@@ -105,6 +105,7 @@ Create a simple greeting function that returns "Hello, {name}!"`;
     vi.clearAllMocks();
 
     // Create test environment with time skipping for faster tests
+    // This can take 10-20 seconds, so we use a longer timeout
     testEnv = await TestWorkflowEnvironment.createTimeSkipping();
 
     // Set up default mock implementations
@@ -308,7 +309,7 @@ Create a simple greeting function that returns "Hello, {name}!"`;
       await testEnv.teardown();
     }
     vi.restoreAllMocks();
-  });
+  }, 30000); // 30 second timeout for hook
 
   it('should execute workflow with minimal input and complete successfully', async () => {
     const input: PackageBuildInput = {
