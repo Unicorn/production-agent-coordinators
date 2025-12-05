@@ -283,10 +283,12 @@ describe('CLI Agent Integration - End-to-End', () => {
         workflowId: `test-e2e-claude-${Date.now()}`,
       });
 
+      // E2E tests can take longer with the new task activity loop pattern
+      // Each task may have multiple iterations, and validation loops add time
       const result = await Promise.race([
         handle.result(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Workflow timeout')), 600000)
+          setTimeout(() => reject(new Error('Workflow timeout')), 1800000) // 30 minutes
         ),
       ]) as { success: boolean; packageName: string; report: unknown };
 
@@ -403,19 +405,30 @@ describe('CLI Agent Integration - End-to-End', () => {
       await fs.rm(testPackagePath, { recursive: true, force: true });
       await fs.mkdir(testPackagePath, { recursive: true });
       
-      // This test verifies the full workflow uses granular activities:
+      // This test verifies the full workflow uses the task activity loop pattern:
       //
-      // Scaffold phase (6 separate tasks):
-      // - checkCLICreditsForExecution
-      // - executeGeminiCLI (6x: package.json, tsconfig.json, jest.config.js, .eslintrc.js, directories, README.md)
-      // - validateCLIResult (after each task)
+      // Scaffold phase:
+      // - requestTaskBreakdown - Gets task breakdown (returns task queue)
+      // - executeAgentActivityRequest - Executes any activity requests from agent
+      // - For each task:
+      //   - Task Activity Loop:
+      //     - executeTaskWithCLI - Executes task with Gemini CLI, loops until taskComplete=true
+      //   - Validation Activity Loop:
+      //     - runTaskValidations - Runs validation steps, writes errors to file
+      //     - executeFixWithCLI - Fixes errors (if any)
+      //     - Loops until allValidationsPassed=true
+      // - Repeats until more_tasks = false
       //
-      // Implement phase:
-      // - checkCLICreditsForExecution
-      // - executeGeminiCLI
-      // - validateCLIResult
+      // Implement phase (same pattern):
+      // - requestTaskBreakdown - Gets next batch of tasks
+      // - For each task: Task Activity Loop + Validation Activity Loop
+      // - Repeats until more_tasks = false
       //
-      // Check Temporal UI to see all these as separate activities
+      // Check Temporal UI to see:
+      // - requestTaskBreakdown activities
+      // - executeTaskWithCLI activities (one per iteration)
+      // - runTaskValidations activities (one per task)
+      // - executeFixWithCLI activities (if validation errors occur)
 
       const input: PackageBuildInput = {
         packageName: TEST_PACKAGE_SPEC.name,
@@ -454,10 +467,12 @@ describe('CLI Agent Integration - End-to-End', () => {
         workflowId: `test-e2e-gemini-${Date.now()}`,
       });
 
+      // E2E tests can take longer with the new task activity loop pattern
+      // Each task may have multiple iterations, and validation loops add time
       const result = await Promise.race([
         handle.result(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Workflow timeout')), 600000)
+          setTimeout(() => reject(new Error('Workflow timeout')), 1800000) // 30 minutes
         ),
       ]) as { success: boolean; packageName: string; report: unknown };
 
