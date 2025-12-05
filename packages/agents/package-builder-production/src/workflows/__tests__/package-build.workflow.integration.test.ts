@@ -402,14 +402,16 @@ Create a simple greeting function that returns "Hello, {name}!"`;
     });
 
     expect(result.success).toBe(true);
-    // Verify multiple CLI calls were made (one per task in scaffold phase)
-    // Note: The workflow may also call CLI for implement phase, so we check >= 2
     // Verify new task activity loop activities were called
     expect(cliActivities.executeTaskWithCLI).toHaveBeenCalled();
     expect(cliActivities.runTaskValidations).toHaveBeenCalled();
     const taskCallCount = (cliActivities.executeTaskWithCLI as ReturnType<typeof vi.fn>).mock.calls.length;
     const validationCallCount = (cliActivities.runTaskValidations as ReturnType<typeof vi.fn>).mock.calls.length;
-    expect(callCount).toBeGreaterThanOrEqual(2);
+    // Verify multiple task calls were made (one per task in scaffold phase)
+    // Note: The workflow may also call CLI for implement phase, so we check >= 2
+    expect(taskCallCount).toBeGreaterThanOrEqual(2);
+    // Verify validations were run for each task
+    expect(validationCallCount).toBeGreaterThanOrEqual(2);
   }, 30000);
 });
 
