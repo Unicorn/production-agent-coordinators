@@ -139,6 +139,7 @@ Create a simple greeting function that returns "Hello, {name}!"`;
           description: 'Create package.json with basic configuration',
           acceptance_criteria: ['package.json exists', 'Contains name and version'],
           quality_gates: ['lint_run'],
+          validation_steps: ['file_exists:package.json'],
           dependencies: [],
         },
       ],
