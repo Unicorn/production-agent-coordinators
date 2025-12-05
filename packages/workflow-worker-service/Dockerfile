@@ -6,16 +6,21 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json ./
-COPY tsconfig.json ./
+# Copy package files and tsconfig
+# Build context is now monorepo root, so paths are relative to that
+COPY packages/workflow-worker-service/package.json ./
+COPY packages/workflow-worker-service/tsconfig.json ./
+COPY tsconfig.base.json ./
+# tsconfig.json extends ../../tsconfig.base.json, so we need it at that relative path
+# Create a temporary tsconfig that extends from current directory instead
+RUN sed 's|"extends": "../../tsconfig.base.json"|"extends": "./tsconfig.base.json"|' tsconfig.json > tsconfig.tmp.json && mv tsconfig.tmp.json tsconfig.json
 
 # Install dependencies (using npm install since this is a yarn workspace)
 # Note: If package-lock.json exists, use npm ci; otherwise use npm install
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy source code
-COPY src ./src
+COPY packages/workflow-worker-service/src ./src
 
 # Build TypeScript
 RUN npm run build
@@ -29,7 +34,7 @@ WORKDIR /app
 RUN apk add --no-cache curl
 
 # Copy package files
-COPY package.json ./
+COPY packages/workflow-worker-service/package.json ./
 
 # Install production dependencies only
 # Note: If package-lock.json exists, use npm ci; otherwise use npm install

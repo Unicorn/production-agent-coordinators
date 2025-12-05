@@ -93,8 +93,8 @@ services:
   # Workflow Builder Worker Service
   workflow-worker-service:
     build:
-      context: ../packages/workflow-worker-service
-      dockerfile: Dockerfile
+      context: ../  # Set context to monorepo root to access tsconfig.base.json
+      dockerfile: packages/workflow-worker-service/Dockerfile
     container_name: coordinator-workflow-worker
     ports:
       - "${WORKER_SERVICE_PORT:-3011}:3011"
