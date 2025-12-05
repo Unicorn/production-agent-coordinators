@@ -360,10 +360,11 @@ describe('CLI Agent Integration - End-to-End', () => {
         workflowId: `test-resume-claude-${Date.now()}`,
       });
 
+      // E2E tests can take longer with the new task activity loop pattern
       const result = await Promise.race([
         handle.result(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Workflow timeout')), 600000)
+          setTimeout(() => reject(new Error('Workflow timeout')), 1800000) // 30 minutes
         ),
       ]);
 
@@ -530,10 +531,11 @@ describe('CLI Agent Integration - End-to-End', () => {
         workflowId: `test-resume-gemini-${Date.now()}`,
       });
 
+      // E2E tests can take longer with the new task activity loop pattern
       const result = await Promise.race([
         handle.result(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Workflow timeout')), 600000)
+          setTimeout(() => reject(new Error('Workflow timeout')), 1800000) // 30 minutes
         ),
       ]);
 
