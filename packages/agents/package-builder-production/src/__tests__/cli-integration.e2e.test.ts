@@ -3,10 +3,41 @@
  *
  * These tests validate the complete CLI agent integration in PackageBuildWorkflow.
  * They require:
- * - Gemini CLI installed and authenticated
- * - Claude CLI installed and authenticated
+ * - Gemini CLI installed and authenticated (for Gemini tests)
+ * - Claude CLI installed and authenticated (for Claude tests)
  * - Temporal server running
  * - Worker running with CLI activities
+ *
+ * Tests are organized by provider:
+ * - All Claude tests first (with credit check and skip if unavailable)
+ * - All Gemini tests second (with credit check and skip if unavailable)
+ *
+ * NOTE: The workflow now uses the task activity loop pattern with efficient CLI communication:
+ * 
+ * Phase 1: Task Breakdown
+ * - requestTaskBreakdown - Gets task breakdown from CLI agent (returns task queue)
+ * 
+ * Phase 2: Task Activity Loop (per task)
+ * - executeTaskWithCLI - Executes task with CLI, loops until agent signals completion
+ *   - Returns: logFilePath (deterministic), sessionId, taskComplete (boolean)
+ *   - Agent signals completion with JSON: { "task_complete": true }
+ *   - If not complete, loops back with continueTask=true
+ * 
+ * Phase 3: Validation Task Activity Loop (per task)
+ * - runTaskValidations - Runs validation steps (file_exists, tests_pass, lint_passes, etc.)
+ *   - Returns: validationErrorsFilePath (deterministic), allPassed (boolean), errors[]
+ *   - Writes errors to deterministic file path (no JSON serialization)
+ * - executeFixWithCLI - Fixes validation errors using CLI
+ *   - Reads validation errors from file path (not file contents - efficient!)
+ *   - CLI reads errors file directly using Read tool
+ *   - Returns: logFilePath (deterministic), fixed (boolean)
+ *   - Loops back to runTaskValidations until allPassed=true
+ * 
+ * Key Benefits:
+ * - Deterministic workflows (only file paths, session IDs, boolean flags)
+ * - Efficient communication (file paths, not file contents in JSON)
+ * - Full visibility (each loop iteration = separate activity in Temporal UI)
+ * - Quality enforcement (validation loop ensures quality before next task)
  *
  * Run with: yarn test cli-integration.e2e.test.ts
  */
@@ -18,6 +49,7 @@ import type { PackageBuildInput } from '../types/index.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { checkClaudeCLI, checkGeminiCLI } from '../activities/credentials.activities.js';
 
 // Test configuration
 const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS || 'localhost:7233';
@@ -67,31 +99,63 @@ const TEST_REQUIREMENTS_CONTENT = `# BernierLLC Package Requirements
 - Tests in __tests__/ directory
 `;
 
+/**
+ * Check if Claude CLI has credits/availability
+ * Returns true if Claude CLI is installed and can be used
+ */
+async function checkClaudeCredits(): Promise<boolean> {
+  try {
+    const status = await checkClaudeCLI();
+    if (!status.available) {
+      return false;
+    }
+    
+    // Try a minimal test to verify credits (check version works)
+    try {
+      execSync('claude --version', { stdio: 'ignore', timeout: 5000 });
+      return true;
+    } catch {
+      // If version check fails, CLI might not be properly authenticated
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if Gemini CLI has credits/availability
+ * Returns true if Gemini CLI is installed and can be used
+ */
+async function checkGeminiCredits(): Promise<boolean> {
+  try {
+    const status = await checkGeminiCLI();
+    if (!status.available) {
+      return false;
+    }
+    
+    // Try a minimal test to verify credits (check version works)
+    try {
+      execSync('gemini --version', { stdio: 'ignore', timeout: 5000 });
+      return true;
+    } catch {
+      // If version check fails, CLI might not be properly authenticated
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
 describe('CLI Agent Integration - End-to-End', () => {
   let client: Client;
   let connection: Connection;
   let testPackagePath: string;
 
   beforeAll(async () => {
-    // Check CLI availability
-    try {
-      execSync('gemini --version', { stdio: 'ignore' });
-      console.log('✅ Gemini CLI available');
-    } catch (error) {
-      console.warn('⚠️  Gemini CLI not found - some tests will be skipped');
-    }
-
-    try {
-      execSync('claude --version', { stdio: 'ignore' });
-      console.log('✅ Claude CLI available');
-    } catch (error) {
-      console.warn('⚠️  Claude CLI not found - some tests will be skipped');
-    }
-
     // Connect to Temporal
     connection = await Connection.connect({
       address: TEMPORAL_ADDRESS,
-      namespace: TEMPORAL_NAMESPACE,
     });
 
     client = new Client({ connection });
@@ -123,68 +187,100 @@ describe('CLI Agent Integration - End-to-End', () => {
     await connection.close();
   });
 
-  describe('Basic CLI Agent Execution', () => {
-    it('should execute Gemini CLI agent for scaffold task', async () => {
-      // Skip if CLI not available
-      try {
-        execSync('gemini --version', { stdio: 'ignore' });
-      } catch {
-        console.log('⏭️  Skipping: Gemini CLI not available');
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Claude CLI Tests
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('Claude CLI Integration', () => {
+    let claudeHasCredits: boolean;
+
+    beforeAll(async () => {
+      claudeHasCredits = await checkClaudeCredits();
+      if (!claudeHasCredits) {
+        console.log('⏭️  Skipping all Claude tests: Claude CLI not available or no credits');
+      } else {
+        console.log('✅ Claude CLI available with credits - running Claude tests');
+      }
+    });
+
+    // NOTE: Scaffold-only test removed - scaffold now uses iterative task breakdown
+    // The agent dynamically generates tasks based on the plan (typically 3-8 tasks per batch)
+    // Each task appears as a separate activity in Temporal UI for better visibility.
+    // The full workflow test below covers scaffold + implement phases comprehensively.
+
+    it('should complete full package build with Claude CLI using granular activities', async () => {
+      if (!claudeHasCredits) {
+        console.log('⏭️  Skipping: Claude CLI not available or no credits');
         return;
       }
+
+      // Clean package directory
+      await fs.rm(testPackagePath, { recursive: true, force: true });
+      await fs.mkdir(testPackagePath, { recursive: true });
+      
+      // This test verifies the full workflow uses the new task activity loop pattern:
+      // 
+      // Scaffold phase:
+      // - requestTaskBreakdown - Gets task breakdown (returns task queue)
+      // - executeAgentActivityRequest - Executes any activity requests from agent
+      // - For each task:
+      //   - Task Activity Loop:
+      //     - executeTaskWithCLI - Executes task, loops until taskComplete=true
+      //     - Each iteration appears as separate activity in Temporal UI
+      //   - Validation Activity Loop:
+      //     - runTaskValidations - Runs validation steps, writes errors to file
+      //     - executeFixWithCLI - Fixes errors (reads from file path, not contents)
+      //     - Loops until allValidationsPassed=true
+      // - Repeats until more_tasks = false
+      //
+      // Implement phase (same pattern):
+      // - requestTaskBreakdown - Gets next batch of tasks
+      // - For each task: Task Activity Loop + Validation Activity Loop
+      // - Repeats until more_tasks = false
+      //
+      // Check Temporal UI to see:
+      // - requestTaskBreakdown activities
+      // - executeTaskWithCLI activities (one per iteration)
+      // - runTaskValidations activities (one per task)
+      // - executeFixWithCLI activities (if validation errors occur)
+      //
+      // All activities return deterministic values (file paths, session IDs, booleans)
+      // File operations happen on filesystem (no JSON serialization of file contents)
 
       const input: PackageBuildInput = {
         packageName: TEST_PACKAGE_SPEC.name,
         packagePath: path.relative(TEST_WORKSPACE_ROOT, testPackagePath),
         planPath: 'plans/test/simple-package.md',
         workspaceRoot: TEST_WORKSPACE_ROOT,
-        category: 'test',
+        category: 'utility',
         dependencies: [],
+        preferredProvider: 'claude',
+        config: {
+          npmRegistry: 'https://registry.npmjs.org',
+          npmToken: '',
+          workspaceRoot: TEST_WORKSPACE_ROOT,
+          maxConcurrentBuilds: 1,
+          temporal: {
+            address: TEMPORAL_ADDRESS,
+            namespace: TEMPORAL_NAMESPACE,
+            taskQueue: 'engine-cli-e2e',
+          },
+          testing: {
+            enableCoverage: true,
+            minCoveragePercent: 80,
+            failOnError: true,
+          },
+          publishing: {
+            dryRun: true,
+            requireTests: true,
+            requireCleanWorkingDirectory: false,
+          },
+        },
       };
 
       const handle = await client.workflow.start(PackageBuildWorkflow, {
-        taskQueue: 'engine',
+        taskQueue: 'engine-cli-e2e',
         args: [input],
-        workflowId: `test-gemini-scaffold-${Date.now()}`,
-      });
-
-      // Wait for workflow to complete (with timeout)
-      const result = await Promise.race([
-        handle.result(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Workflow timeout')), 600000) // 10 min timeout
-        ),
-      ]);
-
-      expect(result).toBeDefined();
-      // Add more assertions based on actual result structure
-    }, 600000); // 10 minute timeout
-
-    it('should execute Claude CLI agent for scaffold task', async () => {
-      // Skip if CLI not available
-      try {
-        execSync('claude --version', { stdio: 'ignore' });
-      } catch {
-        console.log('⏭️  Skipping: Claude CLI not available');
-        return;
-      }
-
-      // Similar test for Claude
-      // Force Claude by setting provider preference
-      const input: PackageBuildInput = {
-        packageName: TEST_PACKAGE_SPEC.name,
-        packagePath: path.relative(TEST_WORKSPACE_ROOT, testPackagePath),
-        planPath: 'plans/test/simple-package.md',
-        workspaceRoot: TEST_WORKSPACE_ROOT,
-        category: 'test',
-        dependencies: [],
-        // TODO: Add provider preference when implemented
-      };
-
-      const handle = await client.workflow.start(PackageBuildWorkflow, {
-        taskQueue: 'engine',
-        args: [input],
-        workflowId: `test-claude-scaffold-${Date.now()}`,
+        workflowId: `test-e2e-claude-${Date.now()}`,
       });
 
       const result = await Promise.race([
@@ -192,28 +288,30 @@ describe('CLI Agent Integration - End-to-End', () => {
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Workflow timeout')), 600000)
         ),
-      ]);
+      ]) as { success: boolean; packageName: string; report: unknown };
 
-      expect(result).toBeDefined();
-    }, 600000);
-  });
+      expect(result.success).toBe(true);
+      expect(result.packageName).toBe(TEST_PACKAGE_SPEC.name);
 
-  describe('Provider Selection and Fallback', () => {
-    it('should select Gemini when both providers are available', async () => {
-      // This would test the ProviderFactory logic
-      // For now, we'll verify the workflow uses a provider
-      // TODO: Add explicit provider selection test
-    });
+      // Verify package files were created
+      const indexFile = path.join(testPackagePath, 'src', 'index.ts');
+      const indexExists = await fs
+        .access(indexFile)
+        .then(() => true)
+        .catch(() => false);
+      expect(indexExists).toBe(true);
+    }, 1800000); // 30 minutes - task activity loops can take longer
 
-    it('should fallback to Claude when Gemini fails', async () => {
-      // This would test the fallback mechanism
-      // TODO: Add fallback test with simulated Gemini failure
-    });
-  });
+    it('should detect partial build and resume with Claude CLI', async () => {
+      if (!claudeHasCredits) {
+        console.log('⏭️  Skipping: Claude CLI not available or no credits');
+        return;
+      }
 
-  describe('Resume Capability', () => {
-    it('should detect partial build and resume', async () => {
       // Create partial package (package.json exists, src/ missing)
+      await fs.rm(testPackagePath, { recursive: true, force: true });
+      await fs.mkdir(testPackagePath, { recursive: true });
+      
       const packageJsonPath = path.join(testPackagePath, 'package.json');
       await fs.writeFile(
         packageJsonPath,
@@ -230,14 +328,36 @@ describe('CLI Agent Integration - End-to-End', () => {
         packagePath: path.relative(TEST_WORKSPACE_ROOT, testPackagePath),
         planPath: 'plans/test/simple-package.md',
         workspaceRoot: TEST_WORKSPACE_ROOT,
-        category: 'test',
+        category: 'utility',
         dependencies: [],
+        preferredProvider: 'claude',
+        config: {
+          npmRegistry: 'https://registry.npmjs.org',
+          npmToken: '',
+          workspaceRoot: TEST_WORKSPACE_ROOT,
+          maxConcurrentBuilds: 1,
+          temporal: {
+            address: TEMPORAL_ADDRESS,
+            namespace: TEMPORAL_NAMESPACE,
+            taskQueue: 'engine-cli-e2e',
+          },
+          testing: {
+            enableCoverage: true,
+            minCoveragePercent: 80,
+            failOnError: true,
+          },
+          publishing: {
+            dryRun: true,
+            requireTests: true,
+            requireCleanWorkingDirectory: false,
+          },
+        },
       };
 
       const handle = await client.workflow.start(PackageBuildWorkflow, {
-        taskQueue: 'engine',
+        taskQueue: 'engine-cli-e2e',
         args: [input],
-        workflowId: `test-resume-${Date.now()}`,
+        workflowId: `test-resume-claude-${Date.now()}`,
       });
 
       const result = await Promise.race([
@@ -249,35 +369,86 @@ describe('CLI Agent Integration - End-to-End', () => {
 
       // Verify resume was detected and used
       expect(result).toBeDefined();
-      // TODO: Verify resume instructions were used
-    }, 600000);
+    }, 1800000); // 30 minutes - task activity loops can take longer
   });
 
-  describe('End-to-End Package Build', () => {
-    it('should complete full package build with Gemini CLI', async () => {
-      // Skip if CLI not available
-      try {
-        execSync('gemini --version', { stdio: 'ignore' });
-      } catch {
-        console.log('⏭️  Skipping: Gemini CLI not available');
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Gemini CLI Tests
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('Gemini CLI Integration', () => {
+    let geminiHasCredits: boolean;
+
+    beforeAll(async () => {
+      geminiHasCredits = await checkGeminiCredits();
+      if (!geminiHasCredits) {
+        console.log('⏭️  Skipping all Gemini tests: Gemini CLI not available or no credits');
+      } else {
+        console.log('✅ Gemini CLI available with credits - running Gemini tests');
+      }
+    });
+
+    // NOTE: Scaffold-only test removed - scaffold now uses iterative task breakdown
+    // The agent dynamically generates tasks based on the plan (typically 3-8 tasks per batch)
+    // Each task appears as a separate activity in Temporal UI for better visibility.
+    // The full workflow test below covers scaffold + implement phases comprehensively.
+
+    it('should complete full package build with Gemini CLI using granular activities', async () => {
+      if (!geminiHasCredits) {
+        console.log('⏭️  Skipping: Gemini CLI not available or no credits');
         return;
       }
 
       // Clean package directory
       await fs.rm(testPackagePath, { recursive: true, force: true });
       await fs.mkdir(testPackagePath, { recursive: true });
+      
+      // This test verifies the full workflow uses granular activities:
+      //
+      // Scaffold phase (6 separate tasks):
+      // - checkCLICreditsForExecution
+      // - executeGeminiCLI (6x: package.json, tsconfig.json, jest.config.js, .eslintrc.js, directories, README.md)
+      // - validateCLIResult (after each task)
+      //
+      // Implement phase:
+      // - checkCLICreditsForExecution
+      // - executeGeminiCLI
+      // - validateCLIResult
+      //
+      // Check Temporal UI to see all these as separate activities
 
       const input: PackageBuildInput = {
         packageName: TEST_PACKAGE_SPEC.name,
         packagePath: path.relative(TEST_WORKSPACE_ROOT, testPackagePath),
         planPath: 'plans/test/simple-package.md',
         workspaceRoot: TEST_WORKSPACE_ROOT,
-        category: 'test',
+        category: 'utility',
         dependencies: [],
+        preferredProvider: 'gemini',
+        config: {
+          npmRegistry: 'https://registry.npmjs.org',
+          npmToken: '',
+          workspaceRoot: TEST_WORKSPACE_ROOT,
+          maxConcurrentBuilds: 1,
+          temporal: {
+            address: TEMPORAL_ADDRESS,
+            namespace: TEMPORAL_NAMESPACE,
+            taskQueue: 'engine-cli-e2e',
+          },
+          testing: {
+            enableCoverage: true,
+            minCoveragePercent: 80,
+            failOnError: true,
+          },
+          publishing: {
+            dryRun: true,
+            requireTests: true,
+            requireCleanWorkingDirectory: false,
+          },
+        },
       };
 
       const handle = await client.workflow.start(PackageBuildWorkflow, {
-        taskQueue: 'engine',
+        taskQueue: 'engine-cli-e2e',
         args: [input],
         workflowId: `test-e2e-gemini-${Date.now()}`,
       });
@@ -299,7 +470,75 @@ describe('CLI Agent Integration - End-to-End', () => {
         .then(() => true)
         .catch(() => false);
       expect(indexExists).toBe(true);
-    }, 600000);
+    }, 1800000); // 30 minutes - task activity loops can take longer
+
+    it('should detect partial build and resume with Gemini CLI', async () => {
+      if (!geminiHasCredits) {
+        console.log('⏭️  Skipping: Gemini CLI not available or no credits');
+        return;
+      }
+
+      // Create partial package (package.json exists, src/ missing)
+      await fs.rm(testPackagePath, { recursive: true, force: true });
+      await fs.mkdir(testPackagePath, { recursive: true });
+      
+      const packageJsonPath = path.join(testPackagePath, 'package.json');
+      await fs.writeFile(
+        packageJsonPath,
+        JSON.stringify({
+          name: TEST_PACKAGE_SPEC.name,
+          version: TEST_PACKAGE_SPEC.version,
+          description: TEST_PACKAGE_SPEC.description,
+        }),
+        'utf-8'
+      );
+
+      const input: PackageBuildInput = {
+        packageName: TEST_PACKAGE_SPEC.name,
+        packagePath: path.relative(TEST_WORKSPACE_ROOT, testPackagePath),
+        planPath: 'plans/test/simple-package.md',
+        workspaceRoot: TEST_WORKSPACE_ROOT,
+        category: 'utility',
+        dependencies: [],
+        preferredProvider: 'gemini',
+        config: {
+          npmRegistry: 'https://registry.npmjs.org',
+          npmToken: '',
+          workspaceRoot: TEST_WORKSPACE_ROOT,
+          maxConcurrentBuilds: 1,
+          temporal: {
+            address: TEMPORAL_ADDRESS,
+            namespace: TEMPORAL_NAMESPACE,
+            taskQueue: 'engine-cli-e2e',
+          },
+          testing: {
+            enableCoverage: true,
+            minCoveragePercent: 80,
+            failOnError: true,
+          },
+          publishing: {
+            dryRun: true,
+            requireTests: true,
+            requireCleanWorkingDirectory: false,
+          },
+        },
+      };
+
+      const handle = await client.workflow.start(PackageBuildWorkflow, {
+        taskQueue: 'engine-cli-e2e',
+        args: [input],
+        workflowId: `test-resume-gemini-${Date.now()}`,
+      });
+
+      const result = await Promise.race([
+        handle.result(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Workflow timeout')), 600000)
+        ),
+      ]);
+
+      // Verify resume was detected and used
+      expect(result).toBeDefined();
+    }, 1800000); // 30 minutes - task activity loops can take longer
   });
 });
-
