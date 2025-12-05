@@ -10,8 +10,14 @@
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:cli": "vitest run cli-integration.e2e.test.ts",
+    "test:cli": "vitest run --bail cli-integration.e2e.test.ts",
     "test:cli:watch": "vitest cli-integration.e2e.test.ts",
+    "test:cli:prompts": "RUN_HEADLESS_CLI_TESTS=true vitest run cli-prompt-inspection.test.ts",
+    "test:cli:direct": "RUN_DIRECT_CLI_TESTS=true vitest run cli-direct-execution.test.ts",
+    "test:cli:minimal": "RUN_MINIMAL_CLI_TESTS=true vitest run cli-minimal.test.ts",
+    "test:cli:simple": "RUN_SIMPLE_CLI_TESTS=true vitest run cli-simple-test.test.ts",
+    "test:activities:integration": "RUN_ACTIVITY_INTEGRATION_TESTS=true vitest run src/activities/__tests__/cli-activities-integration.test.ts",
+    "test:task-execution": "RUN_INTEGRATION_TESTS=true vitest run src/activities/__tests__/task-execution.integration.test.ts",
     "test:integration": "./scripts/test-cli-integration.sh",
     "test:integration:phase4": "vitest run integration/phase4-e2e.test.ts",
     "test:integration:phase4:watch": "vitest integration/phase4-e2e.test.ts",
@@ -32,6 +38,7 @@
     "yaml": "^2.3.4"
   },
   "devDependencies": {
+    "@temporalio/testing": "^1.13.2",
     "@types/handlebars": "^4.1.0",
     "@types/node": "^22.7.5",
     "tsx": "^4.7.0",

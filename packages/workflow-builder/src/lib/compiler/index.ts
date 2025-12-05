@@ -21,7 +21,8 @@ import {
   generatePackageJson,
   generateTsConfig,
 } from './generators/typescript-generator';
-import { ActivityProxyPattern, StateManagementPattern } from './patterns';
+import { ActivityProxyPattern, StateManagementPattern, InterfaceComponentPattern, ContinueAsNewPattern } from './patterns';
+import { configureContinueAsNew } from '../workflow-analyzer';
 
 /**
  * Workflow Compiler Class
@@ -58,6 +59,8 @@ export class WorkflowCompiler {
   private registerDefaultPatterns(): void {
     this.registerPattern(ActivityProxyPattern);
     this.registerPattern(StateManagementPattern);
+    this.registerPattern(InterfaceComponentPattern);
+    this.registerPattern(ContinueAsNewPattern);
   }
 
   /**
@@ -105,31 +108,34 @@ export class WorkflowCompiler {
         }
       }
 
-      // Step 2: Build context
-      const context = this.buildContext(workflow);
+      // Step 2: Auto-configure workflow (classify and set continue-as-new)
+      const configuredWorkflow = configureContinueAsNew(workflow);
 
-      // Step 3: Apply patterns and generate code
-      const codeBlocks = this.generateCode(workflow, context);
+      // Step 3: Build context
+      const context = this.buildContext(configuredWorkflow);
 
-      // Step 4: Generate output files
+      // Step 4: Apply patterns and generate code
+      const codeBlocks = this.generateCode(configuredWorkflow, context);
+
+      // Step 5: Generate output files
       const workflowCode = generateWorkflowFile(
-        workflow,
+        configuredWorkflow,
         codeBlocks,
         context,
         this.options.includeComments
       );
 
       const activitiesCode = generateActivitiesFile(
-        workflow,
+        configuredWorkflow,
         this.options.includeComments
       );
 
       const workerCode = generateWorkerFile(
-        workflow,
+        configuredWorkflow,
         this.options.includeComments
       );
 
-      const packageJson = generatePackageJson(workflow);
+      const packageJson = generatePackageJson(configuredWorkflow);
       const tsConfig = generateTsConfig(this.options.strictMode);
 
       // Step 5: Return result
@@ -143,8 +149,8 @@ export class WorkflowCompiler {
         errors: [],
         warnings: validationWarnings,
         metadata: {
-          nodeCount: workflow.nodes?.length || 0,
-          edgeCount: workflow.edges?.length || 0,
+          nodeCount: configuredWorkflow.nodes?.length || 0,
+          edgeCount: configuredWorkflow.edges?.length || 0,
           patternsApplied: Array.from(context.visitedNodes),
           compilationTime: Date.now() - startTime,
           version: '1.0.0',
@@ -202,6 +208,7 @@ export class WorkflowCompiler {
       resultVars: new Map(),
       proxyMap: new Map(),
       currentIndent: 0,
+      workflowName: workflow.name,
     };
   }
 

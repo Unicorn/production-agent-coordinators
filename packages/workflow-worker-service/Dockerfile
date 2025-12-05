@@ -7,11 +7,12 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (using npm install since this is a yarn workspace)
+# Note: If package-lock.json exists, use npm ci; otherwise use npm install
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy source code
 COPY src ./src
@@ -28,10 +29,11 @@ WORKDIR /app
 RUN apk add --no-cache curl
 
 # Copy package files
-COPY package*.json ./
+COPY package.json ./
 
 # Install production dependencies only
-RUN npm ci --omit=dev
+# Note: If package-lock.json exists, use npm ci; otherwise use npm install
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist

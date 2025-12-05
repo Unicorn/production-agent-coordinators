@@ -6,6 +6,6 @@
     "rootDir": "src"
   },
   "include": ["src/**/*"],
-  "exclude": ["src/**/archived/**", "src/**/__tests__/**", "src/scripts/**"],
+  "exclude": ["src/**/archived/**", "src/**/__tests__/**", "src/scripts/**", "**/*.d.ts", "**/*.d.ts.map", "dist/**"],
   "references": []
 }

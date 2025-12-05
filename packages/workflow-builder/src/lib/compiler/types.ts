@@ -20,7 +20,7 @@ export interface WorkflowDefinition {
  */
 export interface WorkflowNode {
   id: string;
-  type: 'trigger' | 'activity' | 'agent' | 'conditional' | 'loop' | 'child-workflow' | 'signal' | 'phase' | 'retry' | 'state-variable' | 'api-endpoint' | 'condition' | 'end';
+  type: 'trigger' | 'activity' | 'agent' | 'conditional' | 'loop' | 'child-workflow' | 'signal' | 'phase' | 'retry' | 'state-variable' | 'api-endpoint' | 'condition' | 'end' | 'data-in' | 'data-out';
   data: NodeData;
   position: { x: number; y: number };
 }
@@ -82,6 +82,15 @@ export interface WorkflowSettings {
   taskQueue?: string;
   description?: string;
   version?: string;
+  // Internal: Auto-configured, never exposed to UI
+  _longRunning?: {
+    autoContinueAsNew: boolean;
+    maxHistoryEvents: number;      // Default: 1000
+    maxDurationMs: number;         // Default: 24 hours
+    preserveState: boolean;        // Always true - preserve all variables
+  };
+  // Internal: Auto-detected workflow type
+  _workflowType?: 'service' | 'task';
 }
 
 /**
@@ -109,6 +118,7 @@ export interface GeneratorContext {
   resultVars: Map<string, string>;
   proxyMap?: Map<string, string>; // Maps node ID to proxy variable name
   currentIndent: number;
+  workflowName: string; // Workflow function name for code generation
 }
 
 /**
