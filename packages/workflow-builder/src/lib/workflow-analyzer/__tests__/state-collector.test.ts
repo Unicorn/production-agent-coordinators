@@ -234,7 +234,7 @@ describe('StateCollector', () => {
       expect(stateObject).toContain('_signalQueue: _signalQueue');
       
       // Should set internal variables
-      expect(stateObject).toContain('_workflowStartTime: Date.now()');
+      expect(stateObject).toContain('_workflowStartTime: workflowInfo().runStartTime.getTime()');
       expect(stateObject).toContain('_historyResetCount: (_historyResetCount || 0) + 1');
     });
 
@@ -247,9 +247,8 @@ describe('StateCollector', () => {
       const stateObject = generateStateObject(stateMap);
 
       // Should only have internal variables
-      expect(stateObject).toContain('_workflowStartTime: Date.now()');
+      expect(stateObject).toContain('_workflowStartTime: workflowInfo().runStartTime.getTime()');
       expect(stateObject).toContain('_historyResetCount: (_historyResetCount || 0) + 1');
     });
   });
 });
-

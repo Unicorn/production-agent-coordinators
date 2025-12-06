@@ -5,12 +5,12 @@
 -- Part of: Services/Components/Connectors refactor - Phase 2
 -- ============================================================================
 
-CREATE TABLE project_connectors (
+CREATE TABLE IF NOT EXISTS project_connectors (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   target_project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   target_service_id UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-  target_interface_id UUID NOT NULL REFERENCES service_interfaces(id) ON DELETE CASCADE,
+  target_interface_id UUID,
   name VARCHAR(255) NOT NULL,
   display_name VARCHAR(255) NOT NULL,
   description TEXT,
@@ -24,11 +24,11 @@ CREATE TABLE project_connectors (
 );
 
 -- Indexes
-CREATE INDEX idx_project_connectors_source ON project_connectors(source_project_id);
-CREATE INDEX idx_project_connectors_target ON project_connectors(target_project_id);
-CREATE INDEX idx_project_connectors_target_service ON project_connectors(target_service_id);
-CREATE INDEX idx_project_connectors_target_interface ON project_connectors(target_interface_id);
-CREATE INDEX idx_project_connectors_created_by ON project_connectors(created_by);
+CREATE INDEX IF NOT EXISTS idx_project_connectors_source ON project_connectors(source_project_id);
+CREATE INDEX IF NOT EXISTS idx_project_connectors_target ON project_connectors(target_project_id);
+CREATE INDEX IF NOT EXISTS idx_project_connectors_target_service ON project_connectors(target_service_id);
+CREATE INDEX IF NOT EXISTS idx_project_connectors_target_interface ON project_connectors(target_interface_id);
+CREATE INDEX IF NOT EXISTS idx_project_connectors_created_by ON project_connectors(created_by);
 
 -- Comments
 COMMENT ON TABLE project_connectors IS 'Connectors for cross-project communication via Temporal Nexus';
@@ -53,6 +53,27 @@ CREATE TRIGGER trigger_update_project_connectors_updated_at
   BEFORE UPDATE ON project_connectors
   FOR EACH ROW
   EXECUTE FUNCTION update_project_connectors_updated_at();
+
+-- Add foreign key constraint for service_interfaces if table exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'service_interfaces') THEN
+    -- Add foreign key constraint if service_interfaces table exists
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE constraint_name = 'project_connectors_target_interface_id_fkey'
+      AND table_name = 'project_connectors'
+    ) THEN
+      ALTER TABLE project_connectors
+        ADD CONSTRAINT project_connectors_target_interface_id_fkey
+        FOREIGN KEY (target_interface_id) REFERENCES service_interfaces(id) ON DELETE CASCADE;
+    END IF;
+    
+    -- Make it required if table exists
+    ALTER TABLE project_connectors
+      ALTER COLUMN target_interface_id SET NOT NULL;
+  END IF;
+END $$;
 
 -- Enable RLS
 ALTER TABLE project_connectors ENABLE ROW LEVEL SECURITY;

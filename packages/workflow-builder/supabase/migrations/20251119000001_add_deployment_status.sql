@@ -7,10 +7,10 @@
 
 -- Add deployment_status column to workflows table
 ALTER TABLE workflows
-ADD COLUMN deployment_status VARCHAR(50) DEFAULT 'UNDEPLOYED';
+ADD COLUMN IF NOT EXISTS deployment_status VARCHAR(50) DEFAULT 'UNDEPLOYED';
 
 -- Create index for deployment status queries
-CREATE INDEX idx_workflows_deployment_status ON workflows(deployment_status);
+CREATE INDEX IF NOT EXISTS idx_workflows_deployment_status ON workflows(deployment_status);
 
 -- Add comment
 COMMENT ON COLUMN workflows.deployment_status IS 'Deployment status: UNDEPLOYED, DEPLOYING, DEPLOYED, DEPLOYMENT_FAILED, UNDEPLOYING';

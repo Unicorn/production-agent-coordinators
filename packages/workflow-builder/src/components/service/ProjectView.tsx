@@ -145,15 +145,36 @@ export function ProjectView({
           interfaceType: iface.interface_type as 'signal' | 'query' | 'update' | 'start_child',
         }));
 
-      // Get component count from workflow definition
+      // Get component count and interface components from workflow definition
       const definition = service.definition as any;
-      const componentCount = definition?.nodes?.length || 0;
+      const nodes = definition?.nodes || [];
+      const componentCount = nodes.length;
+      
+      // Extract interface components from nodes
+      const interfaceComponents = nodes
+        .filter((node: any) => node.type === 'data-in' || node.type === 'data-out')
+        .map((node: any) => ({
+          id: node.id,
+          name: node.data?.name || node.data?.label || node.id,
+          displayName: node.data?.displayName || node.data?.label || node.id,
+          interfaceType: node.type === 'data-in' ? 'signal' : 'query',
+        }));
+
+      // Merge service interfaces with interface components
+      const allIncomingInterfaces = [
+        ...incomingInterfaces,
+        ...interfaceComponents.filter(ic => ic.interfaceType === 'signal'),
+      ];
+      const allOutgoingInterfaces = [
+        ...outgoingInterfaces,
+        ...interfaceComponents.filter(ic => ic.interfaceType === 'query'),
+      ];
 
       const containerData: ServiceContainerNodeData = {
         serviceId: service.id,
         serviceName: service.display_name || service.name,
-        incomingInterfaces,
-        outgoingInterfaces,
+        incomingInterfaces: allIncomingInterfaces,
+        outgoingInterfaces: allOutgoingInterfaces,
         externalConnectors: [], // Not shown in project view
         internalComponents: Array(componentCount).fill(null).map((_, i) => ({
           id: `component-${i}`,

@@ -199,7 +199,7 @@ describe('ContinueAsNewPattern', () => {
       expect(result.code).toContain('message: message');
       
       // Should set internal tracking variables
-      expect(result.code).toContain('_workflowStartTime: Date.now()');
+      expect(result.code).toContain('_workflowStartTime: workflowInfo().runStartTime.getTime()');
       expect(result.code).toContain('_historyResetCount: (_historyResetCount || 0) + 1');
     });
 
@@ -254,7 +254,7 @@ describe('ContinueAsNewPattern', () => {
 
       const result = ContinueAsNewPattern.generate(node, context);
 
-      expect(result.declarations).toContain('let workflowStartTime: number = Date.now();');
+      expect(result.declarations).toContain('const workflowStartTime: number = workflowInfo().runStartTime.getTime();');
     });
 
     it('should only add imports once (idempotent)', () => {
@@ -287,12 +287,12 @@ describe('ContinueAsNewPattern', () => {
 
       // First call
       const result1 = ContinueAsNewPattern.generate(node, context);
-      expect(result1.declarations).toContain('let workflowStartTime: number = Date.now();');
+      expect(result1.declarations).toContain('const workflowStartTime: number = workflowInfo().runStartTime.getTime();');
 
       // Second call should not add declarations again
       context.visitedNodes.add('_workflow_start_time');
       const result2 = ContinueAsNewPattern.generate(node, context);
-      expect(result2.declarations).not.toContain('let workflowStartTime: number = Date.now();');
+      expect(result2.declarations).not.toContain('const workflowStartTime: number = workflowInfo().runStartTime.getTime();');
     });
 
     it('should generate valid TypeScript code structure', () => {
@@ -316,4 +316,3 @@ describe('ContinueAsNewPattern', () => {
     });
   });
 });
-

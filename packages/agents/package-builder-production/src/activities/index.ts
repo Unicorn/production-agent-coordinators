@@ -105,6 +105,19 @@ export const ALL_ACTIVITY_NAMES = [
   'detectResumePoint',
   'canResumePackage',
   'getResumeContext',
+
+  // CLI agent activities
+  'setupCLIWorkspace',
+  'selectCLIProvider',
+  'readPlanFileContent',
+  'readRequirementsContent',
+  'checkCLICreditsForExecution',
+  'selectClaudeModel',
+  'executeGeminiCLI',
+  'executeClaudeCLI',
+  'validateCLIResult',
+  'requestTaskBreakdown',
+  'executeAgentActivityRequest',
 ] as const;
 
 export type ActivityName = typeof ALL_ACTIVITY_NAMES[number];

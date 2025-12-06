@@ -59,9 +59,9 @@ export const ContinueAsNewPattern: Pattern = {
       context.visitedNodes.add('_continue_as_new_imports');
     }
     
-    // Add declaration for workflow start time (only once)
+    // Add declaration for workflow start time (only once, deterministic from workflow info)
     if (!context.visitedNodes.has('_workflow_start_time')) {
-      declarations.push('let workflowStartTime: number = Date.now();');
+      declarations.push('const workflowStartTime: number = workflowInfo().runStartTime.getTime();');
       context.visitedNodes.add('_workflow_start_time');
     }
     
@@ -89,4 +89,3 @@ ${indentStr}}`.trim();
     };
   },
 };
-

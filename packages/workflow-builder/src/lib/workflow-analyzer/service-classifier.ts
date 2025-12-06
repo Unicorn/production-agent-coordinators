@@ -8,7 +8,7 @@
  * Principle: All classification is automatic - users never see or configure this.
  */
 
-import type { WorkflowDefinition, WorkflowNode } from '../compiler/types';
+import type { WorkflowDefinition } from '../compiler/types';
 
 export type WorkflowType = 'service' | 'task';
 

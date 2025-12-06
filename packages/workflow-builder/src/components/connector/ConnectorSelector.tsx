@@ -6,9 +6,12 @@ import { useState } from 'react';
 import { api } from '@/lib/trpc/client';
 import { ConnectorCreationModal } from './ConnectorCreationModal';
 
+type ConnectorClassification = 'redis' | 'http-log' | 'syslog' | 'file-log' | 'tcp-log' | 'udp-log';
+
 interface ConnectorSelectorProps {
   projectId: string;
-  connectorType: 'email' | 'slack' | 'database' | 'api' | 'oauth';
+  connectorType?: 'email' | 'slack' | 'database' | 'api' | 'oauth';
+  classification?: ConnectorClassification; // Filter by classification instead of connector type
   value?: string; // Selected connector ID
   onChange: (connectorId: string | undefined) => void;
   allowNewConnector?: boolean;
@@ -25,6 +28,7 @@ interface ConnectorSelectorProps {
 export function ConnectorSelector({
   projectId,
   connectorType,
+  classification,
   value,
   onChange,
   allowNewConnector = true,
@@ -42,12 +46,19 @@ export function ConnectorSelector({
       { enabled: isDatabaseConnector && !!projectId }
     );
 
-  // TODO: When connectors API is implemented, use it for non-database connectors
-  // const { data: connectorsData, isLoading: connectorsLoading } = 
-  //   api.connectors.list.useQuery(
-  //     { projectId, connectorType },
-  //     { enabled: !isDatabaseConnector && !!projectId }
-  //   );
+  // Use classification-based query if classification is provided
+  const { data: connectorsByClassification, isLoading: connectorsByClassificationLoading } =
+    api.connectors.getByClassification.useQuery(
+      { projectId, classification: classification! },
+      { enabled: !!classification && !!projectId && !isDatabaseConnector }
+    );
+
+  // Use connector type-based query if connectorType is provided (and no classification)
+  const { data: connectorsByType, isLoading: connectorsByTypeLoading } =
+    api.connectors.list.useQuery(
+      { projectId, connectorType },
+      { enabled: !!connectorType && !classification && !isDatabaseConnector && !!projectId }
+    );
 
   const connectors = isDatabaseConnector
     ? connectionsData?.connections.map(conn => ({
@@ -55,16 +66,34 @@ export function ConnectorSelector({
         name: conn.name,
         type: conn.connectionType,
       })) || []
-    : []; // TODO: Map from connectorsData when available
+    : classification
+    ? connectorsByClassification?.map(conn => ({
+        id: conn.id,
+        name: conn.display_name || conn.name,
+        type: conn.connector_type,
+      })) || []
+    : connectorsByType?.map(conn => ({
+        id: conn.id,
+        name: conn.display_name || conn.name,
+        type: conn.connector_type,
+      })) || [];
 
-  const isLoading = isDatabaseConnector ? connectionsLoading : false; // TODO: connectorsLoading
+  const isLoading = isDatabaseConnector 
+    ? connectionsLoading 
+    : classification
+    ? connectorsByClassificationLoading
+    : connectorsByTypeLoading;
 
   const handleCreateSuccess = (newConnectorId: string) => {
     // Invalidate queries to refresh the list
     if (isDatabaseConnector) {
       utils.connections.list.invalidate({ projectId });
     } else {
-      // TODO: utils.connectors.list.invalidate({ projectId, connectorType });
+      if (classification) {
+        utils.connectors.getByClassification.invalidate({ projectId, classification });
+      } else if (connectorType) {
+        utils.connectors.list.invalidate({ projectId, connectorType });
+      }
     }
     
     // Select the newly created connector
@@ -76,11 +105,14 @@ export function ConnectorSelector({
     <YStack gap="$2">
       <XStack ai="center" jc="space-between">
         <Label htmlFor="connector-select">
-          {connectorType === 'database' ? 'Database Connector' :
-           connectorType === 'email' ? 'Email Connector' :
-           connectorType === 'slack' ? 'Slack Connector' :
-           connectorType === 'api' ? 'API Connector' :
-           'OAuth Connector'}
+          {classification 
+            ? `${classification.charAt(0).toUpperCase() + classification.slice(1).replace('-', ' ')} Connector`
+            : connectorType === 'database' ? 'Database Connector' :
+             connectorType === 'email' ? 'Email Connector' :
+             connectorType === 'slack' ? 'Slack Connector' :
+             connectorType === 'api' ? 'API Connector' :
+             connectorType === 'oauth' ? 'OAuth Connector' :
+             'Connector'}
         </Label>
         {allowNewConnector && (
           <Button
@@ -107,7 +139,11 @@ export function ConnectorSelector({
           disabled={disabled}
         >
           <Select.Trigger id="connector-select" width="100%">
-            <Select.Value placeholder={`Select ${connectorType} connector`} />
+            <Select.Value placeholder={
+            classification 
+              ? `Select ${classification.replace('-', ' ')} connector`
+              : `Select ${connectorType || 'connector'}`
+          } />
           </Select.Trigger>
           <Select.Content>
             <Select.Viewport>
@@ -140,7 +176,7 @@ export function ConnectorSelector({
         </Text>
       )}
 
-      {showCreateModal && (
+      {showCreateModal && connectorType && (
         <ConnectorCreationModal
           projectId={projectId}
           connectorType={connectorType}

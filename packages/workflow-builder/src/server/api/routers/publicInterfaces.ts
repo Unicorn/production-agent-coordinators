@@ -13,12 +13,69 @@ import {
 } from '@/lib/kong/service-interface-registry';
 
 export const publicInterfacesRouter = createTRPCRouter({
-  // List public interfaces for a service interface
+  // List public interfaces for a service interface or project
   list: protectedProcedure
     .input(z.object({
-      serviceInterfaceId: z.string().uuid(),
+      serviceInterfaceId: z.string().uuid().optional(),
+      projectId: z.string().uuid().optional(),
     }))
     .query(async ({ ctx, input }) => {
+      if (input.projectId) {
+        // List all public interfaces for a project
+        const { data: workflows } = await ctx.supabase
+          .from('workflows')
+          .select('id')
+          .eq('project_id', input.projectId)
+          .eq('created_by', ctx.user.id);
+
+        if (!workflows || workflows.length === 0) {
+          return { interfaces: [] };
+        }
+
+        const workflowIds = workflows.map(w => w.id);
+        const { data: serviceInterfaces } = await ctx.supabase
+          .from('service_interfaces')
+          .select('id')
+          .in('workflow_id', workflowIds);
+
+        if (!serviceInterfaces || serviceInterfaces.length === 0) {
+          return { interfaces: [] };
+        }
+
+        const serviceInterfaceIds = serviceInterfaces.map(si => si.id);
+        const { data, error } = await ctx.supabase
+          .from('public_interfaces')
+          .select(`
+            *,
+            service_interface:service_interfaces!inner(
+              *,
+              workflow:workflows!inner(
+                id,
+                name,
+                display_name
+              )
+            )
+          `)
+          .in('service_interface_id', serviceInterfaceIds)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: error.message,
+          });
+        }
+
+        return { interfaces: data || [] };
+      }
+
+      // Original behavior: list for a specific service interface
+      if (!input.serviceInterfaceId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Either serviceInterfaceId or projectId must be provided',
+        });
+      }
       // Verify service interface ownership
       const { data: serviceInterface } = await ctx.supabase
         .from('service_interfaces')
@@ -43,7 +100,17 @@ export const publicInterfacesRouter = createTRPCRouter({
 
       const { data, error } = await ctx.supabase
         .from('public_interfaces')
-        .select('*')
+        .select(`
+          *,
+          service_interface:service_interfaces!inner(
+            *,
+            workflow:workflows!inner(
+              id,
+              name,
+              display_name
+            )
+          )
+        `)
         .eq('service_interface_id', input.serviceInterfaceId)
         .order('created_at', { ascending: false });
 
@@ -54,7 +121,7 @@ export const publicInterfacesRouter = createTRPCRouter({
         });
       }
 
-      return data || [];
+      return { interfaces: data || [] };
     }),
 
   // Get public interface by ID

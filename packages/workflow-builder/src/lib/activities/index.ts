@@ -114,3 +114,24 @@ export {
   type ProgressUpdateInput,
   type ProgressUpdateResult,
 } from './notifications.activities';
+
+/**
+ * State Variable Activities
+ *
+ * Export state variable operations for workflow state management
+ */
+
+export {
+  getStateVariable,
+  setStateVariable,
+  appendStateVariable,
+  incrementStateVariable,
+  decrementStateVariable,
+  stateActivities,
+  type StateVariableInput,
+  type GetStateVariableInput,
+  type SetStateVariableInput,
+  type AppendStateVariableInput,
+  type IncrementStateVariableInput,
+  type DecrementStateVariableInput,
+} from './state.activities';

@@ -5,7 +5,7 @@
  * Automatically identifies all variables, state variables, loop counters, and signal queues.
  */
 
-import type { WorkflowDefinition, WorkflowVariable, WorkflowNode } from '../compiler/types';
+import type { WorkflowDefinition } from '../compiler/types';
 
 /**
  * Map of state variable names to their types
@@ -99,9 +99,8 @@ export function generateStateObject(stateMap: StateMap): string {
   }
   
   // Add internal variables at the end
-  stateEntries.push(`    _workflowStartTime: Date.now(),`);
+  stateEntries.push(`    _workflowStartTime: workflowInfo().runStartTime.getTime(),`);
   stateEntries.push(`    _historyResetCount: (_historyResetCount || 0) + 1`);
   
   return stateEntries.join(',\n');
 }
-

@@ -170,7 +170,7 @@ export const componentsRouter = createTRPCRouter({
       name: z.string().min(1).max(255),
       displayName: z.string().min(1).max(255),
       description: z.string().optional(),
-      componentType: z.enum(['activity', 'agent', 'signal', 'trigger']),
+      componentType: z.enum(['activity', 'agent', 'signal', 'trigger', 'data-in', 'data-out']),
       version: z.string().regex(/^\d+\.\d+\.\d+$/, 'Must be valid semver'),
       visibility: z.enum(['public', 'private', 'organization']),
       configSchema: z.any().optional(),
@@ -188,6 +188,9 @@ export const componentsRouter = createTRPCRouter({
       // Custom activity code
       implementationLanguage: z.string().optional(),
       implementationCode: z.string().optional(),
+      // Interface component specific
+      endpointPath: z.string().optional(),
+      httpMethod: z.enum(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { supabase, user } = ctx;
@@ -266,6 +269,16 @@ export const componentsRouter = createTRPCRouter({
         }
       }
       
+      // Build config schema for interface components
+      let configSchema = input.configSchema || null;
+      if ((input.componentType === 'data-in' || input.componentType === 'data-out') && input.endpointPath) {
+        configSchema = {
+          ...(configSchema || {}),
+          endpointPath: input.endpointPath,
+          httpMethod: input.httpMethod || (input.componentType === 'data-in' ? 'POST' : 'GET'),
+        };
+      }
+      
       // Create component
       const { data, error } = await supabase
         .from('components')
@@ -277,7 +290,7 @@ export const componentsRouter = createTRPCRouter({
           version: input.version,
           created_by: user.id,
           visibility_id: visibility.id,
-          config_schema: input.configSchema || null,
+          config_schema: configSchema,
           input_schema: input.inputSchema || null,
           output_schema: input.outputSchema || null,
           tags: input.tags || null,

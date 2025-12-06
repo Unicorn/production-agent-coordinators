@@ -95,6 +95,8 @@ export interface PackageBuildInput {
   dependencies: string[];
   workspaceRoot: string;
   config: BuildConfig;
+  /** Preferred CLI provider to use (for testing or explicit selection) */
+  preferredProvider?: 'gemini' | 'claude';
 }
 
 // Child workflow result

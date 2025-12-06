@@ -16,6 +16,7 @@ export default defineConfig({
     environmentMatchGlobs: [
       ['tests/ui/**', 'jsdom'],
       ['tests/unit/**/*.test.tsx', 'jsdom'],
+      ['src/components/**/__tests__/*.test.tsx', 'jsdom'],
     ],
   },
   resolve: {

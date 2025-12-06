@@ -7,6 +7,7 @@ import { createTRPCRouter, protectedProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { syncPublicInterfacesForServiceInterface } from '@/lib/kong/service-interface-registry';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceInterfaceFromComponent } from '@/lib/interfaces/interface-component-manager';
 
 export const serviceInterfacesRouter = createTRPCRouter({
   // List service interfaces for a workflow
@@ -266,6 +267,76 @@ export const serviceInterfacesRouter = createTRPCRouter({
       }
 
       return { success: true };
+    }),
+
+  // Create service interface from interface component
+  createFromComponent: protectedProcedure
+    .input(z.object({
+      componentId: z.string().uuid(),
+      workflowId: z.string().uuid(),
+      endpointPath: z.string().min(1),
+      httpMethod: z.enum(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']),
+      inputSchema: z.record(z.any()).optional(),
+      outputSchema: z.record(z.any()).optional(),
+      isPublic: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify workflow ownership
+      const { data: workflow } = await ctx.supabase
+        .from('workflows')
+        .select('id')
+        .eq('id', input.workflowId)
+        .eq('created_by', ctx.user.id)
+        .single();
+
+      if (!workflow) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Workflow not found',
+        });
+      }
+
+      // Verify component ownership
+      const { data: component } = await ctx.supabase
+        .from('components')
+        .select('*')
+        .eq('id', input.componentId)
+        .eq('created_by', ctx.user.id)
+        .single();
+
+      if (!component) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Component not found',
+        });
+      }
+
+      // Create service interface from component
+      const serviceInterface = await createServiceInterfaceFromComponent(
+        input.componentId,
+        input.workflowId,
+        {
+          endpointPath: input.endpointPath,
+          httpMethod: input.httpMethod,
+          inputSchema: input.inputSchema,
+          outputSchema: input.outputSchema,
+          isPublic: input.isPublic,
+        },
+        ctx.supabase
+      );
+
+      // If marked as public, sync with Kong
+      if (input.isPublic) {
+        try {
+          const supabase = await createClient();
+          await syncPublicInterfacesForServiceInterface(serviceInterface.id, supabase);
+        } catch (syncError) {
+          console.error('Failed to sync public interface:', syncError);
+          // Don't fail the request, just log the error
+        }
+      }
+
+      return serviceInterface;
     }),
 });
 

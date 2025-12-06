@@ -62,7 +62,7 @@ export const UTILITY_CATEGORIES: UtilityCategory[] = [
     icon: Globe,
     color: '#f59e0b', // orange
     description: 'External APIs, webhooks, third-party services',
-    keywords: ['external', 'webhook', 'third-party', 'integration', 'connector'],
+    keywords: ['external', 'webhook', 'third-party', 'integration', 'connector', 'kong', 'logging', 'cache', 'cors', 'gateway', 'api-gateway'],
   },
   {
     id: 'receive-data',
@@ -106,6 +106,15 @@ export function categorizeComponent(component: Component): string {
   // Special handling for specific component types (check these first)
   if (component.component_type.name === 'agent') {
     return 'ai-automation';
+  }
+  if (component.component_type.name === 'data-in') {
+    return 'receive-data';
+  }
+  if (component.component_type.name === 'data-out') {
+    return 'provide-data';
+  }
+  if (component.component_type.name === 'kong-logging' || component.component_type.name === 'kong-cache' || component.component_type.name === 'kong-cors' || component.component_type.name === 'graphql-gateway' || component.component_type.name === 'mcp-server') {
+    return 'connect-external';
   }
   if (component.component_type.name === 'signal' || component.name.includes('signal')) {
     return 'connect-services';

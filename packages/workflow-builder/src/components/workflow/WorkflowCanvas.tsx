@@ -60,6 +60,7 @@ export function WorkflowCanvas({
 
   const utils = api.useUtils();
   const notificationMutation = api.notifications.sendSlack.useMutation();
+  const markForDeletionMutation = api.kongCache.markForDeletion.useMutation();
   
   const saveMutation = api.workflows.update.useMutation({
     onSuccess: async () => {
@@ -311,8 +312,10 @@ export function WorkflowCanvas({
     setSelectedNode(node as any);
   }, []);
 
+  const createServiceInterfaceMutation = api.serviceInterfaces.createFromComponent.useMutation();
+
   const onDrop = useCallback(
-    (event: React.DragEvent) => {
+    async (event: React.DragEvent) => {
       if (readOnly) return;
 
       event.preventDefault();
@@ -328,22 +331,61 @@ export function WorkflowCanvas({
         y: event.clientY - reactFlowBounds.top,
       };
 
+      // Extract endpoint config from component
+      const config = component.config_schema || {};
+      const componentTypeName = component.component_type?.name || component.component_type_id;
+      
+      // Generate endpoint path if missing for interface components
+      let endpointPath = config.endpointPath || '';
+      if ((componentTypeName === 'data-in' || componentTypeName === 'data-out') && !endpointPath) {
+        // Import generateEndpointPath dynamically to avoid circular dependencies
+        const { generateEndpointPath } = await import('@/lib/interfaces/endpoint-path-generator');
+        endpointPath = generateEndpointPath(component.name || component.display_name);
+      }
+      
+      const httpMethod = config.httpMethod || (componentTypeName === 'data-in' ? 'POST' : 'GET');
+
       const newNode: WorkflowNode = {
         id: `${component.id}-${Date.now()}`,
-        type: component.component_type.name,
+        type: (componentTypeName || 'activity') as any,
         position,
         data: {
           label: component.display_name,
+          displayName: component.display_name,
           componentId: component.id,
           componentName: component.name,
-          config: {},
+          config: {
+            endpointPath,
+            httpMethod,
+            ...config,
+          },
         },
       };
 
       saveToHistory();
       setNodes((nds) => [...nds, newNode as any]);
+
+      // Auto-create service interface for interface components
+      if (componentTypeName === 'data-in' || componentTypeName === 'data-out') {
+        if (endpointPath) {
+          try {
+            await createServiceInterfaceMutation.mutateAsync({
+              componentId: component.id,
+              workflowId,
+              endpointPath,
+              httpMethod: httpMethod as 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+              isPublic: true, // Default to public for interface components
+            });
+            // Invalidate service interfaces to refresh UI
+            utils.serviceInterfaces.list.invalidate({ serviceId: workflowId });
+          } catch (error) {
+            console.error('Failed to create service interface:', error);
+            // Don't block node creation if interface creation fails
+          }
+        }
+      }
     },
-    [setNodes, readOnly, saveToHistory]
+    [setNodes, readOnly, saveToHistory, workflowId, createServiceInterfaceMutation, utils]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -401,6 +443,24 @@ export function WorkflowCanvas({
 
         if (selectedNodes.length > 0 || selectedEdges.length > 0) {
           saveToHistory();
+          
+          // Mark kong-cache components for deletion before removing
+          selectedNodes.forEach((node) => {
+            if (node.type === 'kong-cache' && node.data?.config?.isSaved) {
+              const projectId = node.data?.projectId || initialDefinition?.projectId;
+              if (projectId && node.id) {
+                markForDeletionMutation.mutate({
+                  componentId: node.id,
+                  projectId,
+                }, {
+                  onError: (error) => {
+                    console.error('Failed to mark cache key for deletion:', error);
+                  },
+                });
+              }
+            }
+          });
+          
           setNodes((nds) => nds.filter((node) => !(node as any).selected));
           setEdges((eds) => eds.filter((edge) => !(edge as any).selected));
           setSelectedNode(null);

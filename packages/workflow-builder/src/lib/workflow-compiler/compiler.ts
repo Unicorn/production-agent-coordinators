@@ -435,7 +435,6 @@ export async function ${activityName}(input: any): Promise<any> {
  * Generate worker TypeScript code
  */
 function generateWorkerCode(workflow: TemporalWorkflow, packageName: string, includeComments: boolean): string {
-  const workflowName = toCamelCase(workflow.kebab_name || workflow.name) + 'Workflow';
 
   return `${includeComments ? `/**
  * Temporal Worker for ${workflow.display_name || workflow.name}

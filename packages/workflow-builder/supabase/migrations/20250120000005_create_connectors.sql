@@ -5,7 +5,7 @@
 -- Part of: Services/Components/Connectors refactor - Phase 2
 -- ============================================================================
 
-CREATE TABLE connectors (
+CREATE TABLE IF NOT EXISTS connectors (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   connector_type VARCHAR(100) NOT NULL, -- 'email', 'slack', 'database', 'api', 'oauth'
@@ -24,10 +24,10 @@ CREATE TABLE connectors (
 );
 
 -- Indexes
-CREATE INDEX idx_connectors_project ON connectors(project_id);
-CREATE INDEX idx_connectors_type ON connectors(connector_type);
-CREATE INDEX idx_connectors_created_by ON connectors(created_by);
-CREATE INDEX idx_connectors_active ON connectors(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_connectors_project ON connectors(project_id);
+CREATE INDEX IF NOT EXISTS idx_connectors_type ON connectors(connector_type);
+CREATE INDEX IF NOT EXISTS idx_connectors_created_by ON connectors(created_by);
+CREATE INDEX IF NOT EXISTS idx_connectors_active ON connectors(is_active) WHERE is_active = true;
 
 -- Comments
 COMMENT ON TABLE connectors IS 'Connectors for external services (SendGrid, Slack, databases, APIs, OAuth)';
@@ -46,6 +46,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_connectors_updated_at ON connectors;
 CREATE TRIGGER trigger_update_connectors_updated_at
   BEFORE UPDATE ON connectors
   FOR EACH ROW
@@ -55,6 +56,7 @@ CREATE TRIGGER trigger_update_connectors_updated_at
 ALTER TABLE connectors ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies (users can only see connectors for projects they have access to)
+DROP POLICY IF EXISTS connectors_select_policy ON connectors;
 CREATE POLICY connectors_select_policy ON connectors
   FOR SELECT
   USING (
@@ -65,6 +67,7 @@ CREATE POLICY connectors_select_policy ON connectors
     )
   );
 
+DROP POLICY IF EXISTS connectors_insert_policy ON connectors;
 CREATE POLICY connectors_insert_policy ON connectors
   FOR INSERT
   WITH CHECK (
@@ -76,6 +79,7 @@ CREATE POLICY connectors_insert_policy ON connectors
     AND created_by = auth.uid()
   );
 
+DROP POLICY IF EXISTS connectors_update_policy ON connectors;
 CREATE POLICY connectors_update_policy ON connectors
   FOR UPDATE
   USING (
@@ -86,6 +90,7 @@ CREATE POLICY connectors_update_policy ON connectors
     )
   );
 
+DROP POLICY IF EXISTS connectors_delete_policy ON connectors;
 CREATE POLICY connectors_delete_policy ON connectors
   FOR DELETE
   USING (

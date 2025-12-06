@@ -5,6 +5,7 @@
  * Integrates service_interfaces and public_interfaces tables with Kong.
  */
 
+import { createHash } from 'crypto';
 import { KongClient } from './client';
 import { generateEndpointHash } from './hash-generator';
 import { getKongConfig, isKongEnabled } from './config';
@@ -83,12 +84,24 @@ export async function registerPublicInterface(
   }
 
   // Generate hash for this endpoint
-  const routeHash = generateEndpointHash({
+  // For interface components, use component ID for consistency
+  // Check if service interface is linked to a component
+  const componentId = serviceInterface.activity_connection_id;
+  const hashInput = componentId 
+    ? `${componentId}:${config.httpPath}` // Use component ID for deterministic hashing
+    : {
     userId,
     projectId: project.id,
     workflowId: workflow.id,
     endpointPath: config.httpPath,
-  });
+      };
+  
+  const routeHash = typeof hashInput === 'string'
+    ? (() => {
+        const hash = createHash('sha256').update(hashInput).digest('hex');
+        return `${hash.substring(0, 8)}-${hash.substring(8, 16)}`;
+      })()
+    : generateEndpointHash(hashInput);
 
   // Full path with hash: /api/v1/{hash}/{endpoint-path}
   const normalizedPath = config.httpPath.startsWith('/') 

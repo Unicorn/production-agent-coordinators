@@ -5,7 +5,7 @@
 -- ============================================================================
 
 -- Agent test sessions: Track test workflow executions
-CREATE TABLE agent_test_sessions (
+CREATE TABLE IF NOT EXISTS agent_test_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_prompt_id UUID NOT NULL REFERENCES agent_prompts(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -20,14 +20,14 @@ CREATE TABLE agent_test_sessions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_agent_test_sessions_agent_prompt_id ON agent_test_sessions(agent_prompt_id);
-CREATE INDEX idx_agent_test_sessions_user_id ON agent_test_sessions(user_id);
-CREATE INDEX idx_agent_test_sessions_temporal_workflow_id ON agent_test_sessions(temporal_workflow_id);
-CREATE INDEX idx_agent_test_sessions_status ON agent_test_sessions(status);
-CREATE INDEX idx_agent_test_sessions_active ON agent_test_sessions(user_id, agent_prompt_id, status) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_agent_test_sessions_agent_prompt_id ON agent_test_sessions(agent_prompt_id);
+CREATE INDEX IF NOT EXISTS idx_agent_test_sessions_user_id ON agent_test_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_test_sessions_temporal_workflow_id ON agent_test_sessions(temporal_workflow_id);
+CREATE INDEX IF NOT EXISTS idx_agent_test_sessions_status ON agent_test_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_agent_test_sessions_active ON agent_test_sessions(user_id, agent_prompt_id, status) WHERE status = 'active';
 
 -- Agent builder sessions: Track AI-assisted builder sessions (for analytics)
-CREATE TABLE agent_builder_sessions (
+CREATE TABLE IF NOT EXISTS agent_builder_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   conversation_messages JSONB DEFAULT '[]'::jsonb,
@@ -40,9 +40,9 @@ CREATE TABLE agent_builder_sessions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_agent_builder_sessions_user_id ON agent_builder_sessions(user_id);
-CREATE INDEX idx_agent_builder_sessions_status ON agent_builder_sessions(status);
-CREATE INDEX idx_agent_builder_sessions_resulting_prompt_id ON agent_builder_sessions(resulting_prompt_id);
+CREATE INDEX IF NOT EXISTS idx_agent_builder_sessions_user_id ON agent_builder_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_builder_sessions_status ON agent_builder_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_agent_builder_sessions_resulting_prompt_id ON agent_builder_sessions(resulting_prompt_id);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_agent_test_sessions_updated_at()

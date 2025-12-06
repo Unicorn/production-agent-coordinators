@@ -12,6 +12,7 @@ import {
   ValidationError,
   CompilationError,
 } from '../errors/workflow-errors';
+import { validateInterfaceComponents } from './interface-validation';
 
 /**
  * Enhanced validation result
@@ -95,6 +96,32 @@ export function validateWorkflow(workflow: WorkflowDefinition): ValidationResult
   // Variable validation
   if (workflow.variables && workflow.variables.length > 0) {
     validateVariables(workflow.variables, workflow.nodes, errors, warnings);
+  }
+
+  // Interface component validation
+  // Convert workflow nodes/edges to React Flow format for validation
+  const reactFlowNodes = workflow.nodes.map((n: WorkflowNode) => ({
+    id: n.id,
+    type: n.type,
+    data: n.data || {},
+  }));
+  const reactFlowEdges = (workflow.edges || []).map((e: WorkflowEdge) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+  }));
+  const interfaceErrors = validateInterfaceComponents(reactFlowNodes, reactFlowEdges);
+  // Convert interface validation errors to ValidationError format
+  for (const interfaceError of interfaceErrors) {
+    errors.push(
+      new ValidationError({
+        message: interfaceError.message,
+        field: 'nodes',
+        invalidValue: interfaceError.nodeId,
+        recoverySuggestions: ['Connect the interface component to a valid target/source component'],
+        details: { nodeId: interfaceError.nodeId },
+      })
+    );
   }
 
   // Settings validation
@@ -316,6 +343,151 @@ function validateNodeType(
               'Signal names should be descriptive and unique',
             ],
             details: { nodeId: node.id },
+          })
+        );
+      }
+      break;
+
+    case 'kong-logging':
+      // Kong logging component must have a connector selected
+      if (!node.data.config?.connectorId) {
+        errors.push(
+          new ValidationError({
+            message: `Kong Logging component "${node.data.label || node.id}" must have a logging connector selected`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Select a logging connector in the component properties',
+              'Logging connectors include HTTP log, Syslog, File log, TCP log, and UDP log',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      break;
+
+    case 'kong-cache':
+      // Kong cache component must have a Redis connector selected
+      if (!node.data.config?.connectorId) {
+        errors.push(
+          new ValidationError({
+            message: `Kong Cache component "${node.data.label || node.id}" must have a Redis connector selected`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Select a Redis connector in the component properties',
+              'Redis connectors include Upstash, Redis Cloud, and other Redis-compatible services',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      // Kong cache component must have a cache key
+      if (!node.data.config?.cacheKey) {
+        errors.push(
+          new ValidationError({
+            message: `Kong Cache component "${node.data.label || node.id}" must have a cache key`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'A cache key will be auto-generated when you add the component',
+              'You can edit the cache key until you save the component',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      break;
+
+    case 'kong-cors':
+      // Kong CORS component should have at least one allowed origin
+      if (!node.data.config?.allowedOrigins || (Array.isArray(node.data.config.allowedOrigins) && node.data.config.allowedOrigins.length === 0)) {
+        errors.push(
+          new ValidationError({
+            message: `Kong CORS component "${node.data.label || node.id}" must have at least one allowed origin configured`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Configure at least one allowed origin in the component properties',
+              'Examples: https://example.com or * for all origins (not recommended for production)',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      // Kong CORS component should have at least one allowed method
+      if (!node.data.config?.allowedMethods || (Array.isArray(node.data.config.allowedMethods) && node.data.config.allowedMethods.length === 0)) {
+        errors.push(
+          new ValidationError({
+            message: `Kong CORS component "${node.data.label || node.id}" must have at least one allowed method configured`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Configure at least one allowed HTTP method in the component properties',
+              'Common methods: GET, POST, PUT, DELETE, OPTIONS',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      break;
+
+    case 'graphql-gateway':
+      // GraphQL gateway component must have a schema defined
+      if (!node.data.config?.schema) {
+        errors.push(
+          new ValidationError({
+            message: `GraphQL Gateway component "${node.data.label || node.id}" must have a GraphQL schema defined`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Define a GraphQL schema in the component properties',
+              'The schema should include type definitions, queries, and mutations',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      // GraphQL gateway should have at least one query or mutation
+      const queries = node.data.config?.queries || [];
+      const mutations = node.data.config?.mutations || [];
+      if (queries.length === 0 && mutations.length === 0) {
+        errors.push(
+          new ValidationError({
+            message: `GraphQL Gateway component "${node.data.label || node.id}" must have at least one query or mutation defined`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Add at least one query or mutation to the GraphQL schema',
+              'Queries map to GET operations, mutations map to POST/PUT/DELETE operations',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      break;
+
+    case 'mcp-server':
+      // MCP server component must have a server name
+      if (!node.data.config?.serverName) {
+        errors.push(
+          new ValidationError({
+            message: `MCP Server component "${node.data.label || node.id}" must have a server name configured`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Configure a server name in the component properties',
+              'The server name identifies this MCP server instance',
+            ],
+            details: { nodeId: node.id, type: node.type },
+          })
+        );
+      }
+      // MCP server should have at least one resource or tool
+      const resources = node.data.config?.resources || [];
+      const tools = node.data.config?.tools || [];
+      if (resources.length === 0 && tools.length === 0) {
+        errors.push(
+          new ValidationError({
+            message: `MCP Server component "${node.data.label || node.id}" must have at least one resource or tool defined`,
+            field: 'nodes',
+            recoverySuggestions: [
+              'Add at least one resource or tool to the MCP server',
+              'Resources expose data, tools expose executable functions',
+            ],
+            details: { nodeId: node.id, type: node.type },
           })
         );
       }

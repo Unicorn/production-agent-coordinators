@@ -5,11 +5,12 @@
 'use client';
 
 import { YStack, XStack, Text, Button, Input, TextArea, Label, Select, Adapt, Sheet, Switch } from 'tamagui';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/trpc/client';
 import { Check, ChevronDown } from 'lucide-react';
 import { TypeScriptEditor } from '@/components/code-editor/TypeScriptEditor';
+import { generateEndpointPath } from '@/lib/interfaces/endpoint-path-generator';
 
 interface ComponentFormProps {
   componentId?: string;
@@ -33,8 +34,29 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
   const [activityCode, setActivityCode] = useState('');
   const [isCodeValid, setIsCodeValid] = useState(false);
   const [error, setError] = useState('');
+  
+  // Interface component specific state
+  const [endpointPath, setEndpointPath] = useState('');
+  const [httpMethod, setHttpMethod] = useState<'POST' | 'PATCH' | 'GET'>('POST');
 
   const { data: types } = api.components.getTypes.useQuery();
+
+  // Auto-generate endpoint path when name or component type changes for interface components
+  useEffect(() => {
+    if ((componentType === 'data-in' || componentType === 'data-out') && name) {
+      const generatedPath = generateEndpointPath(name);
+      setEndpointPath(generatedPath);
+    }
+  }, [name, componentType]);
+
+  // Set default HTTP method based on component type
+  useEffect(() => {
+    if (componentType === 'data-in') {
+      setHttpMethod('POST');
+    } else if (componentType === 'data-out') {
+      setHttpMethod('GET');
+    }
+  }, [componentType]);
 
   const createMutation = api.components.create.useMutation({
     onSuccess: () => {
@@ -56,6 +78,14 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
     if (!name || !displayName || !componentType) {
       setError('Name, display name, and component type are required');
       return;
+    }
+
+    // Validate interface component fields
+    if (componentType === 'data-in' || componentType === 'data-out') {
+      if (!endpointPath || !endpointPath.startsWith('/')) {
+        setError('Endpoint path is required and must start with /');
+        return;
+      }
     }
 
     // Validate custom activity code if enabled
@@ -87,6 +117,9 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
       // Custom activity code
       implementationLanguage: isCustomActivity && activityCode.trim() ? 'typescript' : undefined,
       implementationCode: isCustomActivity && activityCode.trim() ? activityCode : undefined,
+      // Interface component specific
+      endpointPath: (componentType === 'data-in' || componentType === 'data-out') ? endpointPath : undefined,
+      httpMethod: (componentType === 'data-in' || componentType === 'data-out') ? httpMethod : undefined,
     });
   };
 
@@ -291,6 +324,88 @@ export function ComponentForm({ componentId, onSuccess }: ComponentFormProps) {
             Comma-separated list
           </Text>
         </YStack>
+
+        {/* Interface Component Fields (only for data-in and data-out types) */}
+        {(componentType === 'data-in' || componentType === 'data-out') && (
+          <>
+            <YStack gap="$2">
+              <Label htmlFor="endpointPath" fontSize="$3" fontWeight="600">
+                Endpoint Path *
+              </Label>
+              <Input
+                id="endpointPath"
+                size="$4"
+                placeholder="/receive-order"
+                value={endpointPath}
+                onChangeText={setEndpointPath}
+                disabled={createMutation.isLoading}
+              />
+              <Text fontSize="$2" color="$gray11">
+                API endpoint path (auto-generated from name, editable)
+              </Text>
+            </YStack>
+
+            <YStack gap="$2">
+              <Label htmlFor="httpMethod" fontSize="$3" fontWeight="600">
+                HTTP Method *
+              </Label>
+              <Select
+                value={httpMethod}
+                onValueChange={(value) => setHttpMethod(value as 'POST' | 'PATCH' | 'GET')}
+              >
+                <Select.Trigger width="100%" iconAfter={ChevronDown}>
+                  <Select.Value placeholder="Select method" />
+                </Select.Trigger>
+
+                <Adapt when="sm" platform="touch">
+                  <Sheet modal dismissOnSnapToBottom>
+                    <Sheet.Frame>
+                      <Sheet.ScrollView>
+                        <Adapt.Contents />
+                      </Sheet.ScrollView>
+                    </Sheet.Frame>
+                    <Sheet.Overlay />
+                  </Sheet>
+                </Adapt>
+
+                <Select.Content zIndex={200000}>
+                  <Select.ScrollUpButton />
+                  <Select.Viewport>
+                    {componentType === 'data-in' ? (
+                      <>
+                        <Select.Item index={0} value="POST">
+                          <Select.ItemText>POST</Select.ItemText>
+                          <Select.ItemIndicator marginLeft="auto">
+                            <Check size={16} />
+                          </Select.ItemIndicator>
+                        </Select.Item>
+                        <Select.Item index={1} value="PATCH">
+                          <Select.ItemText>PATCH</Select.ItemText>
+                          <Select.ItemIndicator marginLeft="auto">
+                            <Check size={16} />
+                          </Select.ItemIndicator>
+                        </Select.Item>
+                      </>
+                    ) : (
+                      <Select.Item index={0} value="GET">
+                        <Select.ItemText>GET</Select.ItemText>
+                        <Select.ItemIndicator marginLeft="auto">
+                          <Check size={16} />
+                        </Select.ItemIndicator>
+                      </Select.Item>
+                    )}
+                  </Select.Viewport>
+                  <Select.ScrollDownButton />
+                </Select.Content>
+              </Select>
+              <Text fontSize="$2" color="$gray11">
+                {componentType === 'data-in' 
+                  ? 'HTTP method for receiving data (POST or PATCH)'
+                  : 'HTTP method for providing data (GET)'}
+              </Text>
+            </YStack>
+          </>
+        )}
 
         {/* Custom Activity Code (only for activity type) */}
         {componentType === 'activity' && (

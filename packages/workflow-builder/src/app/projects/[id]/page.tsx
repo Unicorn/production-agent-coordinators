@@ -14,6 +14,7 @@ import { ProjectStatisticsPanel } from '@/components/execution/ProjectStatistics
 import { ConnectionManager } from '@/components/project/ConnectionManager';
 import { ConnectorManager } from '@/components/connector/ConnectorManager';
 import { ProjectView } from '@/components/service/ProjectView';
+import { ProjectEndpointsList } from '@/components/project/ProjectEndpointsList';
 
 function ProjectDetailContent() {
   const router = useRouter();
@@ -215,6 +216,14 @@ function ProjectDetailContent() {
           <Card padding="$4" elevate>
             <YStack gap="$3">
               <H2 fontSize="$5">Project Details</H2>
+              <Separator />
+              
+              {/* Endpoints Section */}
+              <YStack gap="$3">
+                <H2 fontSize="$4">API Endpoints</H2>
+                <ProjectEndpointsList projectId={projectId} />
+              </YStack>
+              
               <Separator />
 
               <XStack justifyContent="space-between" flexWrap="wrap">

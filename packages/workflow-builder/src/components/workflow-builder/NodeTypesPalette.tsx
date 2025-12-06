@@ -1,12 +1,12 @@
 'use client';
 
 import { YStack, XStack, Text, Card, Button, ScrollView, Input } from 'tamagui';
-import { Activity, Bot, Send, Search, Inbox, Clock, Plus, Globe, GitBranch, Layers, RotateCcw, Database } from 'lucide-react';
+import { Activity, Bot, Send, Search, Inbox, Clock, Plus, Globe, GitBranch, Layers, RotateCcw, Database, Download, Upload, FileText, Key, Shield, Network, Server } from 'lucide-react';
 import { useState } from 'react';
 
 interface NodeType {
   id: string;
-  type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'condition' | 'phase' | 'retry' | 'state-variable';
+  type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'condition' | 'phase' | 'retry' | 'state-variable' | 'data-in' | 'data-out' | 'api-endpoint' | 'kong-logging' | 'kong-cache' | 'kong-cors' | 'graphql-gateway' | 'mcp-server';
   name: string;
   description: string;
   icon: typeof Activity;
@@ -36,7 +36,7 @@ export function NodeTypesPalette({
   const nodeTypes: NodeType[] = [
     // Activities from components
     ...availableComponents
-      .filter(c => c.component_type_id === 'activity')
+      .filter(c => (c.component_type?.name || c.component_type_id) === 'activity')
       .map(c => ({
         id: c.id,
         type: 'activity' as const,
@@ -49,7 +49,7 @@ export function NodeTypesPalette({
     
     // Agents from components
     ...availableComponents
-      .filter(c => c.component_type_id === 'agent')
+      .filter(c => (c.component_type?.name || c.component_type_id) === 'agent')
       .map(c => ({
         id: c.id,
         type: 'agent' as const,
@@ -57,6 +57,32 @@ export function NodeTypesPalette({
         description: c.description || 'AI Agent',
         icon: Bot,
         color: '$purple9',
+        metadata: c,
+      })),
+    
+    // Data In components (interface components)
+    ...availableComponents
+      .filter(c => (c.component_type?.name || c.component_type_id) === 'data-in')
+      .map(c => ({
+        id: c.id,
+        type: 'data-in' as const,
+        name: c.name,
+        description: c.description || 'Data In Interface',
+        icon: Download,
+        color: '$cyan9',
+        metadata: c,
+      })),
+    
+    // Data Out components (interface components)
+    ...availableComponents
+      .filter(c => (c.component_type?.name || c.component_type_id) === 'data-out')
+      .map(c => ({
+        id: c.id,
+        type: 'data-out' as const,
+        name: c.name,
+        description: c.description || 'Data Out Interface',
+        icon: Upload,
+        color: '$teal9',
         metadata: c,
       })),
     
@@ -141,6 +167,56 @@ export function NodeTypesPalette({
       color: '$blue9',
       metadata: {},
     },
+    // Kong Logging (built-in node type, project-level)
+    {
+      id: 'kong-logging',
+      type: 'kong-logging' as const,
+      name: 'Kong Logging',
+      description: 'Project-level logging configuration for API endpoints',
+      icon: FileText,
+      color: '$blue9',
+      metadata: {},
+    },
+    // Kong Cache (built-in node type)
+    {
+      id: 'kong-cache',
+      type: 'kong-cache' as const,
+      name: 'Kong Cache',
+      description: 'Redis-backed proxy caching for API endpoints',
+      icon: Key,
+      color: '$green9',
+      metadata: {},
+    },
+    // Kong CORS (built-in node type)
+    {
+      id: 'kong-cors',
+      type: 'kong-cors' as const,
+      name: 'Kong CORS',
+      description: 'CORS (Cross-Origin Resource Sharing) configuration for API endpoints',
+      icon: Shield,
+      color: '$purple9',
+      metadata: {},
+    },
+    // GraphQL Gateway (built-in node type)
+    {
+      id: 'graphql-gateway',
+      type: 'graphql-gateway' as const,
+      name: 'GraphQL Gateway',
+      description: 'GraphQL endpoint gateway with schema definition and resolver mapping',
+      icon: Network,
+      color: '$indigo9',
+      metadata: {},
+    },
+    // MCP Server (built-in node type)
+    {
+      id: 'mcp-server',
+      type: 'mcp-server' as const,
+      name: 'MCP Server',
+      description: 'MCP (Model Context Protocol) server for exposing workflows as MCP resources and tools',
+      icon: Server,
+      color: '$violet9',
+      metadata: {},
+    },
   ];
 
   // Filter by search and category
@@ -166,6 +242,8 @@ export function NodeTypesPalette({
   const categories = [
     { id: 'activity', label: 'Activities', icon: Activity, color: '$blue9' },
     { id: 'agent', label: 'Agents', icon: Bot, color: '$purple9' },
+    { id: 'data-in', label: 'Data In', icon: Download, color: '$cyan9' },
+    { id: 'data-out', label: 'Data Out', icon: Upload, color: '$teal9' },
     { id: 'work-queue', label: 'Work Queues', icon: Inbox, color: '$yellow9' },
     { id: 'signal', label: 'Signals', icon: Send, color: '$orange9' },
     { id: 'query', label: 'Queries', icon: Search, color: '$teal9' },

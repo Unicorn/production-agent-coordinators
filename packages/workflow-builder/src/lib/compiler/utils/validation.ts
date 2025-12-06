@@ -185,6 +185,30 @@ function validateNodeType(node: WorkflowNode): CompilerError[] {
         });
       }
       break;
+
+    case 'data-in':
+      // Data-in nodes should have endpoint path
+      if (!node.data.config?.endpointPath && !node.data.endpointPath) {
+        errors.push({
+          message: `Data-in node ${node.id} should have an endpoint path`,
+          nodeId: node.id,
+          type: 'validation',
+          severity: 'warning',
+        });
+      }
+      break;
+
+    case 'data-out':
+      // Data-out nodes should have endpoint path
+      if (!node.data.config?.endpointPath && !node.data.endpointPath) {
+        errors.push({
+          message: `Data-out node ${node.id} should have an endpoint path`,
+          nodeId: node.id,
+          type: 'validation',
+          severity: 'warning',
+        });
+      }
+      break;
   }
 
   return errors;

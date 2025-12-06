@@ -5,7 +5,7 @@
 
 -- Add display_name column
 ALTER TABLE task_queues
-ADD COLUMN display_name VARCHAR(255);
+ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);
 
 -- Set default display_name for existing queues (capitalize name)
 UPDATE task_queues

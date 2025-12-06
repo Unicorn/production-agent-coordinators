@@ -26,6 +26,10 @@ import { connectorsRouter } from './routers/connectors';
 import { projectConnectorsRouter } from './routers/projectConnectors';
 import { fileOperationsRouter } from './routers/file-operations';
 import { notificationsRouter } from './routers/notifications';
+import { stateVariablesRouter } from './routers/stateVariables';
+import { projectLoggingRouter } from './routers/projectLogging';
+import { kongCacheRouter } from './routers/kongCache';
+import { stateMonitoringRouter } from './routers/stateMonitoring';
 
 export const appRouter = createTRPCRouter({
   users: usersRouter,
@@ -52,6 +56,10 @@ export const appRouter = createTRPCRouter({
   projectConnectors: projectConnectorsRouter,
   fileOperations: fileOperationsRouter,
   notifications: notificationsRouter,
+  stateVariables: stateVariablesRouter,
+  projectLogging: projectLoggingRouter,
+  kongCache: kongCacheRouter,
+  stateMonitoring: stateMonitoringRouter,
 });
 
 export type AppRouter = typeof appRouter;

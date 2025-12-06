@@ -14,6 +14,13 @@ import { PhaseNode as PhaseNodeComponent } from './PhaseNode';
 import { RetryNode as RetryNodeComponent } from './RetryNode';
 import { StateVariableNode as StateVariableNodeComponent } from './StateVariableNode';
 import { ServiceContainerNode as ServiceContainerNodeComponent } from './ServiceContainerNode';
+import { DataInNode as DataInNodeComponent } from './DataInNode';
+import { DataOutNode as DataOutNodeComponent } from './DataOutNode';
+import { KongLoggingNode as KongLoggingNodeComponent } from './KongLoggingNode';
+import { KongCacheNode as KongCacheNodeComponent } from './KongCacheNode';
+import { KongCorsNode as KongCorsNodeComponent } from './KongCorsNode';
+import { GraphQLNode as GraphQLNodeComponent } from './GraphQLNode';
+import { MCPServerNode as MCPServerNodeComponent } from './MCPServerNode';
 
 export { ActivityNodeComponent as ActivityNode };
 export { AgentNodeComponent as AgentNode };
@@ -27,6 +34,13 @@ export { PhaseNodeComponent as PhaseNode };
 export { RetryNodeComponent as RetryNode };
 export { StateVariableNodeComponent as StateVariable };
 export { ServiceContainerNodeComponent as ServiceContainerNode };
+export { DataInNodeComponent as DataInNode };
+export { DataOutNodeComponent as DataOutNode };
+export { KongLoggingNodeComponent as KongLoggingNode };
+export { KongCacheNodeComponent as KongCacheNode };
+export { KongCorsNodeComponent as KongCorsNode };
+export { GraphQLNodeComponent as GraphQLNode };
+export { MCPServerNodeComponent as MCPServerNode };
 
 // Node type registry for React Flow
 export const nodeTypes = {
@@ -42,5 +56,12 @@ export const nodeTypes = {
   retry: RetryNodeComponent,
   'state-variable': StateVariableNodeComponent,
   'service-container': ServiceContainerNodeComponent,
+  'data-in': DataInNodeComponent,
+  'data-out': DataOutNodeComponent,
+  'kong-logging': KongLoggingNodeComponent,
+  'kong-cache': KongCacheNodeComponent,
+  'kong-cors': KongCorsNodeComponent,
+  'graphql-gateway': GraphQLNodeComponent,
+  'mcp-server': MCPServerNodeComponent,
 };
 

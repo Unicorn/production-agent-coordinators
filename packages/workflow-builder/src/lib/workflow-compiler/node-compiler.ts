@@ -5,6 +5,8 @@
 
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from '@/types/workflow';
 
+type NodeConfig = Record<string, unknown>;
+
 export interface CompileOptions {
   includeComments?: boolean;
   workflowName?: string;
@@ -48,7 +50,7 @@ ${includeComments ? `/**
  * ${workflowName}
  * Generated Temporal workflow from node-based definition
  */` : ''}
-export async function ${functionName}(input: any): Promise<any> {
+export async function ${functionName}(input: Record<string, unknown> | undefined): Promise<unknown> {
 ${stateVariables}
 
 ${workflowCode}
@@ -61,19 +63,15 @@ ${workflowCode}
 function generateImports(definition: WorkflowDefinition): string {
   const nodes = definition.nodes || [];
   const imports = new Set<string>();
-  
-  imports.add("import { proxyActivities, startChild, executeChild, sleep, condition } from '@temporalio/workflow';");
-  
-  // Check for executeChild usage
-  const usesExecuteChild = nodes.some(n => 
-    n.type === 'child-workflow' && 
-    (n.data.config?.executionType === 'executeChild')
-  );
-  
-  if (usesExecuteChild) {
-    // executeChild already imported above
-  }
-  
+
+  const workflowImports = new Set([
+    'proxyActivities',
+    'startChild',
+    'executeChild',
+    'sleep',
+    'condition',
+  ]);
+
   // Check for activities/agents
   const hasActivities = nodes.some(n => n.type === 'activity' || n.type === 'agent');
   if (hasActivities) {
@@ -83,7 +81,7 @@ function generateImports(definition: WorkflowDefinition): string {
   // Check for child workflows
   const hasChildWorkflows = nodes.some(n => n.type === 'child-workflow');
   if (hasChildWorkflows) {
-    // Already included in base imports
+    workflowImports.add('uuid4');
   }
   
   // Check for signals
@@ -91,6 +89,8 @@ function generateImports(definition: WorkflowDefinition): string {
   if (hasSignals) {
     imports.add("import { defineSignal, setHandler } from '@temporalio/workflow';");
   }
+
+  imports.add(`import { ${Array.from(workflowImports).join(', ')} } from '@temporalio/workflow';`);
 
   return Array.from(imports).join('\n');
 }
@@ -173,7 +173,7 @@ function traverseNode(
   const resultVar = `result_${node.id.replace(/-/g, '_')}`;
 
   // Generate code for this node
-  const nodeCode = generateNodeCode(node, resultVar, resultVars, includeComments, indent);
+  const nodeCode = generateNodeCode(node, resultVar, resultVars, includeComments, indent, edges);
   if (nodeCode) {
     code.push(nodeCode);
   }
@@ -221,10 +221,11 @@ function generateNodeCode(
   resultVar: string,
   resultVars: Map<string, string>,
   includeComments: boolean,
-  indent: number
+  indent: number,
+  edges: WorkflowEdge[]
 ): string {
   const indentStr = '  '.repeat(indent);
-  const config = node.data.config || {};
+  const config: NodeConfig = node.data.config || {};
   const comment = includeComments ? `// ${node.data.label || node.id}` : '';
 
   switch (node.type) {
@@ -237,7 +238,7 @@ ${indentStr}// Cron-scheduled workflow: ${config.cronSchedule}`;
 ${indentStr}// Workflow started`;
     
     case 'activity':
-    case 'agent':
+    case 'agent': {
       const activityName = node.data.componentName || toCamelCase(node.id);
       resultVars.set(node.id, resultVar);
       
@@ -259,12 +260,18 @@ ${indentStr}// Workflow started`;
         }
       }
       
-      // Build input parameter
-      const incomingEdges = Array.from(resultVars.keys()).filter(id => {
-        // Find edges that connect to this node
-        return true; // Simplified - would need edge context
-      });
-      const inputParam = 'input'; // Simplified - would need proper input mapping
+      // Build input parameter using upstream result when available
+      const incoming = edges.filter(edge => edge.target === node.id);
+      const mappedInputs = incoming
+        .map(edge => resultVars.get(edge.source))
+        .filter((value): value is string => Boolean(value));
+
+      const inputParam =
+        mappedInputs.length === 1
+          ? mappedInputs[0]
+          : mappedInputs.length > 1
+            ? `{ ${mappedInputs.map((value, index) => `arg${index + 1}: ${value}`).join(', ')} }`
+            : 'input';
       
       if (activityOptions.length > 0) {
         return `${indentStr}${comment}
@@ -275,35 +282,39 @@ ${indentStr}});`;
       
       return `${indentStr}${comment}
 ${indentStr}const ${resultVar} = await ${activityName}(${inputParam});`;
+    }
     
-    case 'child-workflow':
-      const workflowType = config.workflowType || node.data.componentName || 'ChildWorkflow';
+    case 'child-workflow': {
+      const workflowType = (config.workflowType as string) || node.data.componentName || 'ChildWorkflow';
       const childInput = config.inputMapping 
-        ? generateInputMapping(config.inputMapping, resultVars)
+        ? generateInputMapping(config.inputMapping as Record<string, string>, resultVars)
         : 'input';
-      const executionType = config.executionType || 'startChild';
-      const taskQueue = config.taskQueue ? `taskQueue: '${config.taskQueue}',\n${indentStr}  ` : '';
+      const executionType = (config.executionType as string) || 'startChild';
+      const taskQueue =
+        typeof config.taskQueue === 'string' ? `taskQueue: '${config.taskQueue}',\n${indentStr}  ` : '';
       resultVars.set(node.id, resultVar);
       
       if (executionType === 'executeChild') {
         return `${indentStr}${comment}
 ${indentStr}const ${resultVar} = await executeChild(${workflowType}Workflow, {
-${indentStr}  ${taskQueue}workflowId: '${node.id}-${Date.now()}',
+${indentStr}  ${taskQueue}workflowId: '${node.id}-' + uuid4(),
 ${indentStr}  args: [${childInput}],
 ${indentStr}});`;
       } else {
         return `${indentStr}${comment}
 ${indentStr}const ${resultVar} = await startChild(${workflowType}Workflow, {
-${indentStr}  ${taskQueue}workflowId: '${node.id}-${Date.now()}',
+${indentStr}  ${taskQueue}workflowId: '${node.id}-' + uuid4(),
 ${indentStr}  args: [${childInput}],
 ${indentStr}});`;
       }
+    }
     
-    case 'condition':
-      const expression = config.expression || 'true';
+    case 'condition': {
+      const expression = (config.expression as string) || 'true';
       resultVars.set(node.id, resultVar);
       return `${indentStr}${comment}
 ${indentStr}const ${resultVar} = ${expression};`;
+    }
     
     case 'phase':
       return generatePhaseCode(node, config, resultVars, includeComments, indent);
@@ -314,11 +325,12 @@ ${indentStr}const ${resultVar} = ${expression};`;
     case 'state-variable':
       return generateStateVariableCode(node, config, includeComments, indent);
     
-    case 'signal':
+    case 'signal': {
       const signalName = node.data.signalName || config.signalName || 'signal';
       return `${indentStr}${comment}
 ${indentStr}// Signal handler: ${signalName}
 ${indentStr}// Signal logic would be implemented here`;
+    }
     
     case 'api-endpoint':
       return `${indentStr}${comment}
@@ -335,15 +347,15 @@ ${indentStr}// Node type: ${node.type}`;
  */
 function generatePhaseCode(
   node: WorkflowNode,
-  config: any,
+  config: NodeConfig,
   resultVars: Map<string, string>,
   includeComments: boolean,
   indent: number
 ): string {
   const indentStr = '  '.repeat(indent);
-  const phaseName = config.name || node.data.label || 'Phase';
+  const phaseName = (config.name as string) || node.data.label || 'Phase';
   const isSequential = config.sequential !== false;
-  const maxConcurrent = config.maxConcurrency || 4;
+  const maxConcurrent = typeof config.maxConcurrency === 'number' ? config.maxConcurrency : 4;
 
   const code: string[] = [];
   code.push(`${indentStr}// Phase: ${phaseName}`);
@@ -364,19 +376,18 @@ function generatePhaseCode(
  */
 function generateRetryCode(
   node: WorkflowNode,
-  config: any,
+  config: NodeConfig,
   resultVars: Map<string, string>,
   includeComments: boolean,
   indent: number
 ): string {
   const indentStr = '  '.repeat(indent);
-  const maxAttempts = config.maxAttempts || 3;
-  const retryOn = config.retryOn || 'failure';
-  const backoff = config.backoff || {};
-  const backoffType = backoff.type || 'exponential';
-  const initialInterval = backoff.initialInterval || '1s';
-  const multiplier = backoff.multiplier || 2;
-  const scope = config.scope || 'block';
+  const maxAttempts = typeof config.maxAttempts === 'number' ? config.maxAttempts : 3;
+  const retryOn = (config.retryOn as string) || 'failure';
+  const backoff = (config.backoff as NodeConfig) || {};
+  const backoffType = (backoff.type as string) || 'exponential';
+  const initialInterval = (backoff.initialInterval as string) || '1s';
+  const multiplier = typeof backoff.multiplier === 'number' ? backoff.multiplier : 2;
 
   const code: string[] = [];
   code.push(`${indentStr}// Retry loop: ${node.data.label || 'Retry'}`);
@@ -433,13 +444,13 @@ function generateRetryCode(
  */
 function generateStateVariableCode(
   node: WorkflowNode,
-  config: any,
+  config: NodeConfig,
   includeComments: boolean,
   indent: number
 ): string {
   const indentStr = '  '.repeat(indent);
-  const varName = config.name || toCamelCase(node.id);
-  const operation = config.operation || 'set';
+  const varName = (config.name as string) || toCamelCase(node.id);
+  const operation = (config.operation as string) || 'set';
   const value = config.value;
 
   const code: string[] = [];
@@ -524,8 +535,7 @@ function generateRetryPolicyCode(
   
   switch (retryPolicy.strategy) {
     case 'keep-trying':
-      // Infinite retries with exponential backoff
-      lines.push(`${indentStr}    maximumAttempts: Infinity,`);
+      // Unlimited retries with exponential backoff (leave maximumAttempts undefined)
       if (retryPolicy.initialInterval) {
         lines.push(`${indentStr}    initialInterval: '${retryPolicy.initialInterval}',`);
       } else {
@@ -607,4 +617,3 @@ function toCamelCase(str: string): string {
     .replace(/[^a-zA-Z0-9]+(.)/g, (_, chr) => chr.toUpperCase())
     .replace(/^[A-Z]/, chr => chr.toLowerCase());
 }
-

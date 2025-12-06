@@ -9,11 +9,18 @@ vi.mock('child_process', () => ({
 }));
 
 // Mock fs/promises module
-vi.mock('fs/promises');
+vi.mock('fs/promises', () => ({
+  access: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  mkdir: vi.fn(),
+}));
 
 describe('Build Activities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Mock fs.access to resolve (node_modules exists)
+    vi.mocked(fs.access).mockResolvedValue(undefined);
   });
 
   describe('runBuild', () => {
@@ -97,7 +104,7 @@ describe('Build Activities', () => {
     it('should use cwd option instead of cd command (security fix)', async () => {
       vi.mocked(child_process.exec).mockImplementation((cmd: any, options: any, callback: any) => {
         // Verify that the command doesn't contain 'cd' and that cwd is set in options
-        expect(cmd).toBe('yarn test --coverage');
+        expect(cmd).toBe('yarn jest --coverage');
         expect(options).toHaveProperty('cwd');
         expect(options.cwd).toBe('/test/workspace/packages/core/test-package');
         callback(null, {
@@ -113,7 +120,7 @@ describe('Build Activities', () => {
       });
 
       expect(child_process.exec).toHaveBeenCalledWith(
-        'yarn test --coverage',
+        'yarn jest --coverage',
         { cwd: '/test/workspace/packages/core/test-package' },
         expect.any(Function)
       );

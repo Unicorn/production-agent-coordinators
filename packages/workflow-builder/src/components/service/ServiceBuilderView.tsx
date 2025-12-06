@@ -132,18 +132,44 @@ export function ServiceBuilderView({
       }));
 
     // Transform internal components
+    // Include interface components (data-in, data-out) in the internal flow
     const internalComponents = nodes.map((node: any) => ({
       id: node.id,
       type: node.type,
-      label: node.data?.label || node.data?.name || node.type,
+      label: node.data?.label || node.data?.displayName || node.data?.name || node.type,
+      isInterfaceComponent: node.type === 'data-in' || node.type === 'data-out',
+      endpointPath: node.data?.config?.endpointPath || node.data?.endpointPath,
+      httpMethod: node.data?.config?.httpMethod || node.data?.httpMethod,
     }));
+
+    // Also extract interface components from nodes to show as interfaces
+    const interfaceComponents = nodes
+      .filter((node: any) => node.type === 'data-in' || node.type === 'data-out')
+      .map((node: any) => ({
+        id: node.id,
+        name: node.data?.name || node.data?.label || node.id,
+        displayName: node.data?.displayName || node.data?.label || node.id,
+        interfaceType: node.type === 'data-in' ? 'signal' : 'query',
+        endpointPath: node.data?.config?.endpointPath || node.data?.endpointPath,
+        httpMethod: node.data?.config?.httpMethod || node.data?.httpMethod || (node.type === 'data-in' ? 'POST' : 'GET'),
+      }));
+
+    // Merge service interfaces with interface components
+    const allIncomingInterfaces = [
+      ...incomingInterfaces,
+      ...interfaceComponents.filter(ic => ic.interfaceType === 'signal'),
+    ];
+    const allOutgoingInterfaces = [
+      ...outgoingInterfaces,
+      ...interfaceComponents.filter(ic => ic.interfaceType === 'query'),
+    ];
 
     // Create service container node data
     const containerData: ServiceContainerNodeData = {
       serviceId: workflow.id,
       serviceName: workflow.display_name || workflow.name,
-      incomingInterfaces,
-      outgoingInterfaces,
+      incomingInterfaces: allIncomingInterfaces,
+      outgoingInterfaces: allOutgoingInterfaces,
       externalConnectors,
       internalComponents,
       externalConnections,

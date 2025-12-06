@@ -175,6 +175,7 @@ export const connectorsRouter = createTRPCRouter({
       }
 
       // Don't return encrypted credentials
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { credentials_encrypted, ...safeData } = data;
       return safeData;
     }),
@@ -242,6 +243,7 @@ export const connectorsRouter = createTRPCRouter({
       }
 
       // Don't return encrypted credentials
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { credentials_encrypted, ...safeData } = data;
       return safeData;
     }),
@@ -376,6 +378,161 @@ export const connectorsRouter = createTRPCRouter({
       }
 
       return data || [];
+    }),
+
+  // Get connectors by classification
+  getByClassification: protectedProcedure
+    .input(z.object({
+      projectId: z.string().uuid(),
+      classification: z.enum(['redis', 'http-log', 'syslog', 'file-log', 'tcp-log', 'udp-log']),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Verify ownership
+      const { data: project, error: projectError } = await ctx.supabase
+        .from('projects')
+        .select('id, created_by')
+        .eq('id', input.projectId)
+        .single();
+
+      if (projectError || !project) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found',
+        });
+      }
+
+      if (project.created_by !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You do not have access to this project',
+        });
+      }
+
+      // Query connectors with the specified classification
+      const { data, error } = await ctx.supabase
+        .from('connectors')
+        .select(`
+          id,
+          name,
+          display_name,
+          description,
+          connector_type,
+          is_active,
+          classifications
+        `)
+        .eq('project_id', input.projectId)
+        .eq('is_active', true)
+        .contains('classifications', [input.classification])
+        .order('name');
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return data || [];
+    }),
+
+  // Add classification to connector
+  addClassification: protectedProcedure
+    .input(z.object({
+      connectorId: z.string().uuid(),
+      classification: z.enum(['redis', 'http-log', 'syslog', 'file-log', 'tcp-log', 'udp-log']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Get and verify ownership
+      const { data: connector, error: getError } = await ctx.supabase
+        .from('connectors')
+        .select(`
+          id,
+          project:projects(id, created_by)
+        `)
+        .eq('id', input.connectorId)
+        .single();
+
+      if (getError || !connector) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Connector not found',
+        });
+      }
+
+      if (connector.project?.created_by !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You do not have access to this connector',
+        });
+      }
+
+      // Insert classification (trigger will update classifications JSONB column)
+      const { error } = await ctx.supabase
+        .from('connector_classifications')
+        .insert({
+          connector_id: input.connectorId,
+          classification: input.classification,
+        });
+
+      if (error) {
+        // If it's a unique constraint violation, that's OK (already exists)
+        if (error.code !== '23505') {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: error.message,
+          });
+        }
+      }
+
+      return { success: true };
+    }),
+
+  // Remove classification from connector
+  removeClassification: protectedProcedure
+    .input(z.object({
+      connectorId: z.string().uuid(),
+      classification: z.enum(['redis', 'http-log', 'syslog', 'file-log', 'tcp-log', 'udp-log']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Get and verify ownership
+      const { data: connector, error: getError } = await ctx.supabase
+        .from('connectors')
+        .select(`
+          id,
+          project:projects(id, created_by)
+        `)
+        .eq('id', input.connectorId)
+        .single();
+
+      if (getError || !connector) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Connector not found',
+        });
+      }
+
+      if (connector.project?.created_by !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You do not have access to this connector',
+        });
+      }
+
+      // Delete classification (trigger will update classifications JSONB column)
+      const { error } = await ctx.supabase
+        .from('connector_classifications')
+        .delete()
+        .eq('connector_id', input.connectorId)
+        .eq('classification', input.classification);
+
+      if (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error.message,
+        });
+      }
+
+      return { success: true };
     }),
 });
 

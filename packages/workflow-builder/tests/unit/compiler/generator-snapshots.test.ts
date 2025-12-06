@@ -154,7 +154,7 @@ describe('Generator Snapshots', () => {
       
       // Workflow function name should match workflow.name exactly
       expect(compiled.workflowCode).toContain('export async function TestSimpleWorkflow');
-      expect(compiled.workflowCode).toContain('(input: any): Promise<any>');
+      expect(compiled.workflowCode).toContain('(input: Record<string, unknown> | undefined): Promise<unknown>');
     });
 
     it('generates activity function exports', () => {
@@ -351,4 +351,3 @@ describe('Generator Snapshots', () => {
     });
   });
 });
-

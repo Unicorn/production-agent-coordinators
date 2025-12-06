@@ -2,7 +2,7 @@
 
 import { YStack, XStack, Text, Input, TextArea, Label, Button, ScrollView, Card, Switch, Select, Adapt, Sheet, Separator } from 'tamagui';
 import { X, Save, Check, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CronExpressionBuilder } from '../cron/CronExpressionBuilder';
 import { api } from '@/lib/trpc/client';
 import { ConnectorSelector } from '../connector/ConnectorSelector';
@@ -10,16 +10,17 @@ import { ConnectorSelector } from '../connector/ConnectorSelector';
 interface NodePropertyPanelProps {
   node: {
     id: string;
-    type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'child-workflow' | 'api-endpoint' | 'condition' | 'phase' | 'retry' | 'state-variable';
+    type: 'activity' | 'agent' | 'signal' | 'query' | 'work-queue' | 'scheduled-workflow' | 'child-workflow' | 'api-endpoint' | 'condition' | 'phase' | 'retry' | 'state-variable' | 'data-in' | 'data-out' | 'kong-logging' | 'kong-cache' | 'kong-cors' | 'graphql-gateway' | 'mcp-server';
     data: Record<string, any>;
   } | null;
   onClose: () => void;
   onSave: (nodeId: string, updates: Record<string, any>) => void;
   availableSignals?: Array<{ id: string; signal_name: string }>;
   availableQueries?: Array<{ id: string; query_name: string }>;
+  projectId?: string;
 }
 
-export function NodePropertyPanel({ node, onClose, onSave, availableSignals = [], availableQueries = [] }: NodePropertyPanelProps) {
+export function NodePropertyPanel({ node, onClose, onSave, availableSignals = [], availableQueries = [], projectId }: NodePropertyPanelProps) {
   const [properties, setProperties] = useState(node?.data || {});
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -82,9 +83,14 @@ export function NodePropertyPanel({ node, onClose, onSave, availableSignals = []
           {node.type === 'child-workflow' && <ChildWorkflowProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'api-endpoint' && <ApiEndpointProperties properties={properties} onChange={handlePropertyChange} availableSignals={availableSignals} availableQueries={availableQueries} />}
           {node.type === 'condition' && <ConditionProperties properties={properties} onChange={handlePropertyChange} />}
+          {node.type === 'kong-logging' && <KongLoggingProperties properties={properties} onChange={handlePropertyChange} node={node} />}
+          {node.type === 'kong-cache' && <KongCacheProperties properties={properties} onChange={handlePropertyChange} node={node} />}
+          {node.type === 'kong-cors' && <KongCorsProperties properties={properties} onChange={handlePropertyChange} node={node} />}
+          {node.type === 'graphql-gateway' && <GraphQLGatewayProperties properties={properties} onChange={handlePropertyChange} node={node} />}
+          {node.type === 'mcp-server' && <MCPServerProperties properties={properties} onChange={handlePropertyChange} node={node} />}
           {node.type === 'phase' && <PhaseProperties properties={properties} onChange={handlePropertyChange} />}
           {node.type === 'retry' && <RetryProperties properties={properties} onChange={handlePropertyChange} />}
-          {node.type === 'state-variable' && <StateVariableProperties properties={properties} onChange={handlePropertyChange} />}
+          {node.type === 'state-variable' && <StateVariableProperties properties={{ ...properties, projectId }} onChange={handlePropertyChange} />}
         </YStack>
       </ScrollView>
 
@@ -1088,10 +1094,20 @@ function RetryProperties({ properties, onChange }: any) {
 // State Variable Properties
 function StateVariableProperties({ properties, onChange }: any) {
   const config = properties.config || {};
+  const projectId = properties.projectId; // Passed from NodePropertyPanel
   
   const updateConfig = (key: string, value: any) => {
     onChange('config', { ...config, [key]: value });
   };
+
+  const { data: metricsData } = api.stateMonitoring.getMetrics.useQuery(
+    { variableId: properties.id, scope: config.scope || 'workflow' },
+    { enabled: !!properties.id && !!config.scope }
+  );
+  const { data: alertsData } = api.stateMonitoring.getAlerts.useQuery(
+    { variableId: properties.id, scope: config.scope || 'workflow' },
+    { enabled: !!properties.id && !!config.scope }
+  );
 
   return (
     <YStack gap="$3">
@@ -1196,17 +1212,60 @@ function StateVariableProperties({ properties, onChange }: any) {
               <Select.Item value="workflow" index={0}>
                 <Select.ItemText>Workflow</Select.ItemText>
               </Select.Item>
-              <Select.Item value="phase" index={1}>
-                <Select.ItemText>Phase</Select.ItemText>
-              </Select.Item>
-              <Select.Item value="loop" index={2}>
-                <Select.ItemText>Loop</Select.ItemText>
+              <Select.Item value="project" index={1}>
+                <Select.ItemText>Project</Select.ItemText>
               </Select.Item>
             </Select.Viewport>
             <Select.ScrollDownButton />
           </Select.Content>
         </Select>
       </YStack>
+
+      <YStack gap="$2">
+        <Label>Storage Type</Label>
+        <Select
+          value={config.storageType || 'workflow'}
+          onValueChange={(v) => updateConfig('storageType', v)}
+        >
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Adapt when="sm" platform="touch">
+            <Sheet modal dismissOnSnapToBottom>
+              <Sheet.Frame>
+                <Sheet.ScrollView>
+                  <Adapt.Contents />
+                </Sheet.ScrollView>
+              </Sheet.Frame>
+              <Sheet.Overlay />
+            </Sheet>
+          </Adapt>
+          <Select.Content zIndex={200000}>
+            <Select.ScrollUpButton />
+            <Select.Viewport>
+              <Select.Item value="workflow" index={0}>
+                <Select.ItemText>Workflow (in-memory)</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="database" index={1}>
+                <Select.ItemText>Database (PostgreSQL)</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="redis" index={2}>
+                <Select.ItemText>Redis</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select>
+      </YStack>
+
+      {(config.storageType === 'database' || config.storageType === 'redis') && projectId && (
+        <ConnectorSelector
+          projectId={projectId}
+          classification={config.storageType === 'database' ? 'database' : 'redis'}
+          value={config.connectorId}
+          onChange={(v) => updateConfig('connectorId', v)}
+        />
+      )}
 
       {config.operation === 'set' && (
         <YStack gap="$2">
@@ -1225,6 +1284,84 @@ function StateVariableProperties({ properties, onChange }: any) {
             rows={2}
           />
         </YStack>
+      )}
+
+      {/* Monitoring and Best Practices Info */}
+      <Card padding="$3" backgroundColor="$blue2" borderColor="$blue6">
+        <YStack gap="$2">
+          <Text fontSize="$3" fontWeight="600" color="$blue11">
+            💡 Best Practices
+          </Text>
+          <YStack gap="$1">
+            <Text fontSize="$2" color="$blue11">
+              • <Text fontWeight="600">Small data (&lt;100 KB):</Text> Use workflow state (in-memory)
+            </Text>
+            <Text fontSize="$2" color="$blue11">
+              • <Text fontWeight="600">Medium data (100 KB - 1 MB):</Text> Consider database storage
+            </Text>
+            <Text fontSize="$2" color="$blue11">
+              • <Text fontWeight="600">Large data (&gt;1 MB):</Text> Use database or Redis storage
+            </Text>
+            <Text fontSize="$2" color="$blue11">
+              • <Text fontWeight="600">High-frequency access:</Text> Redis provides best performance
+            </Text>
+            <Text fontSize="$2" color="$blue11">
+              • <Text fontWeight="600">Project-level variables:</Text> Shared across all services in the project
+            </Text>
+          </YStack>
+        </YStack>
+      </Card>
+
+      {/* Display Metrics and Alerts */}
+      {metricsData && (
+        <Card padding="$3" backgroundColor="$gray2" borderColor="$gray6">
+          <YStack gap="$2">
+            <Text fontSize="$3" fontWeight="600" color="$gray11">
+              📊 Metrics
+            </Text>
+            <Text fontSize="$2" color="$gray11">
+              Size: <Text fontWeight="600">{(metricsData.sizeBytes / 1024).toFixed(2)} KB</Text>
+            </Text>
+            <Text fontSize="$2" color="$gray11">
+              Accesses: <Text fontWeight="600">{metricsData.accessCount}</Text>
+            </Text>
+            {metricsData.lastAccessed && (
+              <Text fontSize="$2" color="$gray11">
+                Last Accessed: <Text fontWeight="600">{metricsData.lastAccessed.toLocaleString()}</Text>
+              </Text>
+            )}
+            {metricsData.recommendations.length > 0 && (
+              <YStack gap="$1">
+                <Text fontSize="$2" fontWeight="600" color="$gray11">Recommendations:</Text>
+                {metricsData.recommendations.map((rec, i) => (
+                  <Text key={i} fontSize="$2" color="$gray11">• {rec}</Text>
+                ))}
+              </YStack>
+            )}
+          </YStack>
+        </Card>
+      )}
+
+      {alertsData && alertsData.length > 0 && (
+        <Card padding="$3" backgroundColor="$red2" borderColor="$red6">
+          <YStack gap="$2">
+            <Text fontSize="$3" fontWeight="600" color="$red11">
+              🚨 Alerts
+            </Text>
+            {alertsData.map((alert, i) => (
+              <YStack key={i} gap="$1">
+                <Text fontSize="$2" color="$red11">
+                  • <Text fontWeight="600">{alert.severity.toUpperCase()}:</Text> {alert.message}
+                </Text>
+                {alert.recommendation && (
+                  <Text fontSize="$2" color="$red11" marginLeft="$3">
+                    Recommendation: {alert.recommendation}
+                  </Text>
+                )}
+              </YStack>
+            ))}
+          </YStack>
+        </Card>
       )}
     </YStack>
   );
@@ -1562,6 +1699,964 @@ export async function process(input: any): Promise<any> {
           numberOfLines={4}
         />
       </YStack>
+    </YStack>
+  );
+}
+
+
+// Kong Cache Properties
+function KongCacheProperties({ properties, onChange, node }: any) {
+  const config = properties.config || {};
+  const projectId = properties.projectId || node?.data?.projectId;
+  const componentId = node?.id;
+  const connectorId = config.connectorId;
+  const cacheKey = config.cacheKey || '';
+  const isSaved = config.isSaved || false;
+  const ttlSeconds = config.ttlSeconds || 3600;
+  const cacheKeyStrategy = config.cacheKeyStrategy || 'path';
+  const contentTypes = config.contentTypes || ['application/json'];
+  const responseCodes = config.responseCodes || [200, 201, 202];
+
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  // Fetch existing cache key configuration
+  const { data: cacheKeyConfig } = api.kongCache.get.useQuery(
+    { componentId: componentId || '', projectId: projectId || '' },
+    { enabled: !!componentId && !!projectId && isSaved }
+  );
+
+  // Generate new cache key mutation
+  const generateKeyMutation = api.kongCache.generateKey.useMutation();
+
+  // Upsert cache key mutation
+  const upsertCacheKeyMutation = api.kongCache.upsert.useMutation();
+
+  // Get connector name if connectorId is set
+  const { data: connectorData } = api.connectors.get.useQuery(
+    { id: connectorId || '' },
+    { enabled: !!connectorId }
+  );
+
+  // Auto-generate cache key on mount if not set
+  useEffect(() => {
+    if (!cacheKey && projectId && !isSaved) {
+      generateKeyMutation.mutate(
+        { projectId },
+        {
+          onSuccess: (data) => {
+            updateConfig('cacheKey', data.cacheKey);
+          },
+        }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync with database if component is saved
+  useEffect(() => {
+    if (cacheKeyConfig && isSaved) {
+      updateConfig('cacheKey', cacheKeyConfig.cache_key);
+      updateConfig('ttlSeconds', cacheKeyConfig.ttl_seconds);
+      updateConfig('cacheKeyStrategy', cacheKeyConfig.cache_key_strategy);
+      updateConfig('contentTypes', cacheKeyConfig.content_types);
+      updateConfig('responseCodes', cacheKeyConfig.response_codes);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKeyConfig, isSaved]);
+
+  const handleSave = () => {
+    if (!connectorId || !cacheKey || !projectId || !componentId) {
+      return;
+    }
+
+    // Validate cache key is UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(cacheKey)) {
+      alert('Cache key must be a valid UUID format');
+      return;
+    }
+
+    // Save to database
+    upsertCacheKeyMutation.mutate(
+      {
+        componentId,
+        projectId,
+        connectorId,
+        cacheKey,
+        ttlSeconds,
+        cacheKeyStrategy,
+        contentTypes,
+        responseCodes,
+        isSaved: true,
+      },
+      {
+        onSuccess: () => {
+          updateConfig('isSaved', true);
+        },
+      }
+    );
+  };
+
+  return (
+    <YStack gap="$3">
+      <YStack gap="$1">
+        <Text fontSize="$4" fontWeight="600">Kong Cache Configuration</Text>
+        <Text fontSize="$2" color="$gray11">
+          Redis-backed proxy caching for API endpoints
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Redis Connector *</Label>
+        {projectId ? (
+          <>
+            <ConnectorSelector
+              projectId={projectId}
+              classification="redis"
+              value={connectorId}
+              onChange={(id) => {
+                updateConfig('connectorId', id);
+                if (id && connectorData) {
+                  onChange('connectorName', connectorData.display_name || connectorData.name);
+                }
+              }}
+            />
+            {!connectorId && (
+              <Text fontSize="$1" color="$red10">
+                A Redis connector is required
+              </Text>
+            )}
+            <Text fontSize="$1" color="$gray11">
+              Select a Redis connector (Upstash, Redis Cloud, etc.)
+            </Text>
+          </>
+        ) : (
+          <Text fontSize="$2" color="$red10">
+            Project ID required to select connector
+          </Text>
+        )}
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <Label>Cache Key *</Label>
+        {isSaved ? (
+          <>
+            <Input
+              value={cacheKey}
+              disabled
+              fontFamily="monospace"
+              fontSize="$2"
+            />
+            <Text fontSize="$1" color="$gray11">
+              Cache key is immutable after saving. Remove and recreate the component to change it.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Input
+              value={cacheKey}
+              onChangeText={(text) => {
+                updateConfig('cacheKey', text);
+              }}
+              placeholder="Auto-generated UUID"
+              fontFamily="monospace"
+              fontSize="$2"
+            />
+            <XStack gap="$2">
+              <Button
+                size="$2"
+                onPress={() => {
+                  if (projectId) {
+                    generateKeyMutation.mutate(
+                      { projectId },
+                      {
+                        onSuccess: (data) => {
+                          updateConfig('cacheKey', data.cacheKey);
+                        },
+                      }
+                    );
+                  }
+                }}
+              >
+                Generate New
+              </Button>
+            </XStack>
+            <Text fontSize="$1" color="$gray11">
+              Cache key will be auto-generated. You can edit it until you save the component.
+            </Text>
+          </>
+        )}
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <Label>TTL (Time To Live) - Seconds</Label>
+        <Input
+          value={ttlSeconds.toString()}
+          onChangeText={(text) => {
+            const num = parseInt(text, 10);
+            if (!isNaN(num) && num > 0) {
+              updateConfig('ttlSeconds', num);
+            }
+          }}
+          keyboardType="numeric"
+        />
+        <Text fontSize="$1" color="$gray11">
+          How long cached responses should be stored (default: 3600 seconds = 1 hour)
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Cache Key Strategy</Label>
+        <Select
+          value={cacheKeyStrategy}
+          onValueChange={(value) => {
+            updateConfig('cacheKeyStrategy', value);
+          }}
+        >
+          <Select.Trigger>
+            <Select.Value placeholder="Select strategy" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Viewport>
+              <Select.Item value="path" index={0}>
+                <Select.ItemText>Path</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="query" index={1}>
+                <Select.ItemText>Query String</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="header" index={2}>
+                <Select.ItemText>Header</Select.ItemText>
+              </Select.Item>
+              <Select.Item value="custom" index={3}>
+                <Select.ItemText>Custom</Select.ItemText>
+              </Select.Item>
+            </Select.Viewport>
+          </Select.Content>
+        </Select>
+        <Text fontSize="$1" color="$gray11">
+          How to generate the cache key from the request
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Content Types to Cache</Label>
+        <TextArea
+          value={contentTypes.join(', ')}
+          onChangeText={(text) => {
+            const types = text.split(',').map(t => t.trim()).filter(t => t);
+            updateConfig('contentTypes', types);
+          }}
+          placeholder="application/json, text/html"
+          minHeight={60}
+        />
+        <Text fontSize="$1" color="$gray11">
+          Comma-separated list of content types to cache (default: application/json)
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Response Codes to Cache</Label>
+        <TextArea
+          value={responseCodes.join(', ')}
+          onChangeText={(text) => {
+            const codes = text.split(',').map(c => parseInt(c.trim(), 10)).filter(c => !isNaN(c));
+            updateConfig('responseCodes', codes);
+          }}
+          placeholder="200, 201, 202"
+          minHeight={60}
+        />
+        <Text fontSize="$1" color="$gray11">
+          Comma-separated list of HTTP response codes to cache (default: 200, 201, 202)
+        </Text>
+      </YStack>
+
+      {!isSaved && (
+        <YStack gap="$2">
+          <Button
+            onPress={handleSave}
+            disabled={!connectorId || !cacheKey}
+            backgroundColor="$blue9"
+            color="white"
+          >
+            Save Cache Configuration
+          </Button>
+          <Text fontSize="$1" color="$gray11">
+            Once saved, the cache key becomes immutable
+          </Text>
+        </YStack>
+      )}
+
+      {isSaved && (
+        <Card padding="$2" backgroundColor="$green2" borderColor="$green6">
+          <Text fontSize="$2" color="$green11" fontWeight="600">
+            ✓ Cache configuration saved. Key is now immutable.
+          </Text>
+        </Card>
+      )}
+    </YStack>
+  );
+}
+
+// Kong CORS Properties
+function KongCorsProperties({ properties, onChange, node }: any) {
+  const config = properties.config || {};
+  const allowedOrigins = config.allowedOrigins || [];
+  const allowedMethods = config.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
+  const allowedHeaders = config.allowedHeaders || ['Content-Type', 'Authorization'];
+  const exposedHeaders = config.exposedHeaders || [];
+  const credentials = config.credentials || false;
+  const maxAge = config.maxAge || 3600;
+  const preflightContinue = config.preflightContinue || false;
+
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  const handleOriginsChange = (text: string) => {
+    const origins = text.split(',').map(o => o.trim()).filter(o => o);
+    updateConfig('allowedOrigins', origins);
+  };
+
+  const handleMethodsChange = (text: string) => {
+    const methods = text.split(',').map(m => m.trim().toUpperCase()).filter(m => m);
+    updateConfig('allowedMethods', methods);
+  };
+
+  const handleHeadersChange = (text: string) => {
+    const headers = text.split(',').map(h => h.trim()).filter(h => h);
+    updateConfig('allowedHeaders', headers);
+  };
+
+  const handleExposedHeadersChange = (text: string) => {
+    const headers = text.split(',').map(h => h.trim()).filter(h => h);
+    updateConfig('exposedHeaders', headers);
+  };
+
+  return (
+    <YStack gap="$3">
+      <YStack gap="$1">
+        <Text fontSize="$4" fontWeight="600">Kong CORS Configuration</Text>
+        <Text fontSize="$2" color="$gray11">
+          Configure Cross-Origin Resource Sharing (CORS) headers for API endpoints
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Allowed Origins *</Label>
+        <TextArea
+          value={allowedOrigins.join(', ')}
+          onChangeText={handleOriginsChange}
+          placeholder="https://example.com, https://app.example.com"
+          minHeight={60}
+        />
+        <Text fontSize="$1" color="$gray11">
+          Comma-separated list of allowed origins. Use * for all origins (not recommended for production).
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Allowed Methods *</Label>
+        <TextArea
+          value={allowedMethods.join(', ')}
+          onChangeText={handleMethodsChange}
+          placeholder="GET, POST, PUT, DELETE, OPTIONS"
+          minHeight={60}
+        />
+        <Text fontSize="$1" color="$gray11">
+          Comma-separated list of allowed HTTP methods (default: GET, POST, PUT, DELETE, OPTIONS).
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Allowed Headers</Label>
+        <TextArea
+          value={allowedHeaders.join(', ')}
+          onChangeText={handleHeadersChange}
+          placeholder="Content-Type, Authorization, X-Requested-With"
+          minHeight={60}
+        />
+        <Text fontSize="$1" color="$gray11">
+          Comma-separated list of allowed request headers (default: Content-Type, Authorization).
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Exposed Headers</Label>
+        <TextArea
+          value={exposedHeaders.join(', ')}
+          onChangeText={handleExposedHeadersChange}
+          placeholder="X-Total-Count, X-Page-Number"
+          minHeight={60}
+        />
+        <Text fontSize="$1" color="$gray11">
+          Comma-separated list of headers that browsers are allowed to access.
+        </Text>
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <XStack gap="$3" alignItems="center" justifyContent="space-between">
+          <YStack flex={1}>
+            <Text fontSize="$3" fontWeight="600">Allow Credentials</Text>
+            <Text fontSize="$2" color="$gray11">
+              Allow cookies and authentication headers to be sent with cross-origin requests
+            </Text>
+          </YStack>
+          <Switch
+            checked={credentials}
+            onCheckedChange={(checked) => {
+              updateConfig('credentials', checked);
+            }}
+            size="$3"
+          />
+        </XStack>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Max-Age (seconds)</Label>
+        <Input
+          value={maxAge.toString()}
+          onChangeText={(text) => {
+            const num = parseInt(text, 10);
+            if (!isNaN(num) && num >= 0) {
+              updateConfig('maxAge', num);
+            }
+          }}
+          keyboardType="numeric"
+        />
+        <Text fontSize="$1" color="$gray11">
+          How long the browser should cache preflight OPTIONS requests (default: 3600 seconds = 1 hour).
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <XStack gap="$3" alignItems="center" justifyContent="space-between">
+          <YStack flex={1}>
+            <Text fontSize="$3" fontWeight="600">Preflight Continue</Text>
+            <Text fontSize="$2" color="$gray11">
+              Continue processing the request even if preflight fails (advanced)
+            </Text>
+          </YStack>
+          <Switch
+            checked={preflightContinue}
+            onCheckedChange={(checked) => {
+              updateConfig('preflightContinue', checked);
+            }}
+            size="$3"
+          />
+        </XStack>
+      </YStack>
+
+      <Card padding="$2" backgroundColor="$blue2" borderColor="$blue6">
+        <Text fontSize="$2" color="$blue11">
+          <Text fontWeight="600">Note:</Text> This CORS configuration will be applied to all data-in/data-out endpoints in the workflow when connected.
+        </Text>
+      </Card>
+    </YStack>
+  );
+}
+
+// GraphQL Gateway Properties
+function GraphQLGatewayProperties({ properties, onChange, node }: any) {
+  const config = properties.config || {};
+  const endpointPath = config.endpointPath || '/graphql';
+  const schema = config.schema || '';
+  const queries = config.queries || [];
+  const mutations = config.mutations || [];
+
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  const handleSchemaChange = (text: string) => {
+    updateConfig('schema', text);
+    // TODO: Parse schema and extract queries/mutations
+    // For now, we'll let users manually configure them
+  };
+
+  const addQuery = () => {
+    const newQuery = {
+      name: '',
+      workflowId: '',
+      inputSchema: {},
+      outputSchema: {},
+    };
+    updateConfig('queries', [...queries, newQuery]);
+  };
+
+  const updateQuery = (index: number, field: string, value: any) => {
+    const updatedQueries = [...queries];
+    updatedQueries[index] = { ...updatedQueries[index], [field]: value };
+    updateConfig('queries', updatedQueries);
+  };
+
+  const removeQuery = (index: number) => {
+    updateConfig('queries', queries.filter((_: any, i: number) => i !== index));
+  };
+
+  const addMutation = () => {
+    const newMutation = {
+      name: '',
+      workflowId: '',
+      inputSchema: {},
+      outputSchema: {},
+    };
+    updateConfig('mutations', [...mutations, newMutation]);
+  };
+
+  const updateMutation = (index: number, field: string, value: any) => {
+    const updatedMutations = [...mutations];
+    updatedMutations[index] = { ...updatedMutations[index], [field]: value };
+    updateConfig('mutations', updatedMutations);
+  };
+
+  const removeMutation = (index: number) => {
+    updateConfig('mutations', mutations.filter((_: any, i: number) => i !== index));
+  };
+
+  return (
+    <YStack gap="$3">
+      <YStack gap="$1">
+        <Text fontSize="$4" fontWeight="600">GraphQL Gateway Configuration</Text>
+        <Text fontSize="$2" color="$gray11">
+          Configure GraphQL endpoint with schema definition and resolver mapping
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Endpoint Path *</Label>
+        <Input
+          value={endpointPath}
+          onChangeText={(text) => {
+            updateConfig('endpointPath', text);
+          }}
+          placeholder="/graphql"
+          fontFamily="monospace"
+        />
+        <Text fontSize="$1" color="$gray11">
+          The path where the GraphQL endpoint will be available (default: /graphql)
+        </Text>
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <Label>GraphQL Schema (SDL) *</Label>
+        <TextArea
+          value={schema}
+          onChangeText={handleSchemaChange}
+          placeholder={`type Query {
+  hello: String
+  user(id: ID!): User
+}
+
+type Mutation {
+  createUser(input: UserInput!): User
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
+input UserInput {
+  name: String!
+  email: String!
+}`}
+          minHeight={200}
+          fontFamily="monospace"
+          fontSize="$2"
+        />
+        <Text fontSize="$1" color="$gray11">
+          Define your GraphQL schema using Schema Definition Language (SDL). Include type definitions, queries, and mutations.
+        </Text>
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <XStack gap="$2" alignItems="center" justifyContent="space-between">
+          <Text fontSize="$3" fontWeight="600">Queries</Text>
+          <Button size="$2" onPress={addQuery}>
+            Add Query
+          </Button>
+        </XStack>
+        <Text fontSize="$2" color="$gray11">
+          Map GraphQL queries to workflows
+        </Text>
+
+        {queries.length === 0 ? (
+          <Card padding="$3" backgroundColor="$gray2">
+            <Text fontSize="$2" color="$gray11" textAlign="center">
+              No queries defined. Add a query to map GraphQL queries to workflows.
+            </Text>
+          </Card>
+        ) : (
+          <YStack gap="$2">
+            {queries.map((query: any, index: number) => (
+              <Card key={index} padding="$3" backgroundColor="$gray1" borderColor="$gray4">
+                <YStack gap="$2">
+                  <XStack gap="$2" alignItems="center" justifyContent="space-between">
+                    <Text fontSize="$3" fontWeight="600">Query {index + 1}</Text>
+                    <Button size="$2" onPress={() => removeQuery(index)}>
+                      Remove
+                    </Button>
+                  </XStack>
+                  <YStack gap="$2">
+                    <Label>Query Name *</Label>
+                    <Input
+                      value={query.name || ''}
+                      onChangeText={(text) => updateQuery(index, 'name', text)}
+                      placeholder="user"
+                      fontFamily="monospace"
+                    />
+                    <Label>Workflow ID *</Label>
+                    <Input
+                      value={query.workflowId || ''}
+                      onChangeText={(text) => updateQuery(index, 'workflowId', text)}
+                      placeholder="workflow-uuid"
+                      fontFamily="monospace"
+                    />
+                  </YStack>
+                </YStack>
+              </Card>
+            ))}
+          </YStack>
+        )}
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <XStack gap="$2" alignItems="center" justifyContent="space-between">
+          <Text fontSize="$3" fontWeight="600">Mutations</Text>
+          <Button size="$2" onPress={addMutation}>
+            Add Mutation
+          </Button>
+        </XStack>
+        <Text fontSize="$2" color="$gray11">
+          Map GraphQL mutations to workflows
+        </Text>
+
+        {mutations.length === 0 ? (
+          <Card padding="$3" backgroundColor="$gray2">
+            <Text fontSize="$2" color="$gray11" textAlign="center">
+              No mutations defined. Add a mutation to map GraphQL mutations to workflows.
+            </Text>
+          </Card>
+        ) : (
+          <YStack gap="$2">
+            {mutations.map((mutation: any, index: number) => (
+              <Card key={index} padding="$3" backgroundColor="$gray1" borderColor="$gray4">
+                <YStack gap="$2">
+                  <XStack gap="$2" alignItems="center" justifyContent="space-between">
+                    <Text fontSize="$3" fontWeight="600">Mutation {index + 1}</Text>
+                    <Button size="$2" onPress={() => removeMutation(index)}>
+                      Remove
+                    </Button>
+                  </XStack>
+                  <YStack gap="$2">
+                    <Label>Mutation Name *</Label>
+                    <Input
+                      value={mutation.name || ''}
+                      onChangeText={(text) => updateMutation(index, 'name', text)}
+                      placeholder="createUser"
+                      fontFamily="monospace"
+                    />
+                    <Label>Workflow ID *</Label>
+                    <Input
+                      value={mutation.workflowId || ''}
+                      onChangeText={(text) => updateMutation(index, 'workflowId', text)}
+                      placeholder="workflow-uuid"
+                      fontFamily="monospace"
+                    />
+                  </YStack>
+                </YStack>
+              </Card>
+            ))}
+          </YStack>
+        )}
+      </YStack>
+
+      <Card padding="$2" backgroundColor="$blue2" borderColor="$blue6">
+        <Text fontSize="$2" color="$blue11">
+          <Text fontWeight="600">Note:</Text> The GraphQL schema will be validated and used to generate the GraphQL endpoint. Queries and mutations must be mapped to workflows.
+        </Text>
+      </Card>
+    </YStack>
+  );
+}
+
+// MCP Server Properties
+function MCPServerProperties({ properties, onChange, node }: any) {
+  const config = properties.config || {};
+  const serverName = config.serverName || '';
+  const serverVersion = config.serverVersion || '1.0.0';
+  const endpointPath = config.endpointPath || '/mcp';
+  const resources = config.resources || [];
+  const tools = config.tools || [];
+
+  const updateConfig = (key: string, value: any) => {
+    onChange('config', { ...config, [key]: value });
+  };
+
+  const addResource = () => {
+    const newResource = {
+      uri: '',
+      name: '',
+      description: '',
+      mimeType: 'application/json',
+      workflowId: '',
+    };
+    updateConfig('resources', [...resources, newResource]);
+  };
+
+  const updateResource = (index: number, field: string, value: any) => {
+    const updatedResources = [...resources];
+    updatedResources[index] = { ...updatedResources[index], [field]: value };
+    updateConfig('resources', updatedResources);
+  };
+
+  const removeResource = (index: number) => {
+    updateConfig('resources', resources.filter((_: any, i: number) => i !== index));
+  };
+
+  const addTool = () => {
+    const newTool = {
+      name: '',
+      description: '',
+      inputSchema: {},
+      workflowId: '',
+    };
+    updateConfig('tools', [...tools, newTool]);
+  };
+
+  const updateTool = (index: number, field: string, value: any) => {
+    const updatedTools = [...tools];
+    updatedTools[index] = { ...updatedTools[index], [field]: value };
+    updateConfig('tools', updatedTools);
+  };
+
+  const removeTool = (index: number) => {
+    updateConfig('tools', tools.filter((_: any, i: number) => i !== index));
+  };
+
+  return (
+    <YStack gap="$3">
+      <YStack gap="$1">
+        <Text fontSize="$4" fontWeight="600">MCP Server Configuration</Text>
+        <Text fontSize="$2" color="$gray11">
+          Configure MCP (Model Context Protocol) server to expose workflows as resources and tools
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Server Name *</Label>
+        <Input
+          value={serverName}
+          onChangeText={(text) => {
+            updateConfig('serverName', text);
+          }}
+          placeholder="my-workflow-server"
+          fontFamily="monospace"
+        />
+        <Text fontSize="$1" color="$gray11">
+          Unique identifier for this MCP server instance
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Server Version</Label>
+        <Input
+          value={serverVersion}
+          onChangeText={(text) => {
+            updateConfig('serverVersion', text);
+          }}
+          placeholder="1.0.0"
+          fontFamily="monospace"
+        />
+        <Text fontSize="$1" color="$gray11">
+          Version of the MCP server (default: 1.0.0)
+        </Text>
+      </YStack>
+
+      <YStack gap="$2">
+        <Label>Endpoint Path *</Label>
+        <Input
+          value={endpointPath}
+          onChangeText={(text) => {
+            updateConfig('endpointPath', text);
+          }}
+          placeholder="/mcp"
+          fontFamily="monospace"
+        />
+        <Text fontSize="$1" color="$gray11">
+          The path where the MCP server endpoint will be available (default: /mcp)
+        </Text>
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <XStack gap="$2" alignItems="center" justifyContent="space-between">
+          <Text fontSize="$3" fontWeight="600">Resources</Text>
+          <Button size="$2" onPress={addResource}>
+            Add Resource
+          </Button>
+        </XStack>
+        <Text fontSize="$2" color="$gray11">
+          MCP resources expose data that can be read by clients
+        </Text>
+
+        {resources.length === 0 ? (
+          <Card padding="$3" backgroundColor="$gray2">
+            <Text fontSize="$2" color="$gray11" textAlign="center">
+              No resources defined. Add a resource to expose workflow data.
+            </Text>
+          </Card>
+        ) : (
+          <YStack gap="$2">
+            {resources.map((resource: any, index: number) => (
+              <Card key={index} padding="$3" backgroundColor="$gray1" borderColor="$gray4">
+                <YStack gap="$2">
+                  <XStack gap="$2" alignItems="center" justifyContent="space-between">
+                    <Text fontSize="$3" fontWeight="600">Resource {index + 1}</Text>
+                    <Button size="$2" onPress={() => removeResource(index)}>
+                      Remove
+                    </Button>
+                  </XStack>
+                  <YStack gap="$2">
+                    <Label>URI *</Label>
+                    <Input
+                      value={resource.uri || ''}
+                      onChangeText={(text) => updateResource(index, 'uri', text)}
+                      placeholder="workflow://my-workflow/data"
+                      fontFamily="monospace"
+                    />
+                    <Label>Name *</Label>
+                    <Input
+                      value={resource.name || ''}
+                      onChangeText={(text) => updateResource(index, 'name', text)}
+                      placeholder="Workflow Data"
+                    />
+                    <Label>Description</Label>
+                    <TextArea
+                      value={resource.description || ''}
+                      onChangeText={(text) => updateResource(index, 'description', text)}
+                      placeholder="Description of this resource"
+                      minHeight={60}
+                    />
+                    <Label>MIME Type</Label>
+                    <Input
+                      value={resource.mimeType || 'application/json'}
+                      onChangeText={(text) => updateResource(index, 'mimeType', text)}
+                      placeholder="application/json"
+                      fontFamily="monospace"
+                    />
+                    <Label>Workflow ID *</Label>
+                    <Input
+                      value={resource.workflowId || ''}
+                      onChangeText={(text) => updateResource(index, 'workflowId', text)}
+                      placeholder="workflow-uuid"
+                      fontFamily="monospace"
+                    />
+                  </YStack>
+                </YStack>
+              </Card>
+            ))}
+          </YStack>
+        )}
+      </YStack>
+
+      <Separator />
+
+      <YStack gap="$2">
+        <XStack gap="$2" alignItems="center" justifyContent="space-between">
+          <Text fontSize="$3" fontWeight="600">Tools</Text>
+          <Button size="$2" onPress={addTool}>
+            Add Tool
+          </Button>
+        </XStack>
+        <Text fontSize="$2" color="$gray11">
+          MCP tools expose executable functions that can be called by clients
+        </Text>
+
+        {tools.length === 0 ? (
+          <Card padding="$3" backgroundColor="$gray2">
+            <Text fontSize="$2" color="$gray11" textAlign="center">
+              No tools defined. Add a tool to expose workflow functions.
+            </Text>
+          </Card>
+        ) : (
+          <YStack gap="$2">
+            {tools.map((tool: any, index: number) => (
+              <Card key={index} padding="$3" backgroundColor="$gray1" borderColor="$gray4">
+                <YStack gap="$2">
+                  <XStack gap="$2" alignItems="center" justifyContent="space-between">
+                    <Text fontSize="$3" fontWeight="600">Tool {index + 1}</Text>
+                    <Button size="$2" onPress={() => removeTool(index)}>
+                      Remove
+                    </Button>
+                  </XStack>
+                  <YStack gap="$2">
+                    <Label>Name *</Label>
+                    <Input
+                      value={tool.name || ''}
+                      onChangeText={(text) => updateTool(index, 'name', text)}
+                      placeholder="execute_workflow"
+                      fontFamily="monospace"
+                    />
+                    <Label>Description *</Label>
+                    <TextArea
+                      value={tool.description || ''}
+                      onChangeText={(text) => updateTool(index, 'description', text)}
+                      placeholder="Description of what this tool does"
+                      minHeight={60}
+                    />
+                    <Label>Input Schema (JSON)</Label>
+                    <TextArea
+                      value={JSON.stringify(tool.inputSchema || {}, null, 2)}
+                      onChangeText={(text) => {
+                        try {
+                          const parsed = JSON.parse(text);
+                          updateTool(index, 'inputSchema', parsed);
+                        } catch (e) {
+                          // Invalid JSON, keep as is for now
+                        }
+                      }}
+                      placeholder='{"type": "object", "properties": {...}}'
+                      minHeight={100}
+                      fontFamily="monospace"
+                      fontSize="$2"
+                    />
+                    <Label>Workflow ID *</Label>
+                    <Input
+                      value={tool.workflowId || ''}
+                      onChangeText={(text) => updateTool(index, 'workflowId', text)}
+                      placeholder="workflow-uuid"
+                      fontFamily="monospace"
+                    />
+                  </YStack>
+                </YStack>
+              </Card>
+            ))}
+          </YStack>
+        )}
+      </YStack>
+
+      <Card padding="$2" backgroundColor="$blue2" borderColor="$blue6">
+        <Text fontSize="$2" color="$blue11">
+          <Text fontWeight="600">Note:</Text> MCP servers expose workflows as resources (readable data) and tools (executable functions) that can be used by AI assistants and other MCP clients.
+        </Text>
+      </Card>
     </YStack>
   );
 }
