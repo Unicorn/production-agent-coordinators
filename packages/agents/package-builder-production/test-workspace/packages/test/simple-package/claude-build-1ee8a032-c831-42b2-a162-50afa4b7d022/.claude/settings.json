@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "afterToolCall": {
+      "command": "node scripts/log-tool-call.js",
+      "timeout": 5000,
+      "description": "Log tool calls for audit trail"
+    },
+    "afterResponse": {
+      "command": "node scripts/log-response.js",
+      "timeout": 5000,
+      "description": "Log responses for optimization analysis"
+    }
+  },
+  "defaultModel": "sonnet",
+  "defaultPermissionMode": "acceptEdits",
+  "allowedTools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
+}
+

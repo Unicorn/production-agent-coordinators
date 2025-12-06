@@ -14,13 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Direct connection (port 5432) - IPv4 enabled
-// Try both hostname formats
-const connectionStrings = [
-  'postgresql://postgres:65TzRzrtEJ2DNrdG@db.jeaudyvxapooyfddfptr.supabase.co:5432/postgres',
-  'postgresql://postgres:65TzRzrtEJ2DNrdG@aws-0-us-west-1.pooler.supabase.com:5432/postgres',
-];
-
-let connectionString = connectionStrings[0];
+// Format: postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
+const connectionString = 'postgresql://postgres.jeaudyvxapooyfddfptr:65TzRzrtEJ2DNrdG@aws-0-us-west-2.pooler.supabase.com:5432/postgres';
 
 async function runMigration(client: Client, filename: string, sql: string): Promise<boolean> {
   console.log(`\n📄 ${filename}`);
@@ -68,33 +63,18 @@ async function main() {
 
   console.log(`📋 Found ${allFiles.length} migration files\n`);
 
-  // Try connecting with different hostname formats
-  let client: Client | null = null;
-  let connected = false;
+  const client = new Client({
+    connectionString,
+    ssl: { 
+      rejectUnauthorized: false,
+    },
+  });
 
-  for (const connStr of connectionStrings) {
-    console.log(`🔌 Trying connection: ${connStr.substring(0, 60)}...`);
-    client = new Client({
-      connectionString: connStr,
-      ssl: { rejectUnauthorized: false },
-    });
-
-    try {
-      await client.connect();
-      await client.query('SELECT 1');
-      console.log('✅ Connected to database\n');
-      connectionString = connStr;
-      connected = true;
-      break;
-    } catch (error: any) {
-      console.log(`   ❌ Failed: ${error.message}\n`);
-      await client.end().catch(() => {});
-      client = null;
-    }
-  }
-
-  if (!connected || !client) {
-    console.error('❌ All connection attempts failed');
+  try {
+    await client.connect();
+    console.log('✅ Connected to database\n');
+  } catch (error: any) {
+    console.error('❌ Failed to connect:', error.message);
     console.error('\n💡 Please verify:');
     console.error('   1. IPv4 connections are enabled in Supabase Dashboard');
     console.error('   2. Connection string is correct');

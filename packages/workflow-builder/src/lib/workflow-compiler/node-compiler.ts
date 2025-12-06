@@ -336,6 +336,101 @@ ${indentStr}// Signal logic would be implemented here`;
       return `${indentStr}${comment}
 ${indentStr}// API endpoint registered externally`;
     
+    case 'kong-logging': {
+      const componentName = node.data.label || node.data.componentName || 'Kong Logging';
+      const connectorName = config.connectorName || config.connectorId || 'Not configured';
+      const enabledEndpoints = Array.isArray(config.enabledEndpoints) 
+        ? config.enabledEndpoints.length 
+        : 0;
+      resultVars.set(node.id, resultVar);
+      return `${indentStr}${comment}
+${indentStr}// Kong Logging Configuration: ${componentName}
+${indentStr}// Project-level logging component
+${indentStr}// Connector: ${connectorName}
+${indentStr}// Enabled endpoints: ${enabledEndpoints}
+${indentStr}// Logging plugin will be configured on Kong routes during deployment
+${indentStr}const ${resultVar} = { type: 'kong-logging-config', connector: '${connectorName}' };`;
+    }
+    
+    case 'kong-cache': {
+      const componentName = node.data.label || node.data.componentName || 'Kong Cache';
+      const cacheKey = config.cacheKey || 'not-configured';
+      const connectorName = config.connectorName || config.connectorId || 'Not configured';
+      const ttl = config.ttlSeconds || config.ttl || 3600;
+      const isSaved = config.isSaved === true;
+      resultVars.set(node.id, resultVar);
+      let cacheCode = `${indentStr}${comment}
+${indentStr}// Kong Cache Configuration: ${componentName}
+${indentStr}// Cache Key: ${cacheKey}${isSaved ? ' (immutable)' : ' (editable until save)'}
+${indentStr}// Redis Connector: ${connectorName}
+${indentStr}// TTL: ${ttl} seconds
+${indentStr}// Cache plugin will be configured on Kong routes during deployment`;
+      if (config.markedForDeletion === true) {
+        cacheCode += `\n${indentStr}// Cache key marked for deletion - will be removed from Redis on next deploy`;
+      }
+      cacheCode += `\n${indentStr}const ${resultVar} = { type: 'kong-cache-config', cacheKey: '${cacheKey}', ttl: ${ttl} };`;
+      return cacheCode;
+    }
+    
+    case 'kong-cors': {
+      const componentName = node.data.label || node.data.componentName || 'Kong CORS';
+      const allowedOrigins = Array.isArray(config.allowedOrigins) 
+        ? config.allowedOrigins 
+        : config.allowedOrigins 
+          ? [config.allowedOrigins] 
+          : ['*'];
+      const allowedMethods = Array.isArray(config.allowedMethods) 
+        ? config.allowedMethods 
+        : config.allowedMethods 
+          ? [config.allowedMethods] 
+          : ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+      const allowCredentials = config.allowCredentials === true;
+      const maxAge = config.maxAge || 3600;
+      resultVars.set(node.id, resultVar);
+      return `${indentStr}${comment}
+${indentStr}// Kong CORS Configuration: ${componentName}
+${indentStr}// Allowed Origins: ${allowedOrigins.join(', ')}
+${indentStr}// Allowed Methods: ${allowedMethods.join(', ')}
+${indentStr}// Allow Credentials: ${allowCredentials}
+${indentStr}// Max Age: ${maxAge} seconds
+${indentStr}// CORS plugin will be configured on Kong routes during deployment
+${indentStr}const ${resultVar} = { type: 'kong-cors-config', origins: ${JSON.stringify(allowedOrigins)} };`;
+    }
+    
+    case 'graphql-gateway': {
+      const componentName = node.data.label || node.data.componentName || 'GraphQL Gateway';
+      const endpointPath = config.endpointPath || '/graphql';
+      const queries = Array.isArray(config.queries) ? config.queries : [];
+      const mutations = Array.isArray(config.mutations) ? config.mutations : [];
+      resultVars.set(node.id, resultVar);
+      return `${indentStr}${comment}
+${indentStr}// GraphQL Gateway: ${componentName}
+${indentStr}// Endpoint Path: ${endpointPath}
+${indentStr}// Queries: ${queries.length}, Mutations: ${mutations.length}
+${indentStr}// GraphQL endpoint will be available at: ${endpointPath}
+${indentStr}// GraphQL handler will be generated during deployment
+${indentStr}const ${resultVar} = { type: 'graphql-gateway', endpoint: '${endpointPath}', queries: ${queries.length}, mutations: ${mutations.length} };`;
+    }
+    
+    case 'mcp-server': {
+      const componentName = node.data.label || node.data.componentName || 'MCP Server';
+      const serverName = config.serverName || config.name || 'mcp-server';
+      const version = config.version || '1.0.0';
+      const endpointPath = config.endpointPath || '/mcp';
+      const resources = Array.isArray(config.resources) ? config.resources : [];
+      const tools = Array.isArray(config.tools) ? config.tools : [];
+      resultVars.set(node.id, resultVar);
+      return `${indentStr}${comment}
+${indentStr}// MCP Server: ${componentName}
+${indentStr}// Server Name: ${serverName}
+${indentStr}// Version: ${version}
+${indentStr}// Endpoint Path: ${endpointPath}
+${indentStr}// Resources: ${resources.length}, Tools: ${tools.length}
+${indentStr}// MCP endpoint will be available at: ${endpointPath}
+${indentStr}// MCP server handler will be generated during deployment
+${indentStr}const ${resultVar} = { type: 'mcp-server', serverName: '${serverName}', version: '${version}', resources: ${resources.length}, tools: ${tools.length} };`;
+    }
+    
     default:
       return `${indentStr}${comment}
 ${indentStr}// Node type: ${node.type}`;

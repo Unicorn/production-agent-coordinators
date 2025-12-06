@@ -27,7 +27,23 @@ export const componentsRouter = createTRPCRouter({
           *,
           component_type:component_types(id, name, icon),
           created_by_user:users!components_created_by_fkey(id, display_name),
-          visibility:component_visibility(id, name)
+          visibility:component_visibility(id, name),
+          category_mappings:component_category_mapping(
+            is_primary,
+            category:component_categories(
+              id,
+              name,
+              display_name,
+              description,
+              icon,
+              icon_provider,
+              color,
+              parent_category_id,
+              sort_order
+            )
+          ),
+          keywords:component_keywords(keyword, relevance_score),
+          use_cases:component_use_cases(use_case, description)
         `, { count: 'exact' });
       
       // Apply filters
@@ -149,7 +165,23 @@ export const componentsRouter = createTRPCRouter({
           component_type:component_types(id, name, icon, description),
           created_by_user:users!components_created_by_fkey(id, display_name, email),
           visibility:component_visibility(id, name, description),
-          agent_prompt:agent_prompts(id, name, display_name, version)
+          agent_prompt:agent_prompts(id, name, display_name, version),
+          category_mappings:component_category_mapping(
+            is_primary,
+            category:component_categories(
+              id,
+              name,
+              display_name,
+              description,
+              icon,
+              icon_provider,
+              color,
+              parent_category_id,
+              sort_order
+            )
+          ),
+          keywords:component_keywords(keyword, relevance_score),
+          use_cases:component_use_cases(use_case, description)
         `)
         .eq('id', input.id)
         .single();
@@ -469,6 +501,184 @@ export const componentsRouter = createTRPCRouter({
         ],
         warnings: validation.warnings,
         exportedFunctions,
+      };
+    }),
+
+  // Get all component categories with hierarchy
+  getCategories: publicProcedure
+    .query(async ({ ctx }) => {
+      const { supabase } = ctx;
+      
+      const { data, error } = await supabase
+        .from('component_categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('display_name', { ascending: true });
+      
+      if (error) {
+        throw new TRPCError({ 
+          code: 'INTERNAL_SERVER_ERROR', 
+          message: error.message 
+        });
+      }
+
+      // Build hierarchical structure
+      const categoryMap = new Map<string, any>();
+      const rootCategories: any[] = [];
+
+      // First pass: create map
+      (data || []).forEach(cat => {
+        categoryMap.set(cat.id, { ...cat, children: [] });
+      });
+
+      // Second pass: build tree
+      (data || []).forEach(cat => {
+        const category = categoryMap.get(cat.id)!;
+        if (cat.parent_category_id) {
+          const parent = categoryMap.get(cat.parent_category_id);
+          if (parent) {
+            parent.children.push(category);
+          } else {
+            // Orphaned category, add to root
+            rootCategories.push(category);
+          }
+        } else {
+          rootCategories.push(category);
+        }
+      });
+
+      return {
+        categories: rootCategories,
+        flat: data || [],
+      };
+    }),
+
+  // Get category tree (hierarchical structure)
+  getCategoryTree: publicProcedure
+    .query(async ({ ctx }) => {
+      const { supabase } = ctx;
+      
+      const { data, error } = await supabase
+        .from('component_categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('display_name', { ascending: true });
+      
+      if (error) {
+        throw new TRPCError({ 
+          code: 'INTERNAL_SERVER_ERROR', 
+          message: error.message 
+        });
+      }
+
+      // Build tree structure
+      const buildTree = (parentId: string | null = null): any[] => {
+        return (data || [])
+          .filter(cat => cat.parent_category_id === parentId)
+          .map(cat => ({
+            ...cat,
+            children: buildTree(cat.id),
+          }))
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      };
+
+      return buildTree();
+    }),
+
+  // Get components grouped by category
+  getComponentsByCategory: publicProcedure
+    .input(z.object({
+      categoryId: z.string().uuid().optional(),
+      includeChildren: z.boolean().default(true),
+    }))
+    .query(async ({ ctx, input }) => {
+      const { supabase } = ctx;
+      
+      let categoryIds: string[] = [];
+      
+      if (input.categoryId) {
+        if (input.includeChildren) {
+          // Get category and all children
+          const { data: allCategories } = await supabase
+            .from('component_categories')
+            .select('id');
+          
+          const getChildrenIds = (parentId: string): string[] => {
+            const children = (allCategories || []).filter(
+              cat => cat.parent_category_id === parentId
+            );
+            return [
+              parentId,
+              ...children.flatMap(child => getChildrenIds(child.id)),
+            ];
+          };
+          
+          categoryIds = getChildrenIds(input.categoryId);
+        } else {
+          categoryIds = [input.categoryId];
+        }
+      }
+
+      let query = supabase
+        .from('components')
+        .select(`
+          *,
+          component_type:component_types(id, name, icon),
+          category_mappings:component_category_mapping(
+            is_primary,
+            category:component_categories(
+              id,
+              name,
+              display_name,
+              icon,
+              color,
+              parent_category_id
+            )
+          )
+        `)
+        .eq('is_active', true)
+        .eq('deprecated', false);
+
+      if (categoryIds.length > 0) {
+        const { data: mappings } = await supabase
+          .from('component_category_mapping')
+          .select('component_id')
+          .in('category_id', categoryIds);
+        
+        const componentIds = mappings?.map(m => m.component_id) || [];
+        if (componentIds.length > 0) {
+          query = query.in('id', componentIds);
+        } else {
+          // No components in this category
+          return { components: [], grouped: {} };
+        }
+      }
+
+      const { data, error } = await query.order('display_name', { ascending: true });
+
+      if (error) {
+        throw new TRPCError({ 
+          code: 'INTERNAL_SERVER_ERROR', 
+          message: error.message 
+        });
+      }
+
+      // Group by primary category
+      const grouped: Record<string, any[]> = {};
+      
+      (data || []).forEach(comp => {
+        const primaryMapping = comp.category_mappings?.find((m: any) => m.is_primary);
+        const categoryName = primaryMapping?.category?.name || 'uncategorized';
+        
+        if (!grouped[categoryName]) {
+          grouped[categoryName] = [];
+        }
+        grouped[categoryName].push(comp);
+      });
+
+      return {
+        components: data || [],
+        grouped,
       };
     }),
 });

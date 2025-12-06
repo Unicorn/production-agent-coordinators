@@ -20,7 +20,7 @@ export interface WorkflowDefinition {
  */
 export interface WorkflowNode {
   id: string;
-  type: 'trigger' | 'activity' | 'agent' | 'conditional' | 'loop' | 'child-workflow' | 'signal' | 'phase' | 'retry' | 'state-variable' | 'api-endpoint' | 'condition' | 'end' | 'data-in' | 'data-out';
+  type: 'trigger' | 'activity' | 'agent' | 'conditional' | 'loop' | 'child-workflow' | 'signal' | 'phase' | 'retry' | 'state-variable' | 'api-endpoint' | 'condition' | 'end' | 'data-in' | 'data-out' | 'kong-logging' | 'kong-cache' | 'kong-cors' | 'graphql-gateway' | 'mcp-server';
   data: NodeData;
   position: { x: number; y: number };
 }

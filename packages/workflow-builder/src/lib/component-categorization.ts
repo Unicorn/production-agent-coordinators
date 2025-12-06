@@ -91,9 +91,41 @@ export const UTILITY_CATEGORIES: UtilityCategory[] = [
 ];
 
 /**
- * Categorize a component into a utility category based on its name, description, capabilities, and tags
+ * Get primary category from component's database category mappings
+ * Falls back to keyword-based categorization if no database mapping exists
  */
-export function categorizeComponent(component: Component): string {
+export function categorizeComponent(component: Component & {
+  category_mappings?: Array<{
+    is_primary: boolean;
+    category?: {
+      id: string;
+      name: string;
+      display_name: string;
+    };
+  }>;
+}): string {
+  // First, try to get primary category from database mappings
+  if (component.category_mappings && component.category_mappings.length > 0) {
+    const primaryMapping = component.category_mappings.find(m => m.is_primary);
+    if (primaryMapping?.category?.name) {
+      return primaryMapping.category.name;
+    }
+    // If no primary, use first category
+    const firstMapping = component.category_mappings[0];
+    if (firstMapping?.category?.name) {
+      return firstMapping.category.name;
+    }
+  }
+
+  // Fallback to keyword-based categorization (backward compatibility)
+  return categorizeComponentByKeywords(component);
+}
+
+/**
+ * Categorize a component into a utility category based on its name, description, capabilities, and tags
+ * This is the fallback method when database categories are not available
+ */
+function categorizeComponentByKeywords(component: Component): string {
   const searchText = [
     component.name,
     component.display_name,

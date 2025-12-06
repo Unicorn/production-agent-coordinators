@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',  // critical for Node built-ins
     globals: true,        // optional, but common
     testTimeout: 30000,   // Set a higher timeout for integration tests
+    hookTimeout: 60000,   // Set higher timeout for beforeAll/afterAll hooks (Temporal connection can take time)
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

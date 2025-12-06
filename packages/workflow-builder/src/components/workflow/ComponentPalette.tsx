@@ -16,7 +16,9 @@ import {
   Wrench
 } from 'lucide-react';
 import type { Database } from '@/types/database';
-import { UTILITY_CATEGORIES, categorizeComponent } from '@/lib/component-categorization';
+import { categorizeComponent } from '@/lib/component-categorization';
+import { useComponentCategories, getPrimaryCategory } from '@/hooks/useComponentCategories';
+import * as LucideIcons from 'lucide-react';
 
 type Component = Database['public']['Tables']['components']['Row'] & {
   component_type: { name: string; icon: string | null };
@@ -31,6 +33,7 @@ interface ComponentPaletteProps {
 export function ComponentPalette({ components, disabled = false }: ComponentPaletteProps) {
   // Track which sections are expanded
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const { categoriesFlat, categoryMap, isLoading: categoriesLoading } = useComponentCategories();
 
   // Optionally discover component files from file system (if workspace path is available)
   // This allows discovering components that aren't yet registered in the database
@@ -48,7 +51,7 @@ export function ComponentPalette({ components, disabled = false }: ComponentPale
     }
   );
 
-  // Group by utility category instead of technical type
+  // Group by category (use database categories if available, fallback to keyword-based)
   const groupedComponents = components.reduce((acc, comp) => {
     const categoryId = categorizeComponent(comp);
     if (!acc[categoryId]) acc[categoryId] = [];
@@ -72,10 +75,28 @@ export function ComponentPalette({ components, disabled = false }: ComponentPale
     }));
   };
 
-  // Get categories that have components, in the order defined in UTILITY_CATEGORIES
-  const activeCategories = UTILITY_CATEGORIES.filter(cat => 
-    groupedComponents[cat.id] && groupedComponents[cat.id].length > 0
-  );
+  // Get active categories - use database categories if available, otherwise use fallback
+  const activeCategories = categoriesLoading 
+    ? [] 
+    : categoriesFlat
+        .filter(cat => {
+          const categoryName = cat.name;
+          return groupedComponents[categoryName] && groupedComponents[categoryName].length > 0;
+        })
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+        .map(cat => {
+          // Get icon from lucide-react
+          const IconName = cat.icon as keyof typeof LucideIcons;
+          const Icon = (IconName && LucideIcons[IconName] as typeof LucideIcons.Activity) || LucideIcons.Package;
+          
+          return {
+            id: cat.name,
+            name: cat.display_name,
+            icon: Icon,
+            color: cat.color || '#3b82f6',
+            description: cat.description || '',
+          };
+        });
 
   return (
     <YStack

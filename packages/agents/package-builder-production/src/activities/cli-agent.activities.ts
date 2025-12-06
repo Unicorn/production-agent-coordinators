@@ -983,7 +983,23 @@ export async function requestTaskBreakdown(params: {
   contextContent?: string;
   completedTaskIds?: string[]; // For iterative planning
 }): Promise<TaskBreakdown> {
-  console.log(`[requestTaskBreakdown] Requesting task breakdown for phase: '${params.phase}'`);
+  // Import Context for heartbeat (only available in Temporal activity context)
+  let activityContext: any = null;
+  try {
+    const { Context } = await import('@temporalio/activity');
+    activityContext = Context.current();
+  } catch {
+    // Not in Temporal context, that's fine for direct calls
+  }
+
+  console.log(`[requestTaskBreakdown] Step 1: Starting task breakdown for phase: '${params.phase}'`);
+  if (activityContext) {
+    try {
+      activityContext.heartbeat('Step 1: Starting task breakdown');
+    } catch {
+      // Heartbeat might fail if not in proper activity context
+    }
+  }
   
   // Build the full system prompt based on the user's specification
   const breakdownPrompt = `You are an autonomous headless CLI agent invoked by a Temporal.io workflow. Your job is to (1) read a project plan file and repository context, (2) produce an outline and a small "next slice" of tasks, (3) continuously re-plan based on completed work and new information, and (4) keep quality and safety top-of-mind through explicit quality gates.
@@ -1120,38 +1136,95 @@ Begin by analyzing the plan and producing an outline + the first 3–8 tasks for
     console.log('=== END PROMPT ===\n');
   }
 
+  console.log(`[requestTaskBreakdown] Step 2: Selecting model for provider: ${params.provider}`);
+  if (activityContext) {
+    try {
+      activityContext.heartbeat('Step 2: Selecting model');
+    } catch {}
+  }
+
   // Execute with the appropriate provider
   let result: CLIAgentResult;
   
   if (params.provider === 'claude') {
     // For Claude, select model and build instruction
+    console.log(`[requestTaskBreakdown] Step 3: Calling selectClaudeModel for phase: ${params.phase}`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 3: Calling selectClaudeModel');
+      } catch {}
+    }
+    
     const modelConfig = await selectClaudeModel(params.phase === 'scaffold' ? 'scaffold' : 'implement');
+    console.log(`[requestTaskBreakdown] Step 4: Model selected: ${modelConfig.model}, Permission: ${modelConfig.permissionMode}`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 4: Model selected, building instruction');
+      } catch {}
+    }
+    
     const modelSelection: ModelSelection = {
       model: modelConfig.model,
       permissionMode: modelConfig.permissionMode,
     };
     const instruction = buildClaudeInstruction(breakdownPrompt, modelSelection);
     
-      result = await executeClaudeCLI({
-        instruction,
-        workingDir: params.workingDir,
-        sessionId: undefined, // New session for breakdown
-        model: modelConfig.model,
-        permissionMode: modelConfig.permissionMode,
-        contextContent: params.contextContent,
-        timeoutMs: 600000, // 10 minutes timeout for task breakdown (matching default in executeClaudeAgent)
-      });
+    console.log(`[requestTaskBreakdown] Step 5: Calling executeClaudeCLI (instruction length: ${instruction.length} chars)`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 5: Calling executeClaudeCLI');
+      } catch {}
+    }
+    
+    result = await executeClaudeCLI({
+      instruction,
+      workingDir: params.workingDir,
+      sessionId: undefined, // New session for breakdown
+      model: modelConfig.model,
+      permissionMode: modelConfig.permissionMode,
+      contextContent: params.contextContent,
+      timeoutMs: 600000, // 10 minutes timeout for task breakdown (matching default in executeClaudeAgent)
+    });
+    
+    console.log(`[requestTaskBreakdown] Step 6: executeClaudeCLI completed (success: ${result.success})`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 6: executeClaudeCLI completed, parsing result');
+      } catch {}
+    }
   } else {
     // For Gemini
+    console.log(`[requestTaskBreakdown] Step 3: Calling executeGeminiCLI`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 3: Calling executeGeminiCLI');
+      } catch {}
+    }
+    
     result = await executeGeminiCLI({
       instruction: breakdownPrompt,
       workingDir: params.workingDir,
       contextContent: params.contextContent,
     });
+    
+    console.log(`[requestTaskBreakdown] Step 4: executeGeminiCLI completed (success: ${result.success})`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 4: executeGeminiCLI completed, parsing result');
+      } catch {}
+    }
   }
   
   if (!result.success) {
+    console.error(`[requestTaskBreakdown] Step 7: CLI call failed: ${result.error || 'Unknown error'}`);
     throw new Error(`Failed to get task breakdown: ${result.error || 'Unknown error'}`);
+  }
+  
+  console.log(`[requestTaskBreakdown] Step 7: CLI call succeeded, parsing JSON response (${result.result.length} chars)`);
+  if (activityContext) {
+    try {
+      activityContext.heartbeat('Step 7: Parsing JSON response');
+    } catch {}
   }
   
   // Log the raw response for inspection (when DEBUG_CLI_PROMPTS is set)
@@ -1165,6 +1238,13 @@ Begin by analyzing the plan and producing an outline + the first 3–8 tasks for
   }
   
   // Parse the JSON response
+  console.log(`[requestTaskBreakdown] Step 8: Extracting JSON from response`);
+  if (activityContext) {
+    try {
+      activityContext.heartbeat('Step 8: Extracting JSON');
+    } catch {}
+  }
+  
   try {
     // Extract JSON from response (may be wrapped in markdown code blocks or have prose before it)
     let jsonText = result.result.trim();
@@ -1200,11 +1280,32 @@ Begin by analyzing the plan and producing an outline + the first 3–8 tasks for
       // If no JSON found, will fail with parse error below
     }
     
+    console.log(`[requestTaskBreakdown] Step 9: Parsing JSON (${jsonText.length} chars)`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 9: Parsing JSON');
+      } catch {}
+    }
+    
     const parsed = JSON.parse(jsonText) as TaskBreakdown;
+    
+    console.log(`[requestTaskBreakdown] Step 10: Validating structure`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 10: Validating structure');
+      } catch {}
+    }
     
     // Validate structure
     if (!Array.isArray(parsed.tasks)) {
       throw new Error('Task breakdown response missing "tasks" array');
+    }
+    
+    console.log(`[requestTaskBreakdown] Step 11: Sorting tasks by dependencies`);
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 11: Sorting tasks');
+      } catch {}
     }
     
     // Sort tasks by dependencies (dependencies first)
@@ -1238,6 +1339,7 @@ Begin by analyzing the plan and producing an outline + the first 3–8 tasks for
     
     parsed.tasks = sorted;
     
+    console.log(`[requestTaskBreakdown] Step 12: Task breakdown complete`);
     console.log(`[requestTaskBreakdown] Received ${parsed.tasks.length} tasks`);
     if (parsed.outline) {
       console.log(`[requestTaskBreakdown] Received ${parsed.outline.length} outline phases`);
@@ -1247,6 +1349,12 @@ Begin by analyzing the plan and producing an outline + the first 3–8 tasks for
     }
     if (parsed.more_tasks) {
       console.log(`[requestTaskBreakdown] Agent indicates more tasks are available`);
+    }
+    
+    if (activityContext) {
+      try {
+        activityContext.heartbeat('Step 12: Task breakdown complete');
+      } catch {}
     }
     
     return parsed;

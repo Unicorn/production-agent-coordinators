@@ -4,7 +4,7 @@
 
 export interface WorkflowNode {
   id: string;
-  type: 'activity' | 'agent' | 'signal' | 'trigger' | 'condition' | 'end' | 'api-endpoint' | 'phase' | 'retry' | 'state-variable';
+  type: 'activity' | 'agent' | 'signal' | 'trigger' | 'condition' | 'end' | 'api-endpoint' | 'phase' | 'retry' | 'state-variable' | 'data-in' | 'data-out' | 'kong-logging' | 'kong-cache' | 'kong-cors' | 'graphql-gateway' | 'mcp-server' | 'child-workflow' | 'loop' | 'conditional';
   position: { x: number; y: number };
   data: {
     label: string;

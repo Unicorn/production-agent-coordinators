@@ -10,7 +10,9 @@ import { ComponentCard } from './ComponentCard';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/trpc/client';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { UTILITY_CATEGORIES, categorizeComponent } from '@/lib/component-categorization';
+import { categorizeComponent } from '@/lib/component-categorization';
+import { useComponentCategories } from '@/hooks/useComponentCategories';
+import * as LucideIcons from 'lucide-react';
 import type { Database } from '@/types/database';
 
 type Component = Database['public']['Tables']['components']['Row'] & {

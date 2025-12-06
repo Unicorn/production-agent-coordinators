@@ -7,7 +7,7 @@
 
 import { Client } from 'pg';
 
-const connectionString = 'postgresql://postgres:65TzRzrtEJ2DNrdG@db.jeaudyvxapooyfddfptr.supabase.co:5432/postgres';
+const connectionString = 'postgresql://postgres.jeaudyvxapooyfddfptr:65TzRzrtEJ2DNrdG@aws-0-us-west-2.pooler.supabase.com:5432/postgres';
 
 async function testConnection() {
   console.log('🔍 Testing Database Connection\n');
