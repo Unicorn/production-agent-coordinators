@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { applyFileChanges, normalizeContent, verifyFileCreated } from '../file-operations.activities';
 import * as fs from 'fs/promises';
+<<<<<<< HEAD
+=======
+import * as path from 'path';
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
 
 // Mock fs/promises
 vi.mock('fs/promises', () => ({
@@ -9,7 +13,10 @@ vi.mock('fs/promises', () => ({
   mkdir: vi.fn(),
   unlink: vi.fn(),
   access: vi.fn(),
+<<<<<<< HEAD
   stat: vi.fn(),
+=======
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
 }));
 
 describe('File Operations Activities', () => {
@@ -113,7 +120,11 @@ describe('File Operations Activities', () => {
 
       expect(result.modifiedFiles).toHaveLength(0);
       expect(result.failedOperations).toHaveLength(1);
+<<<<<<< HEAD
       expect(result.failedOperations[0].error).toContain('Path contains ".." (path traversal)');
+=======
+      expect(result.failedOperations[0].error).toContain('Path contains unsafe characters');
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       expect(fs.writeFile).not.toHaveBeenCalled();
     });
 
@@ -132,7 +143,11 @@ describe('File Operations Activities', () => {
 
       expect(result.modifiedFiles).toHaveLength(0);
       expect(result.failedOperations).toHaveLength(1);
+<<<<<<< HEAD
       expect(result.failedOperations[0].error).toContain('Absolute paths not allowed');
+=======
+      expect(result.failedOperations[0].error).toContain('Absolute paths are not allowed');
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       expect(fs.writeFile).not.toHaveBeenCalled();
     });
 
@@ -151,7 +166,11 @@ describe('File Operations Activities', () => {
 
       expect(result.modifiedFiles).toHaveLength(0);
       expect(result.failedOperations).toHaveLength(1);
+<<<<<<< HEAD
       expect(result.failedOperations[0].error).toContain('Path contains null byte');
+=======
+      expect(result.failedOperations[0].error).toContain('Path contains unsafe characters');
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       expect(fs.writeFile).not.toHaveBeenCalled();
     });
 
@@ -170,7 +189,11 @@ describe('File Operations Activities', () => {
 
       expect(result.modifiedFiles).toHaveLength(0);
       expect(result.failedOperations).toHaveLength(1);
+<<<<<<< HEAD
       expect(result.failedOperations[0].error).toContain('Empty path not allowed');
+=======
+      expect(result.failedOperations[0].error).toContain('Path cannot be empty');
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       expect(fs.writeFile).not.toHaveBeenCalled();
     });
 
@@ -190,7 +213,11 @@ describe('File Operations Activities', () => {
 
       expect(result.modifiedFiles).toHaveLength(0);
       expect(result.failedOperations).toHaveLength(1);
+<<<<<<< HEAD
       expect(result.failedOperations[0].error).toContain('Path contains ".." (path traversal)');
+=======
+      expect(result.failedOperations[0].error).toContain('Path escapes package directory');
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       expect(fs.writeFile).not.toHaveBeenCalled();
     });
 
@@ -238,8 +265,12 @@ describe('File Operations Activities', () => {
       expect(result.failedOperations[0].error).toBe('Disk full');
     });
 
+<<<<<<< HEAD
     it('should not normalize content before writing', async () => {
       // The implementation writes content as-is, no normalization
+=======
+    it('should normalize content before writing', async () => {
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       await applyFileChanges({
         operations: [
           {
@@ -254,14 +285,23 @@ describe('File Operations Activities', () => {
 
       expect(fs.writeFile).toHaveBeenCalledWith(
         expect.any(String),
+<<<<<<< HEAD
         'line1\r\nline2\r\nline3',
+=======
+        'line1\nline2\nline3',
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
         'utf-8'
       );
     });
 
+<<<<<<< HEAD
     it('should treat missing files as success when deleting', async () => {
       // Delete operations catch all errors - missing files are considered success
       vi.mocked(fs.access).mockRejectedValueOnce(new Error('ENOENT'));
+=======
+    it('should handle delete operation errors', async () => {
+      vi.mocked(fs.unlink).mockRejectedValueOnce(new Error('File not found'));
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
 
       const result = await applyFileChanges({
         operations: [
@@ -274,13 +314,20 @@ describe('File Operations Activities', () => {
         workspaceRoot: '/workspace'
       });
 
+<<<<<<< HEAD
       // Missing file doesn't add to either array (caught and logged as "already absent")
       expect(result.modifiedFiles).toHaveLength(0);
       expect(result.failedOperations).toHaveLength(0);
+=======
+      expect(result.modifiedFiles).toHaveLength(0);
+      expect(result.failedOperations).toHaveLength(1);
+      expect(result.failedOperations[0].error).toBe('File not found');
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
     });
   });
 
   describe('normalizeContent', () => {
+<<<<<<< HEAD
     it('should replace CRLF with LF and add trailing newline', () => {
       const input = 'line1\r\nline2\r\nline3';
       const output = normalizeContent(input);
@@ -297,6 +344,24 @@ describe('File Operations Activities', () => {
       const input = 'line1\nline2\nline3';
       const output = normalizeContent(input);
       expect(output).toBe('line1\nline2\nline3\n');
+=======
+    it('should replace CRLF with LF', () => {
+      const input = 'line1\r\nline2\r\nline3';
+      const output = normalizeContent(input);
+      expect(output).toBe('line1\nline2\nline3');
+    });
+
+    it('should handle mixed line endings', () => {
+      const input = 'line1\r\nline2\nline3\r\nline4';
+      const output = normalizeContent(input);
+      expect(output).toBe('line1\nline2\nline3\nline4');
+    });
+
+    it('should preserve content with only LF', () => {
+      const input = 'line1\nline2\nline3';
+      const output = normalizeContent(input);
+      expect(output).toBe('line1\nline2\nline3');
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should handle empty content', () => {
@@ -304,6 +369,7 @@ describe('File Operations Activities', () => {
       expect(output).toBe('');
     });
 
+<<<<<<< HEAD
     it('should add trailing newline to single line', () => {
       const input = 'single line';
       const output = normalizeContent(input);
@@ -311,6 +377,15 @@ describe('File Operations Activities', () => {
     });
 
     it('should ensure single trailing newline when input has multiple', () => {
+=======
+    it('should handle content without line breaks', () => {
+      const input = 'single line';
+      const output = normalizeContent(input);
+      expect(output).toBe('single line');
+    });
+
+    it('should preserve trailing newline', () => {
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       const input = 'line1\r\nline2\r\n';
       const output = normalizeContent(input);
       expect(output).toBe('line1\nline2\n');
@@ -319,16 +394,28 @@ describe('File Operations Activities', () => {
 
   describe('verifyFileCreated', () => {
     it('should return true when file exists', async () => {
+<<<<<<< HEAD
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
+=======
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
 
       const result = await verifyFileCreated('/workspace/packages/core/test/src/index.ts');
 
       expect(result).toBe(true);
+<<<<<<< HEAD
       expect(fs.stat).toHaveBeenCalledWith('/workspace/packages/core/test/src/index.ts');
     });
 
     it('should return false when file does not exist', async () => {
       vi.mocked(fs.stat).mockRejectedValue(new Error('ENOENT'));
+=======
+      expect(fs.access).toHaveBeenCalledWith('/workspace/packages/core/test/src/index.ts');
+    });
+
+    it('should return false when file does not exist', async () => {
+      vi.mocked(fs.access).mockRejectedValue(new Error('ENOENT'));
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
 
       const result = await verifyFileCreated('/workspace/packages/core/test/src/missing.ts');
 
@@ -336,7 +423,11 @@ describe('File Operations Activities', () => {
     });
 
     it('should verify file content when expected content provided', async () => {
+<<<<<<< HEAD
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
+=======
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       vi.mocked(fs.readFile).mockResolvedValue('export const foo = "bar";');
 
       const result = await verifyFileCreated(
@@ -352,7 +443,11 @@ describe('File Operations Activities', () => {
     });
 
     it('should return false when content does not match', async () => {
+<<<<<<< HEAD
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
+=======
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       vi.mocked(fs.readFile).mockResolvedValue('wrong content');
 
       const result = await verifyFileCreated(
@@ -364,7 +459,11 @@ describe('File Operations Activities', () => {
     });
 
     it('should handle read errors when verifying content', async () => {
+<<<<<<< HEAD
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
+=======
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       vi.mocked(fs.readFile).mockRejectedValue(new Error('Permission denied'));
 
       const result = await verifyFileCreated(
@@ -376,7 +475,11 @@ describe('File Operations Activities', () => {
     });
 
     it('should skip content check when no expected content provided', async () => {
+<<<<<<< HEAD
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
+=======
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
 
       const result = await verifyFileCreated('/workspace/packages/core/test/src/index.ts');
 

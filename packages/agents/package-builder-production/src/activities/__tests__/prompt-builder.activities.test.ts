@@ -84,9 +84,177 @@ describe('Prompt Builder Activities', () => {
           planPath: 'plans/packages/core/test.md',
           workspaceRoot: '/workspace'
         })
+<<<<<<< HEAD
       ).rejects.toThrow('Plan file not found at any of:');
     });
 
+=======
+      ).rejects.toThrow('Could not find plan file');
+    });
+
+    it('should include quality standards when requested', async () => {
+      vi.mocked(fs.readFile)
+        .mockResolvedValueOnce('# Plan content')
+        .mockResolvedValueOnce('# Quality Standards\n\n- Write tests');
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'FEATURE_IMPLEMENTATION',
+        instructions: 'Add feature',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        includeQualityStandards: true
+      });
+
+      expect(prompt).toContain('# Quality Standards');
+      expect(prompt).toContain('- Write tests');
+      expect(fs.readFile).toHaveBeenCalledWith(expect.stringContaining('quality-standards.md'), 'utf-8');
+    });
+
+    it('should skip quality standards when file not found', async () => {
+      vi.mocked(fs.readFile)
+        .mockResolvedValueOnce('# Plan content')
+        .mockRejectedValueOnce(new Error('ENOENT'));
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'FEATURE_IMPLEMENTATION',
+        instructions: 'Add feature',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        includeQualityStandards: true
+      });
+
+      expect(prompt).not.toContain('# Quality Standards');
+      expect(prompt).toContain('# Plan content');
+    });
+
+    it('should include few-shot examples when requested', async () => {
+      vi.mocked(fs.readFile)
+        .mockResolvedValueOnce('# Plan content')
+        .mockResolvedValueOnce('# Few-Shot Examples\n\nExample 1...');
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'TESTING',
+        instructions: 'Write tests',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        includeFewShotExamples: true
+      });
+
+      expect(prompt).toContain('# Few-Shot Examples');
+      expect(prompt).toContain('Example 1...');
+      expect(fs.readFile).toHaveBeenCalledWith(expect.stringContaining('few-shot-examples.md'), 'utf-8');
+    });
+
+    it('should skip few-shot examples when file not found', async () => {
+      vi.mocked(fs.readFile)
+        .mockResolvedValueOnce('# Plan content')
+        .mockRejectedValueOnce(new Error('ENOENT'));
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'TESTING',
+        instructions: 'Write tests',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        includeFewShotExamples: true
+      });
+
+      expect(prompt).not.toContain('# Few-Shot Examples');
+    });
+
+    it('should include GitHub context when provided', async () => {
+      vi.mocked(fs.readFile).mockResolvedValue('# Plan content');
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'BUG_FIX',
+        instructions: 'Fix issue',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        githubContext: {
+          issueNumber: 123,
+          prNumber: 456,
+          branch: 'fix/bug-123'
+        }
+      });
+
+      expect(prompt).toContain('Issue: #123');
+      expect(prompt).toContain('PR: #456');
+      expect(prompt).toContain('Branch: fix/bug-123');
+    });
+
+    it('should include validation checklist when requested', async () => {
+      vi.mocked(fs.readFile).mockResolvedValue('# Plan content');
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'REFACTORING',
+        instructions: 'Refactor code',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        includeValidationChecklist: true
+      });
+
+      expect(prompt).toContain('qualityChecklist');
+      expect(prompt).toContain('hasTests');
+      expect(prompt).toContain('hasDocumentation');
+    });
+
+    it('should skip validation checklist when not requested', async () => {
+      vi.mocked(fs.readFile).mockResolvedValue('# Plan content');
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'DOCUMENTATION',
+        instructions: 'Write docs',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        includeValidationChecklist: false
+      });
+
+      expect(prompt).not.toContain('qualityChecklist');
+    });
+
+    it('should handle all optional sections together', async () => {
+      vi.mocked(fs.readFile)
+        .mockResolvedValueOnce('# Plan content')
+        .mockResolvedValueOnce('# Quality Standards')
+        .mockResolvedValueOnce('# Few-Shot Examples');
+
+      const prompt = await buildAgentPrompt({
+        agentName: 'test-agent',
+        taskType: 'FEATURE_IMPLEMENTATION',
+        instructions: 'Add feature',
+        packagePath: 'packages/core/test',
+        planPath: 'plans/packages/core/test.md',
+        workspaceRoot: '/workspace',
+        includeQualityStandards: true,
+        includeFewShotExamples: true,
+        includeValidationChecklist: true,
+        githubContext: {
+          issueNumber: 100,
+          prNumber: 200,
+          branch: 'feature/new'
+        }
+      });
+
+      expect(prompt).toContain('# Plan content');
+      expect(prompt).toContain('# Quality Standards');
+      expect(prompt).toContain('# Few-Shot Examples');
+      expect(prompt).toContain('Issue: #100');
+      expect(prompt).toContain('qualityChecklist');
+    });
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
   });
 
   describe('estimateTokenCount', () => {
@@ -116,6 +284,7 @@ describe('Prompt Builder Activities', () => {
   });
 
   describe('validatePrompt', () => {
+<<<<<<< HEAD
     it('should validate prompt with all required sections', () => {
       const prompt = `
         Package Plan:
@@ -124,12 +293,17 @@ describe('Prompt Builder Activities', () => {
         Response Format:
         Return JSON with files array.
       `;
+=======
+    it('should validate prompt with no issues', () => {
+      const prompt = 'This is a valid prompt with good length.'.repeat(10);
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       const result = validatePrompt(prompt);
 
       expect(result.valid).toBe(true);
       expect(result.warnings).toHaveLength(0);
     });
 
+<<<<<<< HEAD
     it('should warn when missing Package Plan section', () => {
       const prompt = 'Response Format: Return JSON';
       const result = validatePrompt(prompt);
@@ -237,6 +411,40 @@ describe('Prompt Builder Activities', () => {
         Response Format:
         Return JSON
       `;
+=======
+    it('should warn on empty prompt', () => {
+      const result = validatePrompt('');
+
+      expect(result.valid).toBe(false);
+      expect(result.warnings).toContain('Prompt is empty');
+    });
+
+    it('should warn on very short prompt', () => {
+      const result = validatePrompt('Short');
+
+      expect(result.valid).toBe(false);
+      expect(result.warnings).toContain('Prompt is very short (may lack context)');
+    });
+
+    it('should warn on very long prompt', () => {
+      const longPrompt = 'a'.repeat(200001); // > 200k chars
+      const result = validatePrompt(longPrompt);
+
+      expect(result.valid).toBe(false);
+      expect(result.warnings).toContain('Prompt is very long (may exceed token limits)');
+    });
+
+    it('should handle prompt at max safe length', () => {
+      const prompt = 'a'.repeat(200000);
+      const result = validatePrompt(prompt);
+
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('should handle prompt at min safe length', () => {
+      const prompt = 'a'.repeat(50);
+>>>>>>> b6e2ccc (chore: commit worktree changes from Cursor IDE)
       const result = validatePrompt(prompt);
 
       expect(result.valid).toBe(true);
