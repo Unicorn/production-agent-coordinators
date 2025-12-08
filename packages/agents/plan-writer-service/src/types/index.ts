@@ -212,6 +212,8 @@ export interface PlanWriterPackageInput {
   reason: string;
   priority: 'low' | 'normal' | 'high' | 'critical';
   sourceService: string;
+  /** Plan generation method: 'api' for Anthropic API, 'cli' for Claude Code CLI. Defaults to 'api' */
+  planGenerationMethod?: 'api' | 'cli';
 }
 
 export interface PlanWriterPackageResult {

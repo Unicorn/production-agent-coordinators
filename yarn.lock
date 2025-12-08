@@ -44,6 +44,16 @@
     "@temporalio/worker" "^1.10.0"
     "@temporalio/workflow" "^1.10.0"
 
+"@coordinator/agent-plan-writer-service@file:/Users/mattbernier/projects/production-agent-coordinators/.worktrees/refactor-plan-writer-service/packages/agents/plan-writer-service":
+  version "0.1.0"
+  resolved "file:packages/agents/plan-writer-service"
+  dependencies:
+    "@coordinator/contracts" "*"
+    "@temporalio/activity" "^1.13.1"
+    "@temporalio/client" "^1.13.1"
+    "@temporalio/worker" "^1.13.1"
+    "@temporalio/workflow" "^1.13.1"
+
 "@coordinator/agents-mock@*", "@coordinator/agents-mock@file:/Users/mattbernier/projects/production-agent-coordinators/.worktrees/refactor-plan-writer-service/packages/agents/mock":
   version "0.1.0"
   resolved "file:packages/agents/mock"
@@ -1537,6 +1547,11 @@ fs.realpath@^1.0.0:
   version "1.0.0"
   resolved "https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz"
   integrity sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==
+
+fsevents@~2.3.2, fsevents@~2.3.3:
+  version "2.3.3"
+  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
+  integrity sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==
 
 get-caller-file@^2.0.5:
   version "2.0.5"

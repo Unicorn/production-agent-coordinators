@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   spawnPlanWriterAgent,
   spawnPackageEvaluatorAgent,
@@ -96,7 +96,7 @@ describe('Plan Activities', () => {
       expect(result.confidence).toBe('high');
     });
 
-    it('should decide plan needed when no plan exists', async () => {
+    it('should decide plan needed when status is plan_needed', async () => {
       const input: PackageEvaluationInput = {
         packageId: '@bernierllc/test-package',
         parentPlanContent: 'Parent plan content',
@@ -111,7 +111,7 @@ describe('Plan Activities', () => {
       expect(result.success).toBe(true);
       expect(result.needsUpdate).toBe(true);
       expect(result.updateType).toBe('plan');
-      expect(result.reason).toContain('No existing plan');
+      expect(result.reason).toContain('Package status is plan_needed');
     });
 
     it('should decide implementation needed when plan exists but not published', async () => {
@@ -119,7 +119,7 @@ describe('Plan Activities', () => {
         packageId: '@bernierllc/test-package',
         existingPlanContent: 'Existing plan content',
         packageDetails: {
-          status: 'plan_written',
+          status: 'planning',
           plan_file_path: 'plans/test.md',
           dependencies: []
         }
@@ -152,12 +152,30 @@ describe('Plan Activities', () => {
   });
 
   describe('updateMCPStatus', () => {
+    beforeEach(() => {
+      // Mock fetch for API calls
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+        text: async () => ''
+      } as Response);
+
+      // Mock environment variables
+      process.env.MBERNIER_API_KEY = 'test-api-key';
+      process.env.MBERNIER_API_URL = 'http://localhost:3355/api/v1';
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should update MCP successfully', async () => {
       const input: MCPUpdateInput = {
         packageId: '@bernierllc/test-package',
         planFilePath: 'plans/packages/test-package.md',
         gitBranch: 'feature/bernierllc-test-package',
-        status: 'plan_written'
+        status: 'planning'
       };
 
       const result = await updateMCPStatus(input);

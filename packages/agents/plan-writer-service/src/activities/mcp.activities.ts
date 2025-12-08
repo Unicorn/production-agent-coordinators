@@ -1,16 +1,30 @@
 /**
  * MCP Query Activities
  *
- * These activities query the packages-api (MCP) for package information.
+ * These activities query the packages-api via REST API for package information.
  *
- * NOTE: Currently using MCP functions. Future: migrate to direct REST API calls.
+ * Uses direct REST API calls instead of MCP functions for better control and error handling.
  * See: docs/plans/2025-11-14-mcp-vs-rest-api-architecture-note.md
  */
 
+import { readFile, access } from 'node:fs/promises';
+import { join } from 'node:path';
 import type {
   MCPPackageDetails,
   MCPPackageLineage
 } from '../types/index';
+
+// Helper to get API configuration
+function getApiConfig() {
+  const apiKey = process.env.MBERNIER_API_KEY;
+  const apiUrl = process.env.MBERNIER_API_URL || 'http://localhost:3355/api/v1';
+
+  if (!apiKey) {
+    throw new Error('MBERNIER_API_KEY environment variable not set');
+  }
+
+  return { apiKey, apiUrl };
+}
 
 /**
  * Query package details from MCP
@@ -19,30 +33,54 @@ import type {
  * Activity Type: standard
  */
 export async function queryPackageDetails(packageId: string): Promise<MCPPackageDetails> {
-  try {
-    console.log(`[queryPackageDetails] Querying MCP for ${packageId}`);
+  console.log(`[queryPackageDetails] Querying MCP for ${packageId}`);
 
-    // TODO: Implement actual MCP query
-    // For now, return mock data
-    const mockDetails: MCPPackageDetails = {
-      packageId,
-      exists: false, // Default to false for new packages
-      status: 'plan_needed'
-    };
+  const { apiKey, apiUrl } = getApiConfig();
 
-    console.log(`[queryPackageDetails] Package exists: ${mockDetails.exists}`);
+  const response = await fetch(`${apiUrl}/packages/${encodeURIComponent(packageId)}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+  });
 
-    return mockDetails;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[queryPackageDetails] Failed for ${packageId}:`, errorMessage);
-
-    // Return non-existent package on error
+  // 404 means package legitimately doesn't exist - this is OK
+  if (response.status === 404) {
+    console.log(`[queryPackageDetails] Package does not exist: ${packageId}`);
     return {
       packageId,
-      exists: false
+      exists: false,
+      status: 'plan_needed'
     };
   }
+
+  // Any other non-OK status (500, 503, etc) is an API error
+  // Throw error so Temporal can retry with exponential backoff
+  if (!response.ok) {
+    const errorText = await response.text();
+    const error = new Error(`packages-API error [${response.status}]: ${errorText.substring(0, 200)}`);
+    console.error(`[queryPackageDetails] API unavailable for ${packageId}: ${error.message}`);
+    throw error;
+  }
+
+  const responseBody = await response.json() as any;
+
+  // Check if data is nested under a 'data' property
+  const data = responseBody.data || responseBody;
+
+  console.log(`[queryPackageDetails] Package exists: ${data.name}`);
+  console.log(`[queryPackageDetails] Status: ${data.status || 'unknown'}`);
+
+  return {
+    packageId: data.name,
+    exists: true,
+    status: data.status,
+    plan_file_path: data.plan_file_path,
+    plan_git_branch: data.plan_git_branch,
+    current_version: data.current_version,
+    dependencies: data.dependencies
+  };
 }
 
 /**
@@ -52,31 +90,66 @@ export async function queryPackageDetails(packageId: string): Promise<MCPPackage
  * Activity Type: standard
  */
 export async function queryPackageLineage(packageId: string): Promise<MCPPackageLineage> {
-  try {
-    console.log(`[queryPackageLineage] Querying lineage for ${packageId}`);
+  console.log(`[queryPackageLineage] Querying lineage for ${packageId}`);
 
-    // TODO: Implement actual MCP lineage query
-    // This should recursively find parents until reaching root
+  const { apiKey, apiUrl } = getApiConfig();
 
-    const mockLineage: MCPPackageLineage = {
-      packageId,
-      parents: [], // Empty means no parents (root package)
-      depth: 0
-    };
+  // First get package details to check if it exists
+  // This will throw if API is down, which is correct - we want to retry
+  const packageDetails = await queryPackageDetails(packageId);
 
-    console.log(`[queryPackageLineage] Lineage depth: ${mockLineage.depth}`);
-
-    return mockLineage;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[queryPackageLineage] Failed for ${packageId}:`, errorMessage);
-
+  if (!packageDetails.exists) {
+    console.log(`[queryPackageLineage] Package doesn't exist, returning empty lineage`);
     return {
       packageId,
       parents: [],
       depth: 0
     };
   }
+
+  // Get dependencies to find parents (packages this one depends on)
+  const response = await fetch(
+    `${apiUrl}/packages/${encodeURIComponent(packageId)}/dependencies?type=internal`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  // 404 means no dependencies - this is OK, return empty parents
+  if (response.status === 404) {
+    console.log(`[queryPackageLineage] No dependencies found, returning root package`);
+    return {
+      packageId,
+      parents: [],
+      depth: 0
+    };
+  }
+
+  // Any other non-OK status is an API error - throw for retry
+  if (!response.ok) {
+    const errorText = await response.text();
+    const error = new Error(`packages-API error fetching dependencies [${response.status}]: ${errorText.substring(0, 200)}`);
+    console.error(`[queryPackageLineage] API unavailable: ${error.message}`);
+    throw error;
+  }
+
+  const deps = await response.json() as any;
+  const parents = deps.dependencies
+    ?.filter((d: any) => d.dependency_type === 'production' && d.dependency_name.startsWith('@bernierllc/'))
+    .map((d: any) => d.dependency_name) || [];
+
+  console.log(`[queryPackageLineage] Lineage depth: ${parents.length}`);
+  console.log(`[queryPackageLineage] Parents: ${parents.join(', ') || 'none'}`);
+
+  return {
+    packageId,
+    parents,
+    depth: parents.length
+  };
 }
 
 /**
@@ -89,13 +162,13 @@ export async function checkPlanExists(planPath: string): Promise<boolean> {
   try {
     console.log(`[checkPlanExists] Checking ${planPath}`);
 
-    // TODO: Implement actual file existence check
-    // For now, always return false (plan doesn't exist)
+    const fullPath = join(process.cwd(), planPath);
+    await access(fullPath);
 
-    return false;
+    console.log(`[checkPlanExists] File exists: ${planPath}`);
+    return true;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[checkPlanExists] Failed for ${planPath}:`, errorMessage);
+    console.log(`[checkPlanExists] File does not exist: ${planPath}`);
     return false;
   }
 }
@@ -110,13 +183,13 @@ export async function readPlanFile(planPath: string): Promise<string | null> {
   try {
     console.log(`[readPlanFile] Reading ${planPath}`);
 
-    // TODO: Implement actual file read
-    // For now, return null (file doesn't exist)
+    const fullPath = join(process.cwd(), planPath);
+    const content = await readFile(fullPath, 'utf-8');
 
-    return null;
+    console.log(`[readPlanFile] Read ${content.length} characters from ${planPath}`);
+    return content;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[readPlanFile] Failed for ${planPath}:`, errorMessage);
+    console.log(`[readPlanFile] File not found: ${planPath}`);
     return null;
   }
 }
@@ -135,13 +208,36 @@ export async function fetchNpmPackageInfo(packageId: string): Promise<{
   try {
     console.log(`[fetchNpmPackageInfo] Fetching ${packageId} from npm`);
 
-    // TODO: Implement actual npm registry query
-    // For now, return null (package doesn't exist on npm)
+    const response = await fetch(`https://registry.npmjs.org/${packageId}`);
 
-    return null;
+    if (response.status === 404) {
+      console.log(`[fetchNpmPackageInfo] Package not published to npm: ${packageId}`);
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`npm registry returned ${response.status}`);
+    }
+
+    const data = await response.json() as any;
+    const latestVersion = data['dist-tags']?.latest;
+
+    if (!latestVersion) {
+      console.log(`[fetchNpmPackageInfo] No latest version found for ${packageId}`);
+      return null;
+    }
+
+    const publishedAt = data.time?.[latestVersion];
+
+    console.log(`[fetchNpmPackageInfo] Found ${packageId}@${latestVersion} published ${publishedAt}`);
+
+    return {
+      version: latestVersion,
+      published_at: publishedAt,
+      url: `https://www.npmjs.com/package/${packageId}`
+    };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[fetchNpmPackageInfo] Failed for ${packageId}:`, errorMessage);
+    console.log(`[fetchNpmPackageInfo] Package not available: ${packageId}`);
     return null;
   }
 }
@@ -153,16 +249,40 @@ export async function fetchNpmPackageInfo(packageId: string): Promise<{
  * Activity Type: standard
  */
 export async function queryChildPackages(packageId: string): Promise<string[]> {
-  try {
-    console.log(`[queryChildPackages] Querying children for ${packageId}`);
+  console.log(`[queryChildPackages] Querying children for ${packageId}`);
 
-    // TODO: Implement actual MCP query for children
-    // For now, return empty array (no children)
+  const { apiKey, apiUrl } = getApiConfig();
 
-    return [];
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[queryChildPackages] Failed for ${packageId}:`, errorMessage);
+  // Get packages that depend on this one (reverse dependencies = children)
+  const response = await fetch(
+    `${apiUrl}/packages/${encodeURIComponent(packageId)}/dependents`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  // 404 means no dependents - this is OK, return empty array
+  if (response.status === 404) {
+    console.log(`[queryChildPackages] No dependents found for ${packageId}`);
     return [];
   }
+
+  // Any other non-OK status is an API error - throw for retry
+  if (!response.ok) {
+    const errorText = await response.text();
+    const error = new Error(`packages-API error fetching dependents [${response.status}]: ${errorText.substring(0, 200)}`);
+    console.error(`[queryChildPackages] API unavailable: ${error.message}`);
+    throw error;
+  }
+
+  const data = await response.json() as any;
+  const children = data.dependents?.map((d: any) => d.package_id) || [];
+
+  console.log(`[queryChildPackages] Found ${children.length} children: ${children.join(', ') || 'none'}`);
+
+  return children;
 }

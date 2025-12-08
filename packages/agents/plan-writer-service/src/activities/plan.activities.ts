@@ -5,6 +5,11 @@
  * Following naming standards from standardization design doc.
  */
 
+import { writeFile, mkdir } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import Anthropic from '@anthropic-ai/sdk';
 import type {
   WritePlanResult,
   WritePlanInputWithContext,
@@ -15,6 +20,21 @@ import type {
   PackageEvaluationInput,
   PackageEvaluationResult
 } from '../types/index';
+
+const execAsync = promisify(exec);
+
+// Initialize Anthropic client
+let anthropicClient: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+  if (!anthropicClient) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error('ANTHROPIC_API_KEY environment variable not set');
+    }
+    anthropicClient = new Anthropic({ apiKey });
+  }
+  return anthropicClient;
+}
 
 /**
  * Agentic Activity: Spawns AI agent to write package plan
@@ -34,15 +54,14 @@ export async function spawnPlanWriterAgent(input: WritePlanInputWithContext): Pr
       console.log(`[spawnPlanWriterAgent] Lineage depth: ${input.lineage?.length || 0}`);
     }
 
-    // TODO: Implement actual agent spawning
-    // This will call the agent-prompt-writer-service or use existing agent
-    // For now, generate a mock plan
-
-    const planContent = generateMockPlan(input);
+    // Generate plan using AI agent (falls back to mock if API key not set)
+    const planContent = await generatePlanContent(input);
     const planFilePath = getPlanFilePath(input.packageId);
 
-    // TODO: Write plan to filesystem
-    // await writeFile(planFilePath, planContent);
+    // Write plan to filesystem
+    const fullPath = join(process.cwd(), planFilePath);
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, planContent, 'utf-8');
 
     const duration = Date.now() - startTime;
 
@@ -81,19 +100,32 @@ export async function gitCommitPlan(input: GitCommitInput): Promise<GitCommitRes
     console.log(`[gitCommitPlan] Committing plan for ${input.packageId}`);
     console.log(`[gitCommitPlan] Branch: ${input.gitBranch}`);
 
-    // TODO: Implement actual git operations
-    // 1. Ensure on correct branch (git checkout -b feature/{package-name})
-    // 2. Add plan file (git add {planFilePath})
-    // 3. Commit (git commit --no-verify -m "{commitMessage}")
-    // 4. Push (git push origin {gitBranch} --no-verify)
+    const cwd = process.cwd();
 
-    const mockCommitSha = `abc${Date.now().toString(36)}`;
+    // 1. Create and checkout branch (or checkout existing)
+    try {
+      await execAsync(`git checkout -b ${input.gitBranch}`, { cwd });
+    } catch (error) {
+      // Branch might already exist, try to check it out
+      await execAsync(`git checkout ${input.gitBranch}`, { cwd });
+    }
 
-    console.log(`[gitCommitPlan] Committed as ${mockCommitSha}`);
+    // 2. Add plan file
+    await execAsync(`git add ${input.planFilePath}`, { cwd });
+
+    // 3. Commit with --no-verify
+    const commitMessage = input.commitMessage || `Add plan for ${input.packageId}`;
+    await execAsync(`git commit --no-verify -m "${commitMessage}"`, { cwd });
+
+    // 4. Get commit SHA
+    const { stdout: commitSha } = await execAsync('git rev-parse --short HEAD', { cwd });
+    const cleanCommitSha = commitSha.trim();
+
+    console.log(`[gitCommitPlan] Committed as ${cleanCommitSha}`);
 
     return {
       success: true,
-      commitSha: mockCommitSha,
+      commitSha: cleanCommitSha,
       branch: input.gitBranch
     };
   } catch (error) {
@@ -123,12 +155,82 @@ export async function updateMCPStatus(input: MCPUpdateInput): Promise<MCPUpdateR
     console.log(`[updateMCPStatus] Plan path: ${input.planFilePath}`);
     console.log(`[updateMCPStatus] Git branch: ${input.gitBranch}`);
 
-    // TODO: Implement actual MCP API call
-    // await mcpClient.packages.update(input.packageId, {
-    //   plan_file_path: input.planFilePath,
-    //   plan_git_branch: input.gitBranch,
-    //   status: input.status
-    // });
+    // Call packages API to update package metadata
+    const apiKey = process.env.MBERNIER_API_KEY;
+    const apiUrl = process.env.MBERNIER_API_URL || 'http://localhost:3355/api/v1';
+
+    if (!apiKey) {
+      throw new Error('MBERNIER_API_KEY environment variable not set');
+    }
+
+    // Try to update first
+    let response = await fetch(`${apiUrl}/packages/${encodeURIComponent(input.packageId)}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        plan_file_path: input.planFilePath,
+        plan_git_branch: input.gitBranch,
+        status: input.status,
+      }),
+    });
+
+    // If package doesn't exist (404), create it first
+    if (response.status === 404) {
+      console.log(`[updateMCPStatus] Package doesn't exist, creating it first`);
+
+      const createResponse = await fetch(`${apiUrl}/packages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          name: input.packageId,
+          description: `Package ${input.packageId}`,
+          category: 'other',
+          status: input.status,
+          plan_file_path: input.planFilePath,
+          plan_git_branch: input.gitBranch,
+        }),
+      });
+
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text();
+        throw new Error(`Failed to create package: ${createResponse.status} ${errorText}`);
+      }
+
+      console.log(`[updateMCPStatus] Package created successfully`);
+
+      // Now update the package with plan metadata
+      const updateResponse = await fetch(`${apiUrl}/packages/${encodeURIComponent(input.packageId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          plan_file_path: input.planFilePath,
+          plan_git_branch: input.gitBranch,
+          status: input.status,
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text();
+        throw new Error(`Failed to update plan metadata: ${updateResponse.status} ${errorText}`);
+      }
+
+      console.log(`[updateMCPStatus] Plan metadata updated successfully`);
+      return { success: true };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API request failed: ${response.status} ${errorText}`);
+    }
 
     console.log(`[updateMCPStatus] MCP updated successfully`);
 
@@ -160,6 +262,7 @@ export async function spawnPackageEvaluatorAgent(
 
   try {
     console.log(`[spawnPackageEvaluatorAgent] Evaluating ${input.packageId}`);
+    console.log(`[spawnPackageEvaluatorAgent] Status: ${input.packageDetails.status}`);
 
     if (input.existingPlanContent) {
       console.log(`[spawnPackageEvaluatorAgent] Existing plan found`);
@@ -187,14 +290,20 @@ export async function spawnPackageEvaluatorAgent(
     };
 
     // Simple heuristics for mock:
+    // - If status is plan_needed → needs plan
     // - If no existing plan but parent exists → needs plan
     // - If parent plan changed recently → might need update
-    if (!input.existingPlanContent && input.parentPlanContent) {
+    if (input.packageDetails.status === 'plan_needed') {
+      mockResult.needsUpdate = true;
+      mockResult.updateType = 'plan';
+      mockResult.reason = 'Package status is plan_needed';
+      mockResult.confidence = 'high';
+    } else if (!input.existingPlanContent && input.parentPlanContent) {
       mockResult.needsUpdate = true;
       mockResult.updateType = 'plan';
       mockResult.reason = 'No existing plan found, but parent plan exists';
       mockResult.confidence = 'high';
-    } else if (!input.npmPackageInfo && input.packageDetails.status === 'plan_written') {
+    } else if (!input.npmPackageInfo && input.packageDetails.status === 'planning') {
       mockResult.needsUpdate = true;
       mockResult.updateType = 'implementation';
       mockResult.reason = 'Plan exists but package not yet implemented';
@@ -227,6 +336,91 @@ export async function spawnPackageEvaluatorAgent(
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Generate plan content - tries AI first, falls back to mock if API key not available
+ */
+async function generatePlanContent(input: WritePlanInputWithContext): Promise<string> {
+  // Check if Anthropic API key is available
+  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+
+  if (hasApiKey) {
+    try {
+      console.log(`[generatePlanContent] Using AI agent to generate plan`);
+      return await generateAIPlan(input);
+    } catch (error) {
+      console.error(`[generatePlanContent] AI generation failed, falling back to mock:`, error);
+      return generateMockPlan(input);
+    }
+  } else {
+    console.log(`[generatePlanContent] No ANTHROPIC_API_KEY, using mock plan`);
+    return generateMockPlan(input);
+  }
+}
+
+/**
+ * Generate plan using Claude AI
+ */
+async function generateAIPlan(input: WritePlanInputWithContext): Promise<string> {
+  const client = getAnthropicClient();
+
+  // Build context for the prompt
+  let contextInfo = '';
+
+  if (input.parentPlanContent && input.parentPackageId) {
+    contextInfo += `\n## Parent Package Context\n\n`;
+    contextInfo += `**Parent**: ${input.parentPackageId}\n`;
+    contextInfo += `**Lineage**: ${input.lineage?.join(' → ') || 'None'}\n\n`;
+    contextInfo += `The parent package has the following plan:\n\n`;
+    contextInfo += `\`\`\`markdown\n${input.parentPlanContent}\n\`\`\`\n\n`;
+    contextInfo += `This package should follow the architectural patterns and standards established by the parent.\n`;
+  }
+
+  const prompt = `You are an expert software architect creating an implementation plan for a TypeScript/Node.js package.
+
+Package: ${input.packageId}
+Reason for plan: ${input.reason}
+${contextInfo}
+
+${input.context ? `Additional Context:\n${JSON.stringify(input.context, null, 2)}\n` : ''}
+
+Create a comprehensive implementation plan in Markdown format. The plan should include:
+
+1. **Overview** - Brief description and purpose
+2. **Architecture** - High-level design decisions
+3. **Implementation Steps** - Detailed phases with checkboxes
+4. **Testing Strategy** - How to test the package
+5. **Quality Requirements** - Standards that must be met
+6. **Dependencies** - Internal and external dependencies
+
+The plan should be:
+- Actionable and specific
+- Include concrete file paths and code examples where appropriate
+- Follow TypeScript and Node.js best practices
+- Include testing requirements (unit, integration)
+- Specify quality gates (linting, coverage, build)
+
+Format the plan as a well-structured Markdown document.`;
+
+  console.log(`[generateAIPlan] Calling Claude to generate plan for ${input.packageId}`);
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: prompt
+    }]
+  });
+
+  const planContent = response.content[0].type === 'text'
+    ? response.content[0].text
+    : '';
+
+  console.log(`[generateAIPlan] Generated ${planContent.length} characters`);
+
+  return planContent;
+}
 
 function generateMockPlan(input: WritePlanInputWithContext): string {
   let plan = `# ${input.packageId} Implementation Plan\n\n`;

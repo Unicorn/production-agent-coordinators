@@ -10,6 +10,7 @@
 import { proxyActivities, sleep } from '@temporalio/workflow';
 import type * as mcpActivities from '../activities/mcp.activities';
 import type * as planActivities from '../activities/plan.activities';
+import type * as claudeCliActivities from '../activities/claude-cli.activities';
 import type {
   PlanWriterPackageInput,
   PlanWriterPackageResult
@@ -24,6 +25,10 @@ const mcp = proxyActivities<typeof mcpActivities>({
 });
 
 const plan = proxyActivities<typeof planActivities>({
+  startToCloseTimeout: '10 minutes'
+});
+
+const claudeCli = proxyActivities<typeof claudeCliActivities>({
   startToCloseTimeout: '10 minutes'
 });
 
@@ -124,15 +129,27 @@ export async function PlanWriterPackageWorkflow(
     }
 
     // Step 4: Write plan with context
-    console.log(`[PlanWriterPackageWorkflow] Step 4: Spawning plan writer agent`);
-    const planResult = await plan.spawnPlanWriterAgent({
-      packageId: input.packageId,
-      reason: input.reason,
-      context: {},
-      parentPlanContent,
-      parentPackageId,
-      lineage: lineage.parents
-    });
+    const planMethod = input.planGenerationMethod || 'api'; // Default to API
+    console.log(`[PlanWriterPackageWorkflow] Step 4: Spawning plan writer agent (method: ${planMethod})`);
+
+    // Choose between API or CLI based on configuration
+    const planResult = planMethod === 'cli'
+      ? await claudeCli.spawnClaudeCodePlanWriter({
+          packageId: input.packageId,
+          reason: input.reason,
+          context: {},
+          parentPlanContent,
+          parentPackageId,
+          lineage: lineage.parents
+        })
+      : await plan.spawnPlanWriterAgent({
+          packageId: input.packageId,
+          reason: input.reason,
+          context: {},
+          parentPlanContent,
+          parentPackageId,
+          lineage: lineage.parents
+        });
 
     if (!planResult.success) {
       throw new Error(planResult.error || 'Plan writing failed');
@@ -163,7 +180,7 @@ export async function PlanWriterPackageWorkflow(
       packageId: input.packageId,
       planFilePath: planResult.planFilePath,
       gitBranch,
-      status: 'plan_written'
+      status: 'planning'
     });
 
     console.log(`[PlanWriterPackageWorkflow] MCP updated with plan metadata`);
