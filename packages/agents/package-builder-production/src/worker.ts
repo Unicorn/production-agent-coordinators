@@ -81,21 +81,40 @@ async function run() {
   console.log(`   Max Concurrent Activities: ${maxConcurrentActivities}`);
   console.log(`   Max Concurrent Workflow Tasks: ${maxConcurrentWorkflowTasks}`);
 
+<<<<<<< HEAD
   // Worker 2: 'turn-based-coding' queue (Legacy - kept for backward compatibility)
   // NOTE: CLI agents now handle code generation directly in PackageBuildWorkflow
   // This queue is maintained for backward compatibility but may be removed in future
+=======
+  // Worker 2: 'turn-based-coding' queue (Claude API child workflows)
+  // CRITICAL: Both limits set to 1 to prevent Claude API rate limiting
+  //   - maxConcurrentWorkflowTaskExecutions: 1 limits workflow task concurrency
+  //   - maxConcurrentActivityTaskExecutions: 1 limits Claude API call concurrency (THE KEY!)
+  // maxCachedWorkflows: 0 prevents runtime conflicts when running multiple workers in same process
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
   const turnBasedWorker = await Worker.create({
     taskQueue: 'turn-based-coding',
     workflowsPath: path.join(__dirname, 'workflows'),
     activities,
+<<<<<<< HEAD
     maxConcurrentActivityTaskExecutions: 1,
     maxConcurrentWorkflowTaskExecutions: 1,
     maxCachedWorkflows: 0,
+=======
+    maxConcurrentActivityTaskExecutions: 1, // ← Only 1 concurrent Claude API call
+    maxConcurrentWorkflowTaskExecutions: 1, // ← Only 1 concurrent workflow task
+    maxCachedWorkflows: 0, // ← Disable caching to avoid runtime conflicts
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
   });
 
   console.log('✅ Turn-Based Coding Worker ready (legacy queue)');
   console.log(`   Task Queue: turn-based-coding`);
+<<<<<<< HEAD
   console.log(`   Note: CLI agents now handle code generation in PackageBuildWorkflow`);
+=======
+  console.log(`   Max Concurrent Activities: 1 (Claude API rate limit control)`);
+  console.log(`   Max Concurrent Workflow Tasks: 1`);
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
 
   console.log(`\n   Namespace: ${process.env.TEMPORAL_NAMESPACE || 'default'}`);
   console.log('   Ready to execute all workflow types\n');

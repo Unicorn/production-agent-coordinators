@@ -124,7 +124,11 @@ describe('Response Parser Activities', () => {
           responseText: response,
           packagePath: 'packages/core/test'
         })
+<<<<<<< HEAD
       ).rejects.toThrow('Response missing required "files" array');
+=======
+      ).rejects.toThrow('Response must include "files" array');
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should throw error when files is not an array', async () => {
@@ -138,7 +142,11 @@ describe('Response Parser Activities', () => {
           responseText: response,
           packagePath: 'packages/core/test'
         })
+<<<<<<< HEAD
       ).rejects.toThrow('Response missing required "files" array');
+=======
+      ).rejects.toThrow('Response must include "files" array');
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should throw error when summary is missing', async () => {
@@ -151,7 +159,11 @@ describe('Response Parser Activities', () => {
           responseText: response,
           packagePath: 'packages/core/test'
         })
+<<<<<<< HEAD
       ).rejects.toThrow('Response missing required "summary" string');
+=======
+      ).rejects.toThrow('Response must include "summary" string');
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should throw error when summary is not a string', async () => {
@@ -165,7 +177,11 @@ describe('Response Parser Activities', () => {
           responseText: response,
           packagePath: 'packages/core/test'
         })
+<<<<<<< HEAD
       ).rejects.toThrow('Response missing required "summary" string');
+=======
+      ).rejects.toThrow('Response must include "summary" string');
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should throw error on invalid JSON', async () => {
@@ -203,7 +219,11 @@ describe('Response Parser Activities', () => {
           responseText: response,
           packagePath: 'packages/core/test'
         })
+<<<<<<< HEAD
       ).rejects.toThrow('Invalid operation');
+=======
+      ).rejects.toThrow('Invalid file operation');
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should reject path traversal in file paths', async () => {
@@ -219,7 +239,11 @@ describe('Response Parser Activities', () => {
           responseText: response,
           packagePath: 'packages/core/test'
         })
+<<<<<<< HEAD
       ).rejects.toThrow('Invalid file path');
+=======
+      ).rejects.toThrow('Path traversal detected');
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should handle create operations with valid content', async () => {
@@ -273,16 +297,27 @@ describe('Response Parser Activities', () => {
   });
 
   describe('validateQualityChecklist', () => {
+<<<<<<< HEAD
     it('should pass when all required checklist items are true', () => {
+=======
+    it('should pass when all checklist items are true', () => {
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
       const response = {
         files: [],
         summary: 'Test',
         qualityChecklist: {
+<<<<<<< HEAD
           strictModeEnabled: true,
           noAnyTypes: true,
           testCoverageAbove80: true,
           allPublicFunctionsDocumented: true,
           errorHandlingComplete: true
+=======
+          hasTests: true,
+          hasDocumentation: true,
+          followsStyleGuide: true,
+          noTodoComments: true
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
         }
       };
 
@@ -292,25 +327,40 @@ describe('Response Parser Activities', () => {
       expect(result.warnings).toHaveLength(0);
     });
 
+<<<<<<< HEAD
     it('should fail when required checklist items are missing or false', () => {
+=======
+    it('should warn when checklist items are false', () => {
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
       const response = {
         files: [],
         summary: 'Test',
         qualityChecklist: {
+<<<<<<< HEAD
           strictModeEnabled: false,
           noAnyTypes: true,
           testCoverageAbove80: false
           // Missing: allPublicFunctionsDocumented, errorHandlingComplete
+=======
+          hasTests: false,
+          hasDocumentation: true,
+          followsStyleGuide: false
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
         }
       };
 
       const result = validateQualityChecklist(response);
 
       expect(result.passed).toBe(false);
+<<<<<<< HEAD
       expect(result.warnings).toContain('Quality check failed: strictModeEnabled');
       expect(result.warnings).toContain('Quality check failed: testCoverageAbove80');
       expect(result.warnings).toContain('Quality check failed: allPublicFunctionsDocumented');
       expect(result.warnings).toContain('Quality check failed: errorHandlingComplete');
+=======
+      expect(result.warnings).toContain('Missing tests (hasTests: false)');
+      expect(result.warnings).toContain('Style guide violations (followsStyleGuide: false)');
+>>>>>>> 60f2dcf (chore: commit worktree changes from Cursor IDE)
     });
 
     it('should fail when quality checklist is missing', () => {
