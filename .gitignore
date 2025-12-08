@@ -69,3 +69,4 @@ temp/
 
 # Temporal
 .temporal/
+temporal.db
