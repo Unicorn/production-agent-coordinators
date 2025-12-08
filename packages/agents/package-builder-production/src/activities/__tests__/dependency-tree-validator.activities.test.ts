@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   validatePackagePublishStatus,
+<<<<<<< HEAD
   validateDependencyTreePublishStatus
+=======
+  validateDependencyTreePublishStatus,
+  type PackagePublishStatus,
+  type DependencyTreeValidation
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
 } from '../dependency-tree-validator.activities';
 import * as child_process from 'child_process';
 import * as fs from 'fs/promises';
@@ -412,7 +418,11 @@ describe('Dependency Tree Validator Activities', () => {
       // Call 5: needs-bump package.json
       // Call 6: needs-bump plan file
       let fileCallCount = 0;
+<<<<<<< HEAD
       vi.mocked(fs.readFile).mockImplementation(async (_path: any, _encoding?: any) => {
+=======
+      vi.mocked(fs.readFile).mockImplementation(async (path: any, encoding?: any) => {
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
         fileCallCount++;
 
         if (fileCallCount === 1) {
@@ -477,7 +487,11 @@ describe('Dependency Tree Validator Activities', () => {
 
       // Mock package.json reads (same versions as npm)
       let callCount = 0;
+<<<<<<< HEAD
       vi.mocked(fs.readFile).mockImplementation(async (_path: any) => {
+=======
+      vi.mocked(fs.readFile).mockImplementation(async (path: any) => {
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
         callCount++;
         if (callCount === 1) {
           return JSON.stringify({ version: '1.0.0' });

@@ -314,3 +314,8 @@ git merge visualization-work
 
 
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)

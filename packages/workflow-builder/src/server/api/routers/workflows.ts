@@ -33,7 +33,11 @@ export const workflowsRouter = createTRPCRouter({
         .from('workflows')
         .select(`
           *,
+<<<<<<< HEAD
           
+=======
+          service_display_name,
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
           status:workflow_statuses(id, name, color),
           task_queue:task_queues(id, name),
           created_by_user:users!workflows_created_by_fkey(id, display_name)
@@ -93,7 +97,11 @@ export const workflowsRouter = createTRPCRouter({
         .from('workflows')
         .select(`
           *,
+<<<<<<< HEAD
           
+=======
+          service_display_name,
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
           status:workflow_statuses(id, name, color, description),
           task_queue:task_queues(id, name,  description),
           created_by_user:users!workflows_created_by_fkey(id, display_name, email),

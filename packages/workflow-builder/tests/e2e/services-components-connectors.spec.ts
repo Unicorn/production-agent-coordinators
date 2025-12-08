@@ -15,6 +15,7 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3010';
 
 test.describe('Services Naming and UI', () => {
+<<<<<<< HEAD
   test.beforeEach(async ({ page }) => {
   });
 
@@ -44,6 +45,48 @@ test.describe('Services Naming and UI', () => {
     
         // Verify channel name is displayed - browser MCP showed "Channel: default-queue" in service cards
     // Browser evaluation confirmed: channelElementsCount: 19
+=======
+  test.use({ storageState: 'playwright/.auth/user.json' });
+
+  test.beforeEach(async ({ page }) => {
+    // Navigate to workflows - already authenticated via storage state
+    await page.goto(`${BASE_URL}/workflows`);
+  });
+
+  test('should display "Services" instead of "Workflows" on workflows page', async ({ page }) => {
+    // Browser MCP observation: Page loads in this sequence:
+    // 1. Initial loading state with "Loading..." and progressbar
+    // 2. AuthGuard authenticates (~1 second)
+    // 3. tRPC request to /api/trpc/users.me,workflows.list
+    // 4. Page renders with heading "Services" [ref=e44] and button "New Service" [ref=e46]
+    
+    // Wait for page to load and verify we're on the correct URL (not redirected to signin)
+    await expect(page).toHaveURL(/workflows/, { timeout: 15000 });
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for button first (this confirms React has hydrated and data has loaded)
+    // Browser MCP showed button "New Service" [ref=e46] exists and appears after tRPC request completes
+    // Increased timeout to account for potential test environment delays
+    await expect(page.getByRole('button', { name: 'New Service' })).toBeVisible({ timeout: 20000 });
+    
+    // 3. Wait for heading to be visible (browser MCP confirmed heading exists and appears with button)
+    // Browser evaluation confirmed: h1Exists: true, h1Text: "Services", headingVisible: true
+    // Browser MCP showed: heading "Services" [level=1] [ref=e44] appears together with button
+    await expect(page.getByRole('heading', { name: 'Services', level: 1 })).toBeVisible({ timeout: 15000 });
+  });
+
+  test('should display "Channel" instead of "Task Queue" in service cards', async ({ page }) => {
+    // Wait for page to load - browser MCP confirmed elements exist after load
+    await page.waitForLoadState('networkidle');
+    
+    // Verify we're on the workflows page (not redirected to signin)
+    // Browser MCP confirmed the page loads correctly
+    await expect(page).toHaveURL(/workflows/, { timeout: 15000 });
+    
+    // Browser MCP showed: "Channel: default-queue" appears in service cards
+    // Browser evaluation confirmed: channelElementsCount: 19, channelTexts include "Channel: default-queue"
+    // Wait for channel text to appear (browser MCP confirmed it exists)
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
     const channelText = page.getByText(/Channel:/i).first();
     
     // Check if any services are displayed
@@ -51,6 +94,7 @@ test.describe('Services Naming and UI', () => {
     
     if (hasServices) {
       // If services exist, verify channel text is visible
+<<<<<<< HEAD
       await expect(channelText).toBeVisible({ timeout: 10000 });
     }
     // If no services, that's okay - empty state is acceptable
@@ -64,12 +108,40 @@ test.describe('Services Naming and UI', () => {
     
     // Verify we're on a service detail page
     await expect(page).toHaveURL(/workflows\/[a-f0-9-]{36}$/);
+=======
+      // Browser MCP confirmed this text exists in the rendered page
+      await expect(channelText).toBeVisible({ timeout: 15000 });
+    }
+    // If no services, that's okay - empty state is acceptable
+    // We already verified the URL is correct above
+  });
+
+  test('should navigate to service detail page when clicking a service', async ({ page }) => {
+    await page.waitForLoadState('networkidle');
+    
+    // Click on first service
+    const firstService = page.locator('text=Hello World Demo').first();
+    if (await firstService.count() > 0) {
+      await firstService.click();
+      await page.waitForLoadState('networkidle');
+      
+      // Verify we're on a service detail page
+      await expect(page).toHaveURL(/workflows\/[a-f0-9-]{36}$/);
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
     }
   });
 });
 
 test.describe('Project Connectors', () => {
+<<<<<<< HEAD
   test.beforeEach(async ({ page }) => {
+=======
+  test.use({ storageState: 'playwright/.auth/user.json' });
+
+  test.beforeEach(async ({ page }) => {
+    // Navigate to projects - already authenticated via storage state
+    await page.goto(`${BASE_URL}/projects`);
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
   });
 
   test('should display Connectors tab on project detail page', async ({ page }) => {
@@ -136,7 +208,15 @@ test.describe('Project Connectors', () => {
 });
 
 test.describe('Project Page - Services Tab', () => {
+<<<<<<< HEAD
   test.beforeEach(async ({ page }) => {
+=======
+  test.use({ storageState: 'playwright/.auth/user.json' });
+
+  test.beforeEach(async ({ page }) => {
+    // Navigate to projects - already authenticated via storage state
+    await page.goto(`${BASE_URL}/projects`);
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
   });
 
   test('should display Services tab instead of Workflows tab', async ({ page }) => {
@@ -171,7 +251,15 @@ test.describe('Project Page - Services Tab', () => {
 });
 
 test.describe('Project Details - Channel Name', () => {
+<<<<<<< HEAD
   test.beforeEach(async ({ page }) => {
+=======
+  test.use({ storageState: 'playwright/.auth/user.json' });
+
+  test.beforeEach(async ({ page }) => {
+    // Navigate to projects - already authenticated via storage state
+    await page.goto(`${BASE_URL}/projects`);
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
   });
 
   test('should display "Channel Name" instead of "Task Queue Name"', async ({ page }) => {
@@ -189,7 +277,15 @@ test.describe('Project Details - Channel Name', () => {
 });
 
 test.describe('Service Interfaces', () => {
+<<<<<<< HEAD
   test.beforeEach(async ({ page }) => {
+=======
+  test.use({ storageState: 'playwright/.auth/user.json' });
+
+  test.beforeEach(async ({ page }) => {
+    // Navigate to workflows - already authenticated via storage state
+    await page.goto(`${BASE_URL}/workflows`);
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
   });
 
   test('should navigate to service detail page to view interfaces', async ({ page }) => {
@@ -208,7 +304,15 @@ test.describe('Service Interfaces', () => {
 });
 
 test.describe('Database Connections Tab', () => {
+<<<<<<< HEAD
   test.beforeEach(async ({ page }) => {
+=======
+  test.use({ storageState: 'playwright/.auth/user.json' });
+
+  test.beforeEach(async ({ page }) => {
+    // Navigate to projects - already authenticated via storage state
+    await page.goto(`${BASE_URL}/projects`);
+>>>>>>> 9a45c12 (chore: commit worktree changes from Cursor IDE)
   });
 
   test('should display Database Connections tab on project page', async ({ page }) => {
