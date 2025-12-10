@@ -1,0 +1,23 @@
+# Kong Service Configuration for Workflow Builder
+# Defines the backend service that routes point to
+
+_format_version: "3.0"
+
+services:
+  # Main workflow builder service
+  - name: workflow-builder-service
+    url: http://workflow-builder-upstream
+    protocol: http
+    connect_timeout: 5000
+    read_timeout: 60000
+    write_timeout: 60000
+    retries: 3
+
+  # Workflow API handler service (hash-based routing)
+  - name: workflow-api-handler
+    url: http://workflow-builder-upstream
+    protocol: http
+    connect_timeout: 60000
+    read_timeout: 60000
+    write_timeout: 60000
+    retries: 5

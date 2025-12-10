@@ -1,0 +1,91 @@
+# Kong Route Configuration for Workflow Builder
+# Defines URL paths and methods that map to services
+
+_format_version: "3.0"
+
+routes:
+  # tRPC endpoints - main application API
+  - name: trpc-route
+    service: workflow-builder-service
+    paths:
+      - /api/trpc
+    strip_path: false
+    preserve_host: true
+    methods:
+      - GET
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Authentication endpoints
+  - name: auth-route
+    service: workflow-builder-service
+    paths:
+      - /api/auth
+    strip_path: false
+    preserve_host: true
+    methods:
+      - GET
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Compiler endpoints (resource intensive)
+  - name: compiler-route
+    service: workflow-builder-service
+    paths:
+      - /api/compiler
+    strip_path: false
+    preserve_host: true
+    methods:
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Deployment endpoints
+  - name: deploy-route
+    service: workflow-builder-service
+    paths:
+      - /api/deploy
+    strip_path: false
+    preserve_host: true
+    methods:
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Health check endpoint (no auth required)
+  - name: health-route
+    service: workflow-builder-service
+    paths:
+      - /api/health
+    strip_path: false
+    preserve_host: true
+    methods:
+      - GET
+    protocols:
+      - http
+      - https
+
+  # Workflow API v1 endpoints (hash-based routing)
+  # These are created dynamically via the Kong Admin API
+  # when workflows are published. This is a template.
+  - name: workflow-api-v1-route
+    service: workflow-api-handler
+    paths:
+      - /api/v1
+    strip_path: false
+    preserve_host: false
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - PATCH
+    protocols:
+      - http
+      - https

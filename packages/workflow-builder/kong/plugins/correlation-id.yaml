@@ -1,0 +1,12 @@
+# Kong Correlation ID Plugin Configuration
+# Adds unique request IDs for tracing and debugging
+
+_format_version: "3.0"
+
+plugins:
+  # Global correlation ID - applies to all routes
+  - name: correlation-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+      echo_downstream: true

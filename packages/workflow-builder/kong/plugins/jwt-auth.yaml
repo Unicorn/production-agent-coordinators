@@ -1,0 +1,43 @@
+# Kong JWT Authentication Plugin Configuration
+# Enables JWT validation for protected routes using Supabase JWT
+
+_format_version: "3.0"
+
+plugins:
+  # JWT auth for tRPC routes
+  - name: jwt
+    route: trpc-route
+    config:
+      key_claim_name: sub
+      claims_to_verify:
+        - exp
+      secret_is_base64: false
+      # JWT secret is configured via environment variable
+      # KONG_JWT_SECRET or via Kong Admin API
+      run_on_preflight: true
+      maximum_expiration: 86400  # 24 hours
+
+  # JWT auth for compiler routes
+  - name: jwt
+    route: compiler-route
+    config:
+      key_claim_name: sub
+      claims_to_verify:
+        - exp
+      secret_is_base64: false
+      run_on_preflight: true
+      maximum_expiration: 86400
+
+  # JWT auth for deploy routes
+  - name: jwt
+    route: deploy-route
+    config:
+      key_claim_name: sub
+      claims_to_verify:
+        - exp
+      secret_is_base64: false
+      run_on_preflight: true
+      maximum_expiration: 86400
+
+  # Note: health-route and auth-route do NOT have JWT enabled
+  # to allow public access for health checks and initial auth

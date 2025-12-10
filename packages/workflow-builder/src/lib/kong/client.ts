@@ -220,5 +220,164 @@ export class KongClient {
       return false;
     }
   }
+
+  /**
+   * Enable JWT authentication plugin on a route
+   */
+  async enableJwtAuth(
+    routeId: string,
+    config?: {
+      keyClaimName?: string;
+      claimsToVerify?: string[];
+      maximumExpiration?: number;
+    }
+  ): Promise<void> {
+    const pluginConfig = {
+      key_claim_name: config?.keyClaimName || 'sub',
+      claims_to_verify: config?.claimsToVerify || ['exp'],
+      secret_is_base64: false,
+      run_on_preflight: true,
+      maximum_expiration: config?.maximumExpiration || 86400, // 24 hours default
+    };
+
+    await this.enablePlugin(routeId, 'jwt', pluginConfig);
+  }
+
+  /**
+   * Create a JWT consumer and credentials
+   * This is needed for Kong to validate JWTs
+   */
+  async createJwtConsumer(
+    consumerId: string,
+    jwtSecret: string,
+    algorithm: 'HS256' | 'HS384' | 'HS512' | 'RS256' | 'RS384' | 'RS512' = 'HS256'
+  ): Promise<{ key: string; secret: string }> {
+    // First create or get consumer
+    let consumer;
+    try {
+      const getResponse = await fetch(`${this.adminUrl}/consumers/${consumerId}`, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      });
+
+      if (getResponse.ok) {
+        consumer = await getResponse.json();
+      } else if (getResponse.status === 404) {
+        // Create consumer
+        const createResponse = await fetch(`${this.adminUrl}/consumers`, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({ username: consumerId }),
+        });
+
+        if (!createResponse.ok) {
+          const error = await createResponse.text();
+          throw new Error(`Failed to create consumer: ${createResponse.status} ${error}`);
+        }
+
+        consumer = await createResponse.json();
+      } else {
+        const error = await getResponse.text();
+        throw new Error(`Failed to get consumer: ${getResponse.status} ${error}`);
+      }
+    } catch (error) {
+      throw error;
+    }
+
+    // Create JWT credential for consumer
+    const response = await fetch(`${this.adminUrl}/consumers/${consumer.id}/jwt`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        algorithm,
+        secret: jwtSecret,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to create JWT credential: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+      key: data.key,
+      secret: data.secret,
+    };
+  }
+
+  /**
+   * Enable correlation-id plugin globally or on a route
+   */
+  async enableCorrelationId(
+    routeId?: string,
+    config?: {
+      headerName?: string;
+      generator?: 'uuid' | 'uuid#counter' | 'tracker';
+      echoDownstream?: boolean;
+    }
+  ): Promise<void> {
+    const pluginConfig = {
+      header_name: config?.headerName || 'X-Request-ID',
+      generator: config?.generator || 'uuid',
+      echo_downstream: config?.echoDownstream ?? true,
+    };
+
+    if (routeId) {
+      await this.enablePlugin(routeId, 'correlation-id', pluginConfig);
+    } else {
+      // Enable globally
+      const response = await fetch(`${this.adminUrl}/plugins`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          name: 'correlation-id',
+          config: pluginConfig,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to enable correlation-id plugin: ${response.status} ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Get plugin by name on a route
+   */
+  async getPluginOnRoute(routeId: string, pluginName: string): Promise<any | null> {
+    const response = await fetch(`${this.adminUrl}/routes/${routeId}/plugins`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const plugin = data.data?.find((p: any) => p.name === pluginName);
+    return plugin || null;
+  }
+
+  /**
+   * Delete a plugin from a route
+   */
+  async deletePlugin(pluginId: string): Promise<void> {
+    const response = await fetch(`${this.adminUrl}/plugins/${pluginId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+
+    if (response.status === 404) {
+      return; // Already deleted
+    }
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to delete plugin: ${response.status} ${error}`);
+    }
+  }
 }
 

@@ -1,0 +1,27 @@
+# Kong Declarative Configuration
+# Main configuration file for workflow-builder Kong API Gateway
+#
+# This file can be used with `kong config db_import kong.yaml`
+# or referenced by individual YAML files in subdirectories.
+#
+# For development, Kong is typically configured dynamically via the Admin API
+# using the KongClient in src/lib/kong/client.ts. This declarative config
+# serves as documentation and can be used for production deployments.
+
+_format_version: "3.0"
+_transform: true
+
+# Import configurations from subdirectories
+# Note: Kong doesn't natively support imports, but this structure
+# documents the expected configuration. Use kong-setup.sh to apply.
+
+# See individual files:
+# - upstreams/workflow-builder.yaml
+# - services/workflow-builder.yaml
+# - routes/api-routes.yaml
+# - plugins/jwt-auth.yaml
+# - plugins/api-key-auth.yaml
+# - plugins/rate-limiting.yaml
+# - plugins/logging.yaml
+# - plugins/correlation-id.yaml
+# - plugins/cors.yaml

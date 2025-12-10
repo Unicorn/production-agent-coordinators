@@ -1,0 +1,65 @@
+# Kong Rate Limiting Plugin Configuration
+# Protects endpoints from abuse with tiered rate limits
+
+_format_version: "3.0"
+
+plugins:
+  # Global rate limit (applies to all routes without specific limits)
+  - name: rate-limiting
+    config:
+      minute: 1000
+      hour: 10000
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      error_code: 429
+      error_message: "Rate limit exceeded. Please try again later."
+
+  # Compiler endpoint - resource intensive, stricter limits
+  - name: rate-limiting
+    route: compiler-route
+    config:
+      minute: 100
+      hour: 1000
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      error_code: 429
+      error_message: "Compiler rate limit exceeded. Please wait before compiling again."
+
+  # Deploy endpoint - moderate limits
+  - name: rate-limiting
+    route: deploy-route
+    config:
+      minute: 50
+      hour: 500
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      error_code: 429
+      error_message: "Deployment rate limit exceeded."
+
+  # Auth endpoint - security-focused, strict limits
+  - name: rate-limiting
+    route: auth-route
+    config:
+      minute: 20
+      hour: 200
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      error_code: 429
+      error_message: "Too many authentication attempts. Please wait."
+
+  # Workflow API v1 - per-endpoint limits are applied dynamically
+  # This is a default limit; specific endpoints can override
+  - name: rate-limiting
+    route: workflow-api-v1-route
+    config:
+      minute: 60
+      hour: 1000
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      error_code: 429
+      error_message: "API rate limit exceeded."

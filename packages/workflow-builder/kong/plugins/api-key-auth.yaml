@@ -1,0 +1,46 @@
+# Kong API Key Authentication Plugin Configuration
+# Enables API key authentication for service-to-service communication
+# and workflow API endpoints
+
+_format_version: "3.0"
+
+plugins:
+  # API key auth for compiler routes (service-to-service)
+  - name: key-auth
+    route: compiler-route
+    config:
+      key_names:
+        - X-API-Key
+        - apikey
+        - api_key
+      key_in_header: true
+      key_in_query: false
+      key_in_body: false
+      hide_credentials: true
+      run_on_preflight: true
+
+  # API key auth for deploy routes
+  - name: key-auth
+    route: deploy-route
+    config:
+      key_names:
+        - X-API-Key
+        - apikey
+      key_in_header: true
+      key_in_query: false
+      key_in_body: false
+      hide_credentials: true
+      run_on_preflight: true
+
+  # API key auth for workflow API v1 routes
+  # This is the primary auth mechanism for published workflow endpoints
+  - name: key-auth
+    route: workflow-api-v1-route
+    config:
+      key_names:
+        - X-API-Key
+      key_in_header: true
+      key_in_query: false
+      key_in_body: false
+      hide_credentials: true
+      run_on_preflight: true

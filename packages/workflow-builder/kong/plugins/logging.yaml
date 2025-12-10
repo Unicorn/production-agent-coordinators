@@ -1,0 +1,27 @@
+# Kong Logging Plugin Configuration
+# Enables request/response logging for monitoring and debugging
+
+_format_version: "3.0"
+
+plugins:
+  # File logging for development
+  - name: file-log
+    config:
+      path: /var/log/kong/access.log
+      reopen: true
+
+  # HTTP logging for production (configure endpoint via environment)
+  # Uncomment and configure for production use
+  # - name: http-log
+  #   config:
+  #     http_endpoint: ${KONG_LOG_ENDPOINT}
+  #     method: POST
+  #     timeout: 10000
+  #     keepalive: 60000
+  #     flush_timeout: 2
+  #     retry_count: 3
+  #     queue_size: 1000
+  #     content_type: application/json
+  #     custom_fields_by_lua:
+  #       request_id: "return kong.request.get_header('X-Request-ID')"
+  #       user_id: "return kong.request.get_header('X-User-ID')"
