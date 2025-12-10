@@ -1,0 +1,119 @@
+{
+  "id": "wf-cross-service-001",
+  "name": "CrossServiceWorkflow",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "trigger",
+      "data": {
+        "label": "Start",
+        "componentName": "Start",
+        "triggerType": "manual"
+      },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "get-project-var-1",
+      "type": "state-variable",
+      "data": {
+        "label": "GetSharedConfig",
+        "componentName": "GetVariable",
+        "variableName": "sharedConfig",
+        "variableScope": "project",
+        "defaultValue": { "version": "1.0.0" },
+        "throwIfMissing": false
+      },
+      "position": { "x": 100, "y": 0 }
+    },
+    {
+      "id": "log-config-1",
+      "type": "activity",
+      "data": {
+        "label": "LogConfig",
+        "componentName": "Log",
+        "logMessage": "Loaded shared config: ${JSON.stringify(result_get_project_var_1.value)}",
+        "logLevel": "info",
+        "includeWorkflowContext": true
+      },
+      "position": { "x": 200, "y": 0 }
+    },
+    {
+      "id": "process-1",
+      "type": "activity",
+      "data": {
+        "label": "ProcessData",
+        "activityName": "processData",
+        "timeout": "30s"
+      },
+      "position": { "x": 300, "y": 0 }
+    },
+    {
+      "id": "set-project-var-1",
+      "type": "state-variable",
+      "data": {
+        "label": "UpdateStatus",
+        "componentName": "SetVariable",
+        "variableName": "lastProcessed",
+        "variableScope": "project",
+        "valueExpression": "{ timestamp: new Date().toISOString(), serviceId: workflowInfo().workflowId }",
+        "createIfMissing": true,
+        "merge": false
+      },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "get-service-var-1",
+      "type": "state-variable",
+      "data": {
+        "label": "GetServiceState",
+        "componentName": "GetVariable",
+        "variableName": "serviceState",
+        "variableScope": "service",
+        "defaultValue": { "status": "idle" }
+      },
+      "position": { "x": 500, "y": 0 }
+    },
+    {
+      "id": "set-service-var-1",
+      "type": "state-variable",
+      "data": {
+        "label": "UpdateServiceState",
+        "componentName": "SetVariable",
+        "variableName": "serviceState",
+        "variableScope": "service",
+        "staticValue": { "status": "completed", "processedAt": "runtime" },
+        "createIfMissing": true,
+        "merge": true
+      },
+      "position": { "x": 600, "y": 0 }
+    },
+    {
+      "id": "stop-1",
+      "type": "end",
+      "data": {
+        "label": "Stop",
+        "componentName": "Stop",
+        "resultMapping": "{ success: true, sharedConfig: result_get_project_var_1.value }",
+        "includeMetadata": true
+      },
+      "position": { "x": 700, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "edge-1", "source": "start-1", "target": "get-project-var-1" },
+    { "id": "edge-2", "source": "get-project-var-1", "target": "log-config-1" },
+    { "id": "edge-3", "source": "log-config-1", "target": "process-1" },
+    { "id": "edge-4", "source": "process-1", "target": "set-project-var-1" },
+    { "id": "edge-5", "source": "set-project-var-1", "target": "get-service-var-1" },
+    { "id": "edge-6", "source": "get-service-var-1", "target": "set-service-var-1" },
+    { "id": "edge-7", "source": "set-service-var-1", "target": "stop-1" }
+  ],
+  "variables": [
+    {
+      "name": "processedData",
+      "type": "object",
+      "defaultValue": {},
+      "description": "Local workflow state for processed data"
+    }
+  ]
+}

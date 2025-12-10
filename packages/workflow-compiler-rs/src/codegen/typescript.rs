@@ -2,9 +2,15 @@
 
 use serde::Serialize;
 
-use crate::schema::{LogConfig, LogLevel, NodeType, StartConfig, StopConfig, WorkflowDefinition, WorkflowNode};
+use crate::schema::{
+    GetVariableConfig, LogConfig, LogLevel, NodeType, ServiceVariableConfig, SetVariableConfig,
+    StartConfig, StopConfig, VariableScope, WorkflowDefinition, WorkflowNode,
+};
 
-use super::components::{generate_log_code, generate_start_code, generate_stop_code};
+use super::components::{
+    generate_get_variable_code, generate_log_code, generate_service_variable_code,
+    generate_set_variable_code, generate_start_code, generate_stop_code,
+};
 use super::{get_handlebars, CodeGenOptions, GeneratedCode};
 
 /// Template data for workflow generation
@@ -296,6 +302,34 @@ impl<'a> TypeScriptGenerator<'a> {
                     )
                 })
             }
+            NodeType::StateVariable => {
+                // Handle variable operations based on component name
+                let component_name = node.data.component_name.as_deref().unwrap_or("ServiceVariable");
+
+                match component_name {
+                    "ServiceVariable" | "service-variable" => {
+                        let config = self.extract_service_variable_config(node);
+                        let pattern = generate_service_variable_code(&config, &node.id);
+                        Some(pattern.code)
+                    }
+                    "GetVariable" | "get-variable" => {
+                        let config = self.extract_get_variable_config(node);
+                        let pattern = generate_get_variable_code(&config, &node.id);
+                        Some(pattern.code)
+                    }
+                    "SetVariable" | "set-variable" => {
+                        let config = self.extract_set_variable_config(node);
+                        let pattern = generate_set_variable_code(&config, &node.id);
+                        Some(pattern.code)
+                    }
+                    _ => {
+                        // Default to service variable
+                        let config = self.extract_service_variable_config(node);
+                        let pattern = generate_service_variable_code(&config, &node.id);
+                        Some(pattern.code)
+                    }
+                }
+            }
             _ => None,
         }
     }
@@ -339,6 +373,95 @@ impl<'a> TypeScriptGenerator<'a> {
                 .unwrap_or_default(),
             metadata: None, // TODO: extract from node.data.metadata if present
             include_workflow_context: node.data.include_workflow_context.unwrap_or(true),
+        }
+    }
+
+    /// Extract ServiceVariableConfig from node data
+    fn extract_service_variable_config(&self, node: &WorkflowNode) -> ServiceVariableConfig {
+        use crate::schema::{PersistenceStrategy, RuntimeVariableType};
+
+        ServiceVariableConfig {
+            name: node
+                .data
+                .variable_name
+                .clone()
+                .unwrap_or_else(|| node.data.label.clone()),
+            variable_type: node
+                .data
+                .variable_type
+                .as_ref()
+                .map(|t| match t.to_lowercase().as_str() {
+                    "string" => RuntimeVariableType::String,
+                    "number" => RuntimeVariableType::Number,
+                    "boolean" => RuntimeVariableType::Boolean,
+                    "object" => RuntimeVariableType::Object,
+                    "array" => RuntimeVariableType::Array,
+                    _ => RuntimeVariableType::Any,
+                })
+                .unwrap_or_default(),
+            default_value: node.data.default_value.clone(),
+            description: None,
+            required: false,
+            persistence: node
+                .data
+                .persistence
+                .as_ref()
+                .map(|p| match p.to_lowercase().as_str() {
+                    "in-memory" | "inmemory" => PersistenceStrategy::InMemory,
+                    "workflow-state" | "workflowstate" => PersistenceStrategy::WorkflowState,
+                    "external-store" | "externalstore" => PersistenceStrategy::ExternalStore,
+                    _ => PersistenceStrategy::WorkflowState,
+                })
+                .unwrap_or_default(),
+            ttl: node.data.ttl.clone(),
+        }
+    }
+
+    /// Extract GetVariableConfig from node data
+    fn extract_get_variable_config(&self, node: &WorkflowNode) -> GetVariableConfig {
+        GetVariableConfig {
+            name: node
+                .data
+                .variable_name
+                .clone()
+                .unwrap_or_else(|| node.data.label.clone()),
+            scope: node
+                .data
+                .variable_scope
+                .as_ref()
+                .map(|s| match s.to_lowercase().as_str() {
+                    "service" => VariableScope::Service,
+                    "project" => VariableScope::Project,
+                    _ => VariableScope::Workflow,
+                })
+                .unwrap_or_default(),
+            default_value: node.data.default_value.clone(),
+            throw_if_missing: node.data.throw_if_missing.unwrap_or(false),
+        }
+    }
+
+    /// Extract SetVariableConfig from node data
+    fn extract_set_variable_config(&self, node: &WorkflowNode) -> SetVariableConfig {
+        SetVariableConfig {
+            name: node
+                .data
+                .variable_name
+                .clone()
+                .unwrap_or_else(|| node.data.label.clone()),
+            scope: node
+                .data
+                .variable_scope
+                .as_ref()
+                .map(|s| match s.to_lowercase().as_str() {
+                    "service" => VariableScope::Service,
+                    "project" => VariableScope::Project,
+                    _ => VariableScope::Workflow,
+                })
+                .unwrap_or_default(),
+            value_expression: node.data.value_expression.clone(),
+            static_value: node.data.static_value.clone(),
+            create_if_missing: node.data.create_if_missing.unwrap_or(true),
+            merge: node.data.merge.unwrap_or(false),
         }
     }
 }

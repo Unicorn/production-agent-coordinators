@@ -146,6 +146,28 @@ pub struct NodeData {
     pub log_level: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_workflow_context: Option<bool>,
+
+    // Variable component fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variable_scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persistence: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_services: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub throw_if_missing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub create_if_missing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_expression: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub static_value: Option<serde_json::Value>,
 }
 
 /// Workflow node with strict typing

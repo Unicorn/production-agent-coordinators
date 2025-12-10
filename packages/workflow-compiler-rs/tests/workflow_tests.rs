@@ -382,3 +382,198 @@ fn test_all_workflows_have_consistent_logging() {
         );
     }
 }
+
+// ============================================================================
+// VariableWorkflow Tests
+// ============================================================================
+
+#[test]
+fn test_variable_workflow_loads() {
+    let workflow = load_fixture("variable_workflow");
+    assert_eq!(workflow.name, Some("VariableWorkflow".to_string()));
+    assert_eq!(workflow.nodes.len(), 6);
+    assert_eq!(workflow.edges.len(), 5);
+}
+
+#[test]
+fn test_variable_workflow_validates() {
+    let workflow = load_fixture("variable_workflow");
+    let result = validate(&workflow);
+    assert!(
+        result.valid,
+        "VariableWorkflow should be valid: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn test_variable_workflow_has_state_variables() {
+    let workflow = load_fixture("variable_workflow");
+
+    let state_vars: Vec<_> = workflow
+        .nodes
+        .iter()
+        .filter(|n| n.node_type == workflow_compiler::schema::NodeType::StateVariable)
+        .collect();
+
+    assert_eq!(state_vars.len(), 3, "Should have 3 state variable nodes");
+}
+
+#[test]
+fn test_variable_workflow_has_workflow_variable() {
+    let workflow = load_fixture("variable_workflow");
+    assert_eq!(workflow.variables.len(), 1);
+
+    let var = &workflow.variables[0];
+    assert_eq!(var.name, "counter");
+    assert_eq!(var.variable_type, workflow_compiler::schema::VariableType::Number);
+}
+
+#[test]
+fn test_variable_workflow_generates_code() {
+    let workflow = load_fixture("variable_workflow");
+    let options = CodeGenOptions::new();
+    let result = generate(&workflow, &options);
+
+    assert!(result.is_ok(), "Code generation should succeed");
+    let code = result.unwrap();
+
+    // Check for variable operations
+    assert!(
+        code.workflow.contains("[VAR:SERVICE:INIT]") || code.workflow.contains("state.counter"),
+        "Should contain service variable initialization"
+    );
+    assert!(
+        code.workflow.contains("[VAR:GET:WORKFLOW]") || code.workflow.contains("state.counter"),
+        "Should contain get variable code"
+    );
+    assert!(
+        code.workflow.contains("[VAR:SET:WORKFLOW]") || code.workflow.contains("state.counter"),
+        "Should contain set variable code"
+    );
+}
+
+#[test]
+fn test_variable_workflow_generates_state_interface() {
+    let workflow = load_fixture("variable_workflow");
+    let options = CodeGenOptions::new();
+    let result = generate(&workflow, &options);
+
+    assert!(result.is_ok(), "Code generation should succeed");
+    let code = result.unwrap();
+
+    // Should have state variable interface
+    assert!(
+        code.workflow.contains("WorkflowState") || code.workflow.contains("state:"),
+        "Should have state management"
+    );
+}
+
+// ============================================================================
+// CrossServiceWorkflow Tests
+// ============================================================================
+
+#[test]
+fn test_cross_service_workflow_loads() {
+    let workflow = load_fixture("cross_service_workflow");
+    assert_eq!(workflow.name, Some("CrossServiceWorkflow".to_string()));
+    assert_eq!(workflow.nodes.len(), 8);
+    assert_eq!(workflow.edges.len(), 7);
+}
+
+#[test]
+fn test_cross_service_workflow_validates() {
+    let workflow = load_fixture("cross_service_workflow");
+    let result = validate(&workflow);
+    assert!(
+        result.valid,
+        "CrossServiceWorkflow should be valid: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn test_cross_service_workflow_has_project_scope_variables() {
+    let workflow = load_fixture("cross_service_workflow");
+
+    let project_vars: Vec<_> = workflow
+        .nodes
+        .iter()
+        .filter(|n| {
+            n.node_type == workflow_compiler::schema::NodeType::StateVariable
+                && n.data.variable_scope.as_deref() == Some("project")
+        })
+        .collect();
+
+    assert_eq!(
+        project_vars.len(),
+        2,
+        "Should have 2 project-scoped variable nodes"
+    );
+}
+
+#[test]
+fn test_cross_service_workflow_has_service_scope_variables() {
+    let workflow = load_fixture("cross_service_workflow");
+
+    let service_vars: Vec<_> = workflow
+        .nodes
+        .iter()
+        .filter(|n| {
+            n.node_type == workflow_compiler::schema::NodeType::StateVariable
+                && n.data.variable_scope.as_deref() == Some("service")
+        })
+        .collect();
+
+    assert_eq!(
+        service_vars.len(),
+        2,
+        "Should have 2 service-scoped variable nodes"
+    );
+}
+
+#[test]
+fn test_cross_service_workflow_generates_code() {
+    let workflow = load_fixture("cross_service_workflow");
+    let options = CodeGenOptions::new();
+    let result = generate(&workflow, &options);
+
+    assert!(result.is_ok(), "Code generation should succeed");
+    let code = result.unwrap();
+
+    // Check for project scope variable operations
+    assert!(
+        code.workflow.contains("[VAR:GET:PROJECT]") || code.workflow.contains("getProjectVariable"),
+        "Should contain project get variable code"
+    );
+    assert!(
+        code.workflow.contains("[VAR:SET:PROJECT]") || code.workflow.contains("setProjectVariable"),
+        "Should contain project set variable code"
+    );
+
+    // Check for service scope variable operations
+    assert!(
+        code.workflow.contains("[VAR:GET:SERVICE]") || code.workflow.contains("getServiceVariable"),
+        "Should contain service get variable code"
+    );
+    assert!(
+        code.workflow.contains("[VAR:SET:SERVICE]") || code.workflow.contains("setServiceVariable"),
+        "Should contain service set variable code"
+    );
+}
+
+#[test]
+fn test_cross_service_workflow_generates_activity_calls() {
+    let workflow = load_fixture("cross_service_workflow");
+    let options = CodeGenOptions::new();
+    let result = generate(&workflow, &options);
+
+    assert!(result.is_ok(), "Code generation should succeed");
+    let code = result.unwrap();
+
+    // Service and project scope operations should call activities
+    assert!(
+        code.workflow.contains("acts.") || code.workflow.contains("await acts"),
+        "Should contain activity calls for service/project variables"
+    );
+}

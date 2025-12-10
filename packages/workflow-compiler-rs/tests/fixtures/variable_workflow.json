@@ -1,0 +1,91 @@
+{
+  "id": "wf-variables-001",
+  "name": "VariableWorkflow",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "trigger",
+      "data": {
+        "label": "Start",
+        "componentName": "Start",
+        "triggerType": "manual"
+      },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "var-init-1",
+      "type": "state-variable",
+      "data": {
+        "label": "counter",
+        "componentName": "ServiceVariable",
+        "variableName": "counter",
+        "variableType": "number",
+        "defaultValue": 0,
+        "persistence": "workflow-state"
+      },
+      "position": { "x": 100, "y": 0 }
+    },
+    {
+      "id": "var-get-1",
+      "type": "state-variable",
+      "data": {
+        "label": "GetCounter",
+        "componentName": "GetVariable",
+        "variableName": "counter",
+        "variableScope": "workflow",
+        "defaultValue": 0
+      },
+      "position": { "x": 200, "y": 0 }
+    },
+    {
+      "id": "var-set-1",
+      "type": "state-variable",
+      "data": {
+        "label": "IncrementCounter",
+        "componentName": "SetVariable",
+        "variableName": "counter",
+        "variableScope": "workflow",
+        "valueExpression": "state.counter + 1"
+      },
+      "position": { "x": 300, "y": 0 }
+    },
+    {
+      "id": "log-1",
+      "type": "activity",
+      "data": {
+        "label": "LogCounter",
+        "componentName": "Log",
+        "logMessage": "Counter value: ${state.counter}",
+        "logLevel": "info",
+        "includeWorkflowContext": true
+      },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "stop-1",
+      "type": "end",
+      "data": {
+        "label": "Stop",
+        "componentName": "Stop",
+        "resultMapping": "{ counter: state.counter }",
+        "includeMetadata": true
+      },
+      "position": { "x": 500, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "edge-1", "source": "start-1", "target": "var-init-1" },
+    { "id": "edge-2", "source": "var-init-1", "target": "var-get-1" },
+    { "id": "edge-3", "source": "var-get-1", "target": "var-set-1" },
+    { "id": "edge-4", "source": "var-set-1", "target": "log-1" },
+    { "id": "edge-5", "source": "log-1", "target": "stop-1" }
+  ],
+  "variables": [
+    {
+      "name": "counter",
+      "type": "number",
+      "defaultValue": 0,
+      "description": "A counter variable to track iterations"
+    }
+  ]
+}
