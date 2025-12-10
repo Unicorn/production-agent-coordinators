@@ -1,0 +1,39 @@
+{
+  "id": "simple-workflow-001",
+  "name": "SimpleWorkflow",
+  "description": "Basic workflow: Start -> Stop",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "trigger",
+      "position": { "x": 100, "y": 100 },
+      "data": {
+        "label": "Start",
+        "triggerType": "manual"
+      }
+    },
+    {
+      "id": "stop-1",
+      "type": "end",
+      "position": { "x": 100, "y": 300 },
+      "data": {
+        "label": "Stop",
+        "resultMapping": "input",
+        "includeMetadata": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "start-1",
+      "target": "stop-1"
+    }
+  ],
+  "variables": [],
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-01-01T00:00:00Z",
+    "updatedAt": "2025-01-01T00:00:00Z"
+  }
+}

@@ -70,3 +70,4 @@ temp/
 
 # Temporal
 .temporal/
+packages/workflow-compiler-rs/target/

@@ -1,0 +1,195 @@
+# Kong Declarative Configuration for Workflow Compiler Service
+#
+# This file can be used with Kong's declarative configuration mode
+# or imported via the Admin API.
+#
+# Usage:
+#   kong config db_import kong.yaml
+#   or
+#   Use Kong Admin API to create services/routes programmatically
+
+_format_version: "3.0"
+
+services:
+  - name: workflow-compiler
+    url: http://workflow-compiler:3020
+    protocol: http
+    host: workflow-compiler
+    port: 3020
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 5
+    tags:
+      - workflow
+      - compiler
+      - internal
+
+routes:
+  # Compile endpoint - main compilation route
+  - name: workflow-compiler-compile
+    service: workflow-compiler
+    paths:
+      - /api/v1/compile
+    methods:
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - workflow
+      - compiler
+
+  # Validate endpoint - validation only
+  - name: workflow-compiler-validate
+    service: workflow-compiler
+    paths:
+      - /api/v1/compile/validate
+    methods:
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - workflow
+      - compiler
+
+  # Generate endpoint - code generation without verification
+  - name: workflow-compiler-generate
+    service: workflow-compiler
+    paths:
+      - /api/v1/compile/generate
+    methods:
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - workflow
+      - compiler
+
+  # Verify endpoint - verify generated code
+  - name: workflow-compiler-verify
+    service: workflow-compiler
+    paths:
+      - /api/v1/compile/verify
+    methods:
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - workflow
+      - compiler
+
+  # Full compile endpoint - validate + generate + verify
+  - name: workflow-compiler-full
+    service: workflow-compiler
+    paths:
+      - /api/v1/compile/full
+    methods:
+      - POST
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - workflow
+      - compiler
+
+  # Schema endpoint
+  - name: workflow-compiler-schema
+    service: workflow-compiler
+    paths:
+      - /api/v1/schema
+    methods:
+      - GET
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - workflow
+      - compiler
+
+  # Version endpoint
+  - name: workflow-compiler-version
+    service: workflow-compiler
+    paths:
+      - /api/v1/version
+    methods:
+      - GET
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - workflow
+      - compiler
+
+  # Health check endpoints
+  - name: workflow-compiler-health
+    service: workflow-compiler
+    paths:
+      - /health
+      - /healthz
+    methods:
+      - GET
+    strip_path: false
+    preserve_host: false
+    protocols:
+      - http
+      - https
+    tags:
+      - health
+      - workflow
+
+plugins:
+  # Rate limiting for compile endpoints
+  - name: rate-limiting
+    route: workflow-compiler-compile
+    config:
+      minute: 30
+      hour: 500
+      policy: local
+
+  - name: rate-limiting
+    route: workflow-compiler-full
+    config:
+      minute: 10
+      hour: 100
+      policy: local
+
+  # Request/response logging
+  - name: file-log
+    service: workflow-compiler
+    config:
+      path: /var/log/kong/workflow-compiler.log
+
+  # Request size limiting (large workflows)
+  - name: request-size-limiting
+    service: workflow-compiler
+    config:
+      allowed_payload_size: 10
+      size_unit: megabytes
+
+  # Response transformer for consistent headers
+  - name: response-transformer
+    service: workflow-compiler
+    config:
+      add:
+        headers:
+          - X-Service-Name:workflow-compiler
+          - X-Service-Version:0.1.0

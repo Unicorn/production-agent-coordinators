@@ -1,0 +1,97 @@
+{
+  "id": "base-long-running-workflow-001",
+  "name": "BaseLongRunningWorkflow",
+  "description": "Long-running workflow with continue-as-new pattern: Start -> Loop (Log) -> Stop",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "trigger",
+      "position": { "x": 100, "y": 100 },
+      "data": {
+        "label": "Start",
+        "triggerType": "manual"
+      }
+    },
+    {
+      "id": "loop-1",
+      "type": "loop",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "label": "Processing Loop",
+        "condition": "state.iteration < state.maxIterations",
+        "continueAsNew": true,
+        "maxIterationsBeforeReset": 1000
+      }
+    },
+    {
+      "id": "log-1",
+      "type": "activity",
+      "position": { "x": 100, "y": 300 },
+      "data": {
+        "label": "Log Iteration",
+        "componentName": "Log",
+        "activityName": "log",
+        "logMessage": "Processing iteration ${state.iteration}",
+        "logLevel": "debug",
+        "includeWorkflowContext": true
+      }
+    },
+    {
+      "id": "stop-1",
+      "type": "end",
+      "position": { "x": 100, "y": 400 },
+      "data": {
+        "label": "Complete",
+        "resultMapping": "{ totalIterations: state.iteration }",
+        "includeMetadata": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "start-1",
+      "target": "loop-1"
+    },
+    {
+      "id": "edge-2",
+      "source": "loop-1",
+      "target": "log-1",
+      "label": "continue"
+    },
+    {
+      "id": "edge-3",
+      "source": "log-1",
+      "target": "loop-1"
+    },
+    {
+      "id": "edge-4",
+      "source": "loop-1",
+      "target": "stop-1",
+      "label": "done"
+    }
+  ],
+  "variables": [
+    {
+      "id": "var-1",
+      "name": "iteration",
+      "type": "number",
+      "defaultValue": 0
+    },
+    {
+      "id": "var-2",
+      "name": "maxIterations",
+      "type": "number",
+      "defaultValue": 10
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-01-01T00:00:00Z",
+    "updatedAt": "2025-01-01T00:00:00Z",
+    "continueAsNew": {
+      "enabled": true,
+      "maxHistoryLength": 10000
+    }
+  }
+}

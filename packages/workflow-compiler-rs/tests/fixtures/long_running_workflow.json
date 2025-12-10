@@ -1,0 +1,79 @@
+{
+  "id": "long-running-workflow-001",
+  "name": "LongRunningWorkflow",
+  "description": "Long-running workflow with signal handling: Start -> Wait for Signal -> Log -> Stop",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "trigger",
+      "position": { "x": 100, "y": 100 },
+      "data": {
+        "label": "Start",
+        "triggerType": "manual"
+      }
+    },
+    {
+      "id": "signal-1",
+      "type": "signal",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "label": "Wait for Approval",
+        "signalName": "approval",
+        "timeout": "24h"
+      }
+    },
+    {
+      "id": "log-1",
+      "type": "activity",
+      "position": { "x": 100, "y": 300 },
+      "data": {
+        "label": "Log Approval",
+        "componentName": "Log",
+        "activityName": "log",
+        "logMessage": "Approval received",
+        "logLevel": "info",
+        "includeWorkflowContext": true
+      }
+    },
+    {
+      "id": "stop-1",
+      "type": "end",
+      "position": { "x": 100, "y": 400 },
+      "data": {
+        "label": "Complete",
+        "resultMapping": "{ approved: true }",
+        "includeMetadata": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "start-1",
+      "target": "signal-1"
+    },
+    {
+      "id": "edge-2",
+      "source": "signal-1",
+      "target": "log-1"
+    },
+    {
+      "id": "edge-3",
+      "source": "log-1",
+      "target": "stop-1"
+    }
+  ],
+  "variables": [
+    {
+      "id": "var-1",
+      "name": "approvalStatus",
+      "type": "string",
+      "defaultValue": "pending"
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-01-01T00:00:00Z",
+    "updatedAt": "2025-01-01T00:00:00Z"
+  }
+}
