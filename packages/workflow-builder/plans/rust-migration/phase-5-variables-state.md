@@ -1703,3 +1703,65 @@ Before marking Phase 5 complete:
 - [ ] Expression evaluation working
 - [ ] All tests pass
 - [ ] Documentation updated
+
+---
+
+## CI/CD Requirements (moved from Phase 2)
+
+These CI/CD items should be implemented once the project is in the radium repo:
+
+### 4.9 CI/CD Pipeline Setup
+
+**Description**: Set up automated build and test pipeline for Rust compiler
+
+**Subtasks**:
+- [ ] 4.9.1 Create GitHub Actions workflow for Rust builds
+- [ ] 4.9.2 Configure cargo build and test in CI
+- [ ] 4.9.3 Add cargo clippy linting to CI
+- [ ] 4.9.4 Add cargo fmt --check to CI
+- [ ] 4.9.5 Set up test coverage reporting
+- [ ] 4.9.6 Configure artifact caching for faster builds
+- [ ] 4.9.7 Add Docker image build to CI
+- [ ] 4.9.8 Set up deployment pipeline (staging/production)
+
+**Files to Create**:
+```yaml
+# .github/workflows/rust-compiler.yml
+name: Rust Compiler CI
+
+on:
+  push:
+    paths:
+      - 'packages/workflow-builder/workflow-compiler-rs/**'
+  pull_request:
+    paths:
+      - 'packages/workflow-builder/workflow-compiler-rs/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/workflow-builder/workflow-compiler-rs
+      - name: Build
+        run: cargo build --release
+        working-directory: packages/workflow-builder/workflow-compiler-rs
+      - name: Test
+        run: cargo test
+        working-directory: packages/workflow-builder/workflow-compiler-rs
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+        working-directory: packages/workflow-builder/workflow-compiler-rs
+      - name: Format Check
+        run: cargo fmt --check
+        working-directory: packages/workflow-builder/workflow-compiler-rs
+```
+
+**Acceptance Criteria**:
+- [ ] CI runs on all PRs touching Rust code
+- [ ] Build, test, lint, and format checks all pass
+- [ ] Docker images built and pushed on merge to main
+- [ ] Deployment to staging automated

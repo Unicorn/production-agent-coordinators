@@ -1,0 +1,141 @@
+# Test Docker Compose
+# Ephemeral infrastructure for E2E tests
+# Spins up fresh for each test run - NO persistent volumes
+# Uses different ports to avoid conflicts with dev environment
+
+services:
+  # Kong Database (ephemeral)
+  kong-database-test:
+    image: postgres:15
+    container_name: workflow-builder-kong-db-test
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+      POSTGRES_DB: kong
+    # No volumes - ephemeral storage
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - workflow-builder-test-network
+
+  # Kong Migrations
+  kong-migrations-test:
+    image: kong:3.4
+    container_name: workflow-builder-kong-migrations-test
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database-test
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+    depends_on:
+      kong-database-test:
+        condition: service_healthy
+    networks:
+      - workflow-builder-test-network
+
+  # Kong Gateway (test instance)
+  kong-test:
+    image: kong:3.4
+    container_name: workflow-builder-kong-test
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database-test
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+    ports:
+      # Test ports offset by 1000 from dev to avoid conflicts
+      - "9000:8000"  # Proxy port
+      - "9443:8443"  # Proxy SSL port
+      - "9001:8001"  # Admin API
+      - "9444:8444"  # Admin API SSL
+    depends_on:
+      kong-database-test:
+        condition: service_healthy
+      kong-migrations-test:
+        condition: service_completed_successfully
+    networks:
+      - workflow-builder-test-network
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  # Temporal (test instance - in-memory)
+  temporal-test:
+    image: temporalio/auto-setup:1.23
+    container_name: workflow-builder-temporal-test
+    ports:
+      # Test ports offset from dev
+      - "9233:7233"  # Temporal gRPC
+    environment:
+      DB: sqlite
+      DEFAULT_NAMESPACE: test
+      SKIP_DEFAULT_NAMESPACE_CREATION: false
+    # No volumes - ephemeral
+    tmpfs:
+      - /var/lib/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "--address", "127.0.0.1:7233", "operator", "search-attribute", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - workflow-builder-test-network
+
+  # Mock upstream service for testing Kong routing
+  # This simulates the Rust compiler and other backend services
+  mock-upstream:
+    image: kennethreitz/httpbin:latest
+    container_name: workflow-builder-mock-upstream
+    networks:
+      - workflow-builder-test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Rust Workflow Compiler Service (test instance)
+  # Requires pre-built Docker image or building during test setup
+  rust-compiler-test:
+    build:
+      context: ./workflow-compiler-rs
+      dockerfile: Dockerfile
+    container_name: workflow-builder-rust-compiler-test
+    ports:
+      # Test port offset from dev (3020 -> 3120)
+      - "3120:3020"
+    environment:
+      RUST_LOG: info
+      HOST: 0.0.0.0
+      PORT: 3020
+    networks:
+      - workflow-builder-test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3020/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Only start if explicitly requested (saves build time for non-compiler tests)
+    profiles:
+      - rust-compiler
+
+networks:
+  workflow-builder-test-network:
+    driver: bridge
+    name: workflow-builder-test-network

@@ -1,0 +1,14 @@
+# Kong Service Configuration for Rust Workflow Compiler
+# Defines the Rust-based compiler service for workflow compilation
+
+_format_version: "3.0"
+
+services:
+  # Rust workflow compiler service
+  - name: rust-compiler-service
+    url: http://rust-compiler-upstream
+    protocol: http
+    connect_timeout: 5000
+    read_timeout: 120000  # Longer timeout for compilation
+    write_timeout: 60000
+    retries: 2

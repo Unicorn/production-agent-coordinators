@@ -1,0 +1,116 @@
+# Kong Route Configuration for Rust Workflow Compiler
+# Defines URL paths for the Rust-based compiler service
+
+_format_version: "3.0"
+
+routes:
+  # Rust compiler - compile endpoint
+  - name: rust-compiler-compile-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/compile
+      - /api/v1/compile
+    strip_path: false
+    preserve_host: true
+    methods:
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Rust compiler - validate endpoint
+  - name: rust-compiler-validate-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/validate
+      - /api/v1/compile/validate
+    strip_path: false
+    preserve_host: true
+    methods:
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Rust compiler - generate TypeScript endpoint
+  - name: rust-compiler-generate-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/generate
+      - /api/v1/compile/generate
+    strip_path: false
+    preserve_host: true
+    methods:
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Rust compiler - verify code endpoint
+  - name: rust-compiler-verify-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/verify
+      - /api/v1/compile/verify
+    strip_path: false
+    preserve_host: true
+    methods:
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Rust compiler - full compile pipeline
+  - name: rust-compiler-full-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/full
+      - /api/v1/compile/full
+    strip_path: false
+    preserve_host: true
+    methods:
+      - POST
+    protocols:
+      - http
+      - https
+
+  # Rust compiler - health check
+  - name: rust-compiler-health-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/health
+    strip_path: false
+    preserve_host: true
+    methods:
+      - GET
+    protocols:
+      - http
+      - https
+
+  # Rust compiler - schema endpoint
+  - name: rust-compiler-schema-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/schema
+      - /api/v1/schema
+    strip_path: false
+    preserve_host: true
+    methods:
+      - GET
+    protocols:
+      - http
+      - https
+
+  # Rust compiler - version endpoint
+  - name: rust-compiler-version-route
+    service: rust-compiler-service
+    paths:
+      - /api/compiler/rust/version
+      - /api/v1/version
+    strip_path: false
+    preserve_host: true
+    methods:
+      - GET
+    protocols:
+      - http
+      - https

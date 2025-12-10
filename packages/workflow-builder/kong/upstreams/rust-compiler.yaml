@@ -1,0 +1,75 @@
+# Kong Upstream Configuration for Rust Workflow Compiler
+# Defines the backend service pool for the Rust-based compiler service
+
+_format_version: "3.0"
+
+upstreams:
+  - name: rust-compiler-upstream
+    algorithm: round-robin
+    slots: 10000
+
+    healthchecks:
+      active:
+        type: http
+        healthy:
+          interval: 5
+          successes: 2
+          http_statuses:
+            - 200
+            - 302
+        unhealthy:
+          interval: 5
+          http_failures: 3
+          tcp_failures: 3
+          timeouts: 3
+          http_statuses:
+            - 429
+            - 500
+            - 503
+        http_path: /health
+        timeout: 5
+        concurrency: 10
+
+      passive:
+        type: http
+        healthy:
+          successes: 5
+          http_statuses:
+            - 200
+            - 201
+            - 202
+            - 203
+            - 204
+            - 205
+            - 206
+            - 207
+            - 208
+            - 226
+            - 300
+            - 301
+            - 302
+            - 303
+            - 304
+            - 305
+            - 306
+            - 307
+            - 308
+        unhealthy:
+          http_failures: 5
+          tcp_failures: 5
+          timeouts: 5
+          http_statuses:
+            - 429
+            - 500
+            - 503
+
+    targets:
+      # Development target - Rust compiler runs on port 3020
+      - target: localhost:3020
+        weight: 100
+
+      # Production targets would be added here
+      # - target: rust-compiler-1.internal:3020
+      #   weight: 100
+      # - target: rust-compiler-2.internal:3020
+      #   weight: 100
