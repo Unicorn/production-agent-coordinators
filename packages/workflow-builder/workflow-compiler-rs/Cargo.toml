@@ -1,0 +1,55 @@
+[package]
+name = "workflow-compiler"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bernier LLC"]
+description = "Rust-based workflow compiler for type-safe TypeScript generation"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "timeout", "request-id"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# Templating
+handlebars = "5"
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Async utilities
+futures = "0.3"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# UUID generation
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Regex for validation
+regex = "1"
+
+[dev-dependencies]
+pretty_assertions = "1"
+tokio-test = "0.4"
+tempfile = "3"
+
+[features]
+default = []
